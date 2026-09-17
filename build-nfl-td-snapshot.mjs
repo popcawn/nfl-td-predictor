@@ -467,14 +467,17 @@ async function parseSeason(season) {
       },
     };
   }
-  // league-average TDs allowed per team-game by position (baseline for "weak vs")
+  // league-average TDs allowed per team-game by position (baseline for "weak vs").
+  // Average the per-team RECENCY-WEIGHTED rates so the baseline is on the same footing
+  // as each team's def.byPos (using the unweighted flat total here biased every defense).
   const leagueByPos = {};
-  for (const k of ['RB', 'WR', 'TE', 'QB']) leagueByPos[k] = +(retGames ? league.byPos[k] / retGames : 0).toFixed(3);
+  for (const k of ['RB', 'WR', 'TE', 'QB']) {
+    let sum = 0, n = 0;
+    for (const t of Object.values(teamProfiles)) if (t.def && t.def.byPos) { sum += t.def.byPos[k]; n++; }
+    leagueByPos[k] = +(n ? sum / n : 0).toFixed(3);
+  }
   log(`  league TD/gm allowed by pos: RB ${leagueByPos.RB} WR ${leagueByPos.WR} TE ${leagueByPos.TE} QB ${leagueByPos.QB}`);
-  // league-average red-zone TD% for reshaping
-  let lgRzTD = 0, lgRzTr = 0;
-  for (const p of Object.values(teamProfiles)) { /* use raw sums instead */ }
-  const LEAGUE_RZ_TDPCT = 0.55;
+  const LEAGUE_RZ_TDPCT = 0.55;   // league-average red-zone TD% used for the TD-vs-FG reshape
 
   // -------- per-player blended scores --------
   function playerScore(p) {

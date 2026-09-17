@@ -364,7 +364,8 @@ function teamExpectations(off, oppDef, impPts, marginPts, outdoor, wind){
   if(outdoor && wind>12) rushShare += Math.min(0.09,(wind-12)*0.005); // wind suppresses passing TDs
   rushShare = clamp(rushShare, 0.24, 0.80);
 
-  return { expOff, rushShare, nonOff: clamp(oppDef.nonOffFor!=null?oppDef.nonOffFor:off.nonOff, 0.05, 0.7) };
+  // D/ST return-TD rate for this team's own defense (run() also sets this explicitly)
+  return { expOff, rushShare, nonOff: clamp(off.def?off.def.nonOffTDpg:0.14, 0.05, 0.7) };
 }
 
 function buildWeights(roster){
@@ -908,7 +909,7 @@ function applyPastedOdds(){
 }
 function clearAllOdds(){
   // clear odds for the market currently being priced (players + D/ST), keep other markets
-  if(LAST){ Object.keys(LAST.bookMap).forEach(k=>{ if(k.startsWith(MARKET+'|')) delete LAST.bookMap[k]; }); renderPlayers(); renderDST(); }
+  if(LAST){ Object.keys(LAST.bookMap).forEach(k=>{ if(k.startsWith(MARKET+'|')) delete LAST.bookMap[k]; }); renderPlayers(); renderDST(); computeParlays(); }
   $('oddsPaste').value=''; $('oddsMsg').textContent='';
 }
 $('applyOdds').onclick=applyPastedOdds;
