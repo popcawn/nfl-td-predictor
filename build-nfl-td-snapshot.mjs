@@ -189,7 +189,7 @@ function playerRec(pid, name, season) {
 }
 
 // league totals (for conversion-rate constants)
-const league = { gl5carry: 0, gl5td: 0, rzTgt: 0, rzTgtTD: 0, tgt: 0, tgtTD: 0, offTD: 0, teamGames: new Set(), points: 0, returnTD: 0, spreadResid: 0, spreadN: 0, byPos: { RB: 0, WR: 0, TE: 0, QB: 0 }, rushAtt: 0, rushTDtot: 0 };
+const league = { gl5carry: 0, gl5td: 0, rzTgt: 0, rzTgtTD: 0, tgt: 0, tgtTD: 0, offTD: 0, teamGames: new Set(), points: 0, returnTD: 0, spreadResid: 0, spreadN: 0, byPos: { RB: 0, WR: 0, TE: 0, QB: 0 }, rushAtt: 0, rushTDtot: 0, airYtot: 0 };
 
 // load nflverse rosters (newest first) -> espn<->gsis id maps + gsis->position.
 // Positions must be known BEFORE parsing PBP so we can bucket each TD scorer.
@@ -250,7 +250,7 @@ const pw = new Map();       // pid -> Map(week -> {g,rushAtt,rushTD,glCarry,tgt,
 const tw = new Map();       // team -> Map(week -> {rushTD,passTD,g:Set})
 function pwRec(pid, wk) {
   let m = pw.get(pid); if (!m) { m = new Map(); pw.set(pid, m); }
-  let r = m.get(wk); if (!r) { r = { g: 0, rushAtt: 0, rushTD: 0, glCarry: 0, tgt: 0, rzTgt: 0, recTD: 0 }; m.set(wk, r); }
+  let r = m.get(wk); if (!r) { r = { g: 0, rushAtt: 0, rushTD: 0, glCarry: 0, tgt: 0, rzTgt: 0, recTD: 0, airY: 0 }; m.set(wk, r); }
   return r;
 }
 function twRec(team, wk) {
@@ -347,6 +347,7 @@ async function parseSeason(season) {
       const tgtId = f[idx.receiver_player_id];
       if (tgtId) {
         league.tgt++; if (passTD) league.tgtTD++;
+        league.airYtot += Math.max(0, num(f[idx.air_yards]));   // downfield-target volume
         if (yl > 0 && yl <= 20) { league.rzTgt++; if (passTD) league.rzTgtTD++; }
       }
     }
@@ -366,7 +367,7 @@ async function parseSeason(season) {
       const pc = playerRec(cId, f[idx.receiver_player_name], season);
       pc.games.add(gid);
       pc.tgt++;
-      pc.airY += num(f[idx.air_yards]);
+      pc.airY += Math.max(0, num(f[idx.air_yards]));
       if (isTrue(f[idx.complete_pass])) pc.rec++;
       if (yl > 0 && yl <= 20) pc.rzTgt++;
       if (passTD && f[idx.td_player_id] === cId) pc.recTD++;
@@ -391,7 +392,7 @@ async function parseSeason(season) {
         const twk = twRec(pos, wk); if (rushTD) twk.rushTD++; if (passTD) twk.passTD++; twk.g.add(gid);
       }
       if (rId && isRush) { const r = pwRec(rId, wk); r.g = 1; r.rushAtt++; if (yl > 0 && yl <= 5) r.glCarry++; if (rushTD && f[idx.td_player_id] === rId) r.rushTD++; }
-      if (cId && isPass) { const r = pwRec(cId, wk); r.g = 1; r.tgt++; if (yl > 0 && yl <= 20) r.rzTgt++; if (passTD && f[idx.td_player_id] === cId) r.recTD++; }
+      if (cId && isPass) { const r = pwRec(cId, wk); r.g = 1; r.tgt++; r.airY += Math.max(0, num(f[idx.air_yards])); if (yl > 0 && yl <= 20) r.rzTgt++; if (passTD && f[idx.td_player_id] === cId) r.recTD++; }
       const tdp = f[idx.td_player_id];
       if (tdp && (rushTD || passTD)) g.scored.add(tdp);
     }
@@ -434,6 +435,7 @@ async function parseSeason(season) {
   const RZTGTCONV = league.rzTgt ? league.rzTgtTD / league.rzTgt : 0.19;      // P(TD | RZ target)
   const TGTTD = league.tgt ? league.tgtTD / league.tgt : 0.05;               // P(TD | target)
   const RUSHTDATT = league.rushAtt ? league.rushTDtot / league.rushAtt : 0.023; // P(TD | rush attempt) — carry-volume signal
+  const AIRYDTD = league.airYtot ? league.tgtTD / league.airYtot : 0.0009;      // rec TD per downfield air yard — depth/deep-target signal
 
   // league off TD/gm for the kappa (points -> off TD) map.
   // IMPORTANT: use only FULL seasons (>=200 team-games ~= >6 gm/team); the newest
@@ -526,7 +528,7 @@ async function parseSeason(season) {
     // opportunity-weighted: lean more on stable usage (goal-line carries, carry volume,
     // RZ + overall target share) and less on noisy realized TDs.
     const rushScore = 0.40 * rushTDpg + 0.40 * (glPg * GLCONV) + 0.20 * (rushAttPg * RUSHTDATT);
-    const recScore = 0.35 * recTDpg + 0.35 * (rzTgtPg * RZTGTCONV) + 0.30 * (tgtPg * TGTTD);
+    const recScore = 0.35 * recTDpg + 0.35 * (rzTgtPg * RZTGTCONV) + 0.20 * (tgtPg * TGTTD) + 0.10 * (Math.max(0, airPg) * AIRYDTD);
     return {
       rushScore, recScore, games: wG,
       isQB: wPassAtt > wRushAtt * 1.5 && wPassAtt > 20,
@@ -559,10 +561,11 @@ async function parseSeason(season) {
     const rzTgt = (s24 ? s24.rzTgt : 0) * W_PRIOR + (r ? r.rzTgt : 0) * W_CUR;
     const tgt = (s24 ? s24.tgt : 0) * W_PRIOR + (r ? r.tgt : 0) * W_CUR;
     const rushAtt = (s24 ? s24.rushAtt : 0) * W_PRIOR + (r ? r.rushAtt : 0) * W_CUR;
+    const airY = (s24 ? s24.airY : 0) * W_PRIOR + (r ? r.airY : 0) * W_CUR;
     const d = g + SHRINK_GAMES;
     return {
       rushScore: 0.40 * (rushTD / d) + 0.40 * ((glCar / d) * GLCONV) + 0.20 * ((rushAtt / d) * RUSHTDATT),
-      recScore: 0.35 * (recTD / d) + 0.35 * ((rzTgt / d) * RZTGTCONV) + 0.30 * ((tgt / d) * TGTTD),
+      recScore: 0.35 * (recTD / d) + 0.35 * ((rzTgt / d) * RZTGTCONV) + 0.20 * ((tgt / d) * TGTTD) + 0.10 * ((Math.max(0, airY) / d) * AIRYDTD),
     };
   }
   function candTeamSplit(team) {
@@ -574,8 +577,8 @@ async function parseSeason(season) {
   }
   function foldWeek(wk) {
     for (const [pid, m] of pw) { const w = m.get(wk); if (!w) continue;
-      let a = run25.get(pid); if (!a) { a = { g: 0, rushAtt: 0, rushTD: 0, glCarry: 0, tgt: 0, rzTgt: 0, recTD: 0 }; run25.set(pid, a); }
-      a.g += w.g; a.rushAtt += w.rushAtt; a.rushTD += w.rushTD; a.glCarry += w.glCarry; a.tgt += w.tgt; a.rzTgt += w.rzTgt; a.recTD += w.recTD; }
+      let a = run25.get(pid); if (!a) { a = { g: 0, rushAtt: 0, rushTD: 0, glCarry: 0, tgt: 0, rzTgt: 0, recTD: 0, airY: 0 }; run25.set(pid, a); }
+      a.g += w.g; a.rushAtt += w.rushAtt; a.rushTD += w.rushTD; a.glCarry += w.glCarry; a.tgt += w.tgt; a.rzTgt += w.rzTgt; a.recTD += w.recTD; a.airY += w.airY; }
     for (const [team, m] of tw) { const w = m.get(wk); if (!w) continue;
       let a = runTeam.get(team); if (!a) { a = { rushTD: 0, passTD: 0 }; runTeam.set(team, a); }
       a.rushTD += w.rushTD; a.passTD += w.passTD; }
