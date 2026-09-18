@@ -367,8 +367,15 @@ function setLine(){
   if(el){ const fs=S.teams[game.fav]?(S.teams[game.fav].short||game.fav):game.fav;
     el.innerHTML=`📉 line: <b>${fs} -${Math.abs(game.spread)}</b> · O/U <b>${game.total}</b> <span class="muted">(auto — edit if it moved)</span>`; }
 }
-$('awaySel').onchange=()=>{refreshFav();setLine();setWeather();};
-$('homeSel').onchange=()=>{refreshFav();setLine();setWeather();};
+// switching teams invalidates any odds pasted for the previous game — wipe the
+// board (bookMap + paste box) so stale prices can't bleed into the new slate's
+// EV / parlays. run() (via setWeather) then rebuilds every input empty.
+function clearOddsBoard(){
+  if(LAST) LAST.bookMap={};
+  $('oddsPaste').value=''; $('oddsMsg').textContent='';
+}
+$('awaySel').onchange=()=>{clearOddsBoard();refreshFav();setLine();setWeather();};
+$('homeSel').onchange=()=>{clearOddsBoard();refreshFav();setLine();setWeather();};
 refreshFav();
 
 // ---------- the model ----------
