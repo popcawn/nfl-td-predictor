@@ -238,6 +238,21 @@
       <div id="parlayBody" class="legend" style="margin-top:8px"></div>
     </div>
 
+    <!-- CROSS-GAME SLIP -->
+    <h2>Cross-game parlay slip</h2>
+    <div class="panel" id="slipPanel" style="padding:14px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:6px">🧾 Build a parlay across <b>different games</b> — legs are independent, so books pay <b>full</b> odds and this EV is <b>real</b>, not a same-game ceiling. Add legs as you price each game; the slip stays put when you switch matchups.</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <span class="muted" style="font-size:12px">Add from <b id="slipGameLbl">this game</b>:</span>
+        <select id="slipMarket" class="statussel"><option value="anytime">Anytime</option><option value="two">2+ TD</option><option value="first">1st TD</option><option value="last">Last TD</option></select>
+        <select id="slipPlayer" class="statussel" style="max-width:230px"></select>
+        <button class="btn" id="slipAdd" style="padding:6px 14px;font-size:13px">➕ Add leg</button>
+        <button class="btn" id="slipAddBest" style="padding:6px 12px;font-size:12px" title="adds this game's highest-EV priced leg in the selected market">➕ Best EV</button>
+        <button class="statussel" id="slipClear" style="padding:6px 10px;font-size:12px;margin-left:auto">Clear slip</button>
+      </div>
+      <div id="slipBody" class="legend"></div>
+    </div>
+
     <div class="note" id="corrNote"><b>Same-game correlation:</b> two scorers on the same team are <b>positively correlated</b> (when an offense scores a lot, several of its players cash together). Treat multiple "TAKE"s on one team as a same-game parlay leg set, not as independent edges. A model edge much larger than the market's usually means a missed inactive or role change — verify before betting.</div>
     <div class="note"><b>Estimate-grade until inactives lock.</b> Props involving Q/DBT players are estimates until game-day actives are confirmed (~90 min before kickoff). Update each player's status above when the inactive list drops.</div>
   </div>
@@ -525,7 +540,7 @@ function run(){
 
   $('impliedNote').textContent = `Implied points — ${S.teams[away].short}: ${imp.away.toFixed(1)}, ${S.teams[home].short}: ${imp.home.toFixed(1)}  ·  exp. off. TDs ${awayExp.expOff.toFixed(2)} / ${homeExp.expOff.toFixed(2)}`;
   $('results').classList.remove('hidden');
-  renderTott(); renderPlayers(); renderDST(); computeParlays();
+  renderTott(); renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder();
 }
 function maybeSim(){ if(LAST) run(); }
 
@@ -607,7 +622,7 @@ function renderPlayers(){
   });
   // wire book odds inputs — persist to bookMap (per market) so odds survive re-sims/switches
   body.querySelectorAll('.bookin').forEach(inp=>{
-    inp.oninput=e=>{ if(LAST) LAST.bookMap[bkey(e.target.dataset.key)]=e.target.value; computeEV(); };
+    inp.oninput=e=>{ if(LAST) LAST.bookMap[bkey(e.target.dataset.key)]=e.target.value; computeEV(); refreshSlipAdder(); };
   });
   // header sort
   document.querySelectorAll('#playerTable th[data-k]').forEach(th=>{
@@ -806,6 +821,68 @@ function parlayNote(){ return `<div class="muted" style="margin-top:9px;font-siz
   `<b class="v-flag">The catch:</b> every leg is one game, so these are <b>Same-Game Parlays</b>, and books <b>cut the payout</b> for correlated legs — so even "EV at full odds" is optimistic, and the correlation upside usually won't be paid. Enter your book's actual SGP price for the real number. `+
   `<b class="v-flag">And a big real EV is a red flag, not a jackpot:</b> per-leg model error <i>compounds</i> across legs, and this list is ranked by EV so it self-selects the parlays the model most overrates — a sharp SGP price sitting far wider than "fair" almost always means the sim is too high, not that the book is generous. Treat these as <b>candidates, not +EV locks</b>.</div>`; }
 
+// ---------- cross-game slip: parlay legs from DIFFERENT games. These are independent
+// (no same-game correlation), so the joint prob is a clean product and the book pays the
+// FULL multiplied odds — so full-odds EV here is REAL, not a ceiling. Each leg snapshots
+// its model prob + odds at add-time, so old games never need reloading. Persists via
+// localStorage so the slip survives reloads. ----
+let slip=[]; let slipLegCache=[];
+function loadSlip(){ try{ const s=localStorage.getItem('nfltd_slip'); if(s) slip=JSON.parse(s)||[]; }catch(e){ slip=[]; } if(!Array.isArray(slip)) slip=[]; }
+function saveSlip(){ try{ localStorage.setItem('nfltd_slip', JSON.stringify(slip)); }catch(e){} }
+function curGameId(){ return LAST ? LAST.away+'@'+LAST.home : null; }
+function fmtGame(g){ const [a,h]=String(g).split('@'); const sh=x=>S.teams[x]?(S.teams[x].short||x):x; return sh(a)+' @ '+sh(h); }
+// current game's priced legs for one market, sorted best-EV first (players + D/ST)
+function priceableLegs(market){
+  if(!LAST) return [];
+  const out=[]; const add=(bookKey,key,name,abbr,mp)=>{ if(mp==null) return; const o=LAST.bookMap[bookKey]; if(!o) return; const r=evalBet(mp,o); if(!r) return; out.push({key,name,abbr,mp,odds:o,ev:r.ev}); };
+  LAST.awayR.concat(LAST.homeR).forEach(p=>{ if(p._status==='OUT') return; add(market+'|'+p._key, p._key, p.name, p._abbr, p[market]); });
+  if(market!=='two'){ // defenses have no 2+ market
+    add(market+'|DST|'+LAST.away, 'DST|'+LAST.away, S.teams[LAST.away].short+' D/ST', LAST.away, LAST.dst.dstAway[market]);
+    add(market+'|DST|'+LAST.home, 'DST|'+LAST.home, S.teams[LAST.home].short+' D/ST', LAST.home, LAST.dst.dstHome[market]);
+  }
+  return out.sort((a,b)=>b.ev-a.ev);
+}
+function slipHas(game,key,market){ return slip.some(l=>l.game===game&&l.key===key&&l.market===market); }
+function addLeg(leg,market){ const game=curGameId(); if(!game||!leg) return false;
+  if(slipHas(game,leg.key,market)) return false;
+  slip.push({game,key:leg.key,name:leg.name,abbr:leg.abbr,market,mp:leg.mp,odds:leg.odds}); saveSlip(); renderSlip(); return true; }
+function refreshSlipAdder(){
+  const msel=$('slipMarket'), psel=$('slipPlayer'); if(!msel||!psel) return;
+  $('slipGameLbl').textContent = LAST ? fmtGame(curGameId()) : 'this game';
+  const mkt=msel.value; slipLegCache=priceableLegs(mkt);
+  psel.innerHTML = slipLegCache.length
+    ? slipLegCache.map((l,i)=>`<option value="${i}">${l.name} · ${l.odds} · EV ${(l.ev*100).toFixed(0)}%</option>`).join('')
+    : `<option value="">— no priced ${MKT[mkt].label} legs in this game —</option>`;
+}
+function renderSlip(){
+  const body=$('slipBody'); if(!body) return;
+  if(!slip.length){ body.innerHTML=`<div class="muted">No legs yet. Price a game above, pick a leg (or hit <b>➕ Best EV</b>), then switch games and keep adding — the slip stays put across matchups. Pull the best 2+ TD from each 1 o'clock game into one parlay without going back.</div>`; return; }
+  let html='<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:9px">';
+  slip.forEach((l,i)=>{ html+=`<div style="display:flex;gap:8px;align-items:center;font-size:13px;flex-wrap:wrap">`+
+    `<button class="statussel slipdel" data-i="${i}" style="padding:0 8px;color:var(--warn);font-weight:700" title="remove leg">✕</button>`+
+    `<span class="muted" style="min-width:96px">${fmtGame(l.game)}</span>`+
+    `<b style="color:${teamText(l.abbr)}">${l.name}</b> <span class="muted">${MKT[l.market].label}</span> <span class="odds">${l.odds}</span>`+
+    `<span class="muted">· model ${pct(l.mp)}</span></div>`; });
+  html+='</div>';
+  // independent joint across games
+  const gc={}; slip.forEach(l=>gc[l.game]=(gc[l.game]||0)+1); const dupes=Object.entries(gc).filter(([,n])=>n>1);
+  const jp=slip.reduce((a,l)=>a*l.mp,1);
+  const dec=slip.reduce((a,l)=>{ const d=oddsDec(l.odds); return a*(d||1); },1);
+  const evFull=slip.reduce((a,l)=>{ const d=oddsDec(l.odds); return a*(l.mp*(d||1)); },1)-1;
+  let badge,cls,evcls,note='';
+  if(dupes.length){ badge='⚠ same-game legs'; cls='vb-flag'; evcls='ev-dart';
+    note=` <span style="color:var(--warn)">— ${dupes.map(([g,n])=>`${n} legs in ${fmtGame(g)}`).join(', ')} are in the SAME game, so they're correlated — this cross-game EV assumes independence and is wrong for them. Price same-game stacks in the Parlay picker above instead.</span>`; }
+  else if(evFull>0.50){ badge='⚠ verify legs'; cls='vb-flag'; evcls='ev-dart';
+    note=` <span style="color:var(--warn)">— cross-game books DO pay full odds, so this is real if the model's right; but a huge EV means per-leg error is compounding. Verify each leg (injury / role) before trusting it.</span>`; }
+  else if(evFull>0.03){ badge='TAKE'; cls='vb-take'; evcls='ev-pos'; }
+  else { badge='PASS'; cls='vb-pass'; evcls='ev-neg'; }
+  html+=`<div style="border-top:1px solid var(--line);padding-top:8px;font-size:13px">`+
+    `<b>${slip.length}-leg cross-game parlay</b> · hits <b>${pct(jp)}</b> · fair <span class="odds">${probToAmerican(jp)}</span> · pays <span class="odds">${amStr(decToAmerican(dec))}</span> at full odds`+
+    ` · real EV <b class="${evcls}">${evFull>=0?'+':''}${(evFull*100).toFixed(1)}%</b> <span class="vbadge ${cls}" style="padding:1px 8px">${badge}</span>${note}</div>`+
+    `<div class="muted" style="margin-top:7px;font-size:12px;line-height:1.5">Different-game legs don't influence each other, so the book pays the full multiplied price and this EV is the honest number (unlike a same-game parlay). It's still per-leg model edges multiplied, so a big EV can be compounded overrating — treat as leads, size small.</div>`;
+  body.innerHTML=html;
+}
+
 const dstKey=(abbr)=>MARKET+'|DST|'+abbr;   // D/ST book odds, per market
 function renderDST(){
   const {away,home,dst,awayExp,homeExp}=LAST;
@@ -978,20 +1055,26 @@ function applyPastedOdds(){
     }
     unmatched.push(raw||name);
   }
-  renderPlayers(); renderDST(); computeParlays();   // rebuild inputs from bookMap + recompute EV + parlays
+  renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder();   // rebuild inputs from bookMap + recompute EV + parlays + slip adder
   const lbl=['anytime','first','last','two'].filter(m=>touched.has(m)).map(m=>MKT[m].label).join(', ');
   $('oddsMsg').innerHTML=`Filled <b>${filled}</b> ${filled===1?'player':'players'}${lbl?` across <b>${lbl}</b>`:''}.`+
     (unmatched.length?` <span style="color:var(--warn)">Couldn't match:</span> ${unmatched.slice(0,12).map(u=>`<code>${esc(u)}</code>`).join(' · ')}${unmatched.length>12?' …':''}`:' ✓');
 }
 function clearAllOdds(){
   // clear odds for the market currently being priced (players + D/ST), keep other markets
-  if(LAST){ Object.keys(LAST.bookMap).forEach(k=>{ if(k.startsWith(MARKET+'|')) delete LAST.bookMap[k]; }); renderPlayers(); renderDST(); computeParlays(); }
+  if(LAST){ Object.keys(LAST.bookMap).forEach(k=>{ if(k.startsWith(MARKET+'|')) delete LAST.bookMap[k]; }); renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder(); }
   $('oddsPaste').value=''; $('oddsMsg').textContent='';
 }
 $('applyOdds').onclick=applyPastedOdds;
 $('clearOdds').onclick=clearAllOdds;
 $('findParlays').onclick=computeParlays;
 $('parlayLegs').onchange=computeParlays;
+// cross-game slip wiring
+$('slipMarket').onchange=refreshSlipAdder;
+$('slipAdd').onclick=()=>{ const i=$('slipPlayer').value; if(i==='') return; if(!addLeg(slipLegCache[+i], $('slipMarket').value)) $('slipGameLbl').title='already in slip'; };
+$('slipAddBest').onclick=()=>{ if(slipLegCache.length) addLeg(slipLegCache[0], $('slipMarket').value); };
+$('slipClear').onclick=()=>{ if(slip.length && confirm('Clear all '+slip.length+' cross-game slip legs?')){ slip=[]; saveSlip(); renderSlip(); } };
+$('slipBody').addEventListener('click', e=>{ const b=e.target.closest('.slipdel'); if(!b) return; slip.splice(+b.dataset.i,1); saveSlip(); renderSlip(); });
 $('oddsPaste').addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); applyPastedOdds(); }});
 // pricing-market switch: re-point Fair/Book/EV/Verdict + sort at the chosen market
 document.querySelectorAll('.mktbtn').forEach(b=>{
@@ -1003,12 +1086,14 @@ document.querySelectorAll('.mktbtn').forEach(b=>{
     $('dstFairMkt').textContent='('+MKT[MARKET].label+')';
     document.querySelectorAll('#playerTable th').forEach(x=>x.classList.remove('sorted'));
     const th=document.querySelector(`#playerTable th[data-k="${MARKET}"]`); if(th) th.classList.add('sorted');
+    const sm=$('slipMarket'); if(sm){ sm.value=MARKET; refreshSlipAdder(); }  // slip adder follows the pricing market
     if(LAST){ renderPlayers(); renderDST(); }
   };
 });
 
 $('simBtn').onclick=run;
 [['total','change'],['spread','change'],['favSel','change'],['outdoor','change'],['wind','change']].forEach(([id,ev])=> $(id).addEventListener(ev,maybeSim));
+loadSlip(); renderSlip();       // restore the cross-game slip from a previous visit
 setLine(); run(); setWeather(); // auto-fill line, sim, then stadium + live weather
 })();
 </script>
