@@ -379,11 +379,11 @@ function impliedPoints(total, spreadPts, favAbbr, home, away){
 }
 
 function teamExpectations(off, oppDef, impPts, marginPts, outdoor, wind){
-  // Stage 1: expected offensive TDs anchored to the implied team total.
-  // Red-zone efficiency reshapes TD-vs-FG mix WITHOUT changing total points.
-  const rzBlend = 0.5*off.rzTDpct + 0.5*oppDef.rzTDpctAllow;
-  const rzReshape = clamp(rzBlend / C.LEAGUE_RZ_TDPCT, 0.85, 1.15);
-  let expOff = Math.max(0.35, impPts * C.KAPPA * rzReshape);
+  // Stage 1: expected offensive TDs anchored to the implied team total (= the exact
+  // formula the backtest validated). A red-zone-matchup reshape used to sit here but
+  // it was NOT in the backtest, so it ran the live model ~5-15% hot vs what was
+  // validated — dropped for consistency until it can be tested properly.
+  let expOff = Math.max(0.35, impPts * C.KAPPA);
 
   // Stage 2 prep: run/pass TD split = team tendency, funnelled by opponent + game script + weather.
   let rushShare = off.rushShare;
