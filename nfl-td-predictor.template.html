@@ -728,28 +728,40 @@ function computeParlays(){
   const J=LAST.dst.joint, pool=parlayCandidates(), maxLegs=+(($('parlayLegs')&&$('parlayLegs').value)||3);
   if(pool.length<2){ body.innerHTML=`Enter book odds on at least <b>2</b> model-liked legs (any markets, model prob ≥8%, no 🎲/⚠) and I'll rank the best parlays here.`+parlayNote(); return; }
   const combos=(arr,k)=>{ const out=[]; (function rec(st,acc){ if(acc.length===k){out.push(acc.slice());return;} for(let i=st;i<arr.length;i++){ if(acc.some(x=>x.who===arr[i].who))continue; acc.push(arr[i]); rec(i+1,acc); acc.pop(); } })(0,[]); return out; };
+  const LONGSHOT=0.02;   // a parlay that hits <2% of sims is a lottery ticket, not a lead
+  const isDST=c=>String(c.who).startsWith('DST|');
   const results=[];
   for(let k=2;k<=maxLegs;k++) for(const combo of combos(pool,k)){
+    // never stack two opposing defenses: both D/STs returning a TD in one game is rare AND
+    // anti-correlated, yet independent-EV on long (+700/+750) odds kept floating it to the top
+    if(combo.filter(isDST).length>1) continue;
     const jp=jointProb(J,combo); if(jp<=0)continue;
     const dec=combo.reduce((a,c)=>a*c.dec,1), indepP=combo.reduce((a,c)=>a*c.mp,1);
-    const indepEV=combo.reduce((a,c)=>a*(c.mp*c.dec),1)-1;  // full odds, treating legs independent (the honest baseline)
-    const ceilEV=jp*dec-1;                                  // + the sim's correlation (only real if the book DOESN'T de-correlate)
-    results.push({legs:combo,jp,dec,indepEV,ceilEV,corr:indepP>0?jp/indepP-1:0});
+    const indepEV=combo.reduce((a,c)=>a*(c.mp*c.dec),1)-1;  // full odds, legs treated independent
+    const ceilEV=jp*dec-1;                                  // full odds with the sim's TRUE correlation
+    // rank by the WORSE of the two: caps positive-correlation inflation (books de-correlate)
+    // AND penalises anti-correlated stacks (legs that fight each other) that independent-EV
+    // alone would reward. quality = a plausible (hits >= LONGSHOT) positive-EV pick.
+    const rankEV=Math.min(indepEV,ceilEV);
+    results.push({legs:combo,jp,dec,indepEV,ceilEV,rankEV,corr:indepP>0?jp/indepP-1:0});
   }
-  // rank by the conservative full-odds EV, so a parlay only ranks high if its LEGS carry
-  // real value — not because correlation inflates a stack of individually-bad prices
-  results.sort((a,b)=>b.indepEV-a.indepEV);
+  // plausible +EV picks first, then everything else by conservative EV — so a lottery-odds
+  // stack (e.g. a defense + a long shot) can't outrank a solid, likely parlay
+  const quality=r=>(r.rankEV>0 && r.jp>=LONGSHOT)?1:0;
+  results.sort((a,b)=> quality(b)-quality(a) || b.rankEV-a.rankEV);
   const top=results.slice(0,6);
   parlayRows=top;
   let html='';
-  if(!top.some(r=>r.indepEV>0)) html+=`<div style="margin-bottom:7px"><b>No parlay worth it</b> at these prices — normal, because the market is efficient on most legs. Closest ones for reference:</div>`;
+  if(!top.some(r=>r.rankEV>0 && r.jp>=LONGSHOT)) html+=`<div style="margin-bottom:7px"><b>No parlay worth it</b> at these prices — normal, because the market is efficient on most legs. Closest ones for reference:</div>`;
   html+='<div style="display:flex;flex-direction:column;gap:8px">';
   top.forEach((r,i)=>{
     const legs=r.legs.map(c=>`<b style="color:${teamText(c.abbr)}">${c.label}</b> <span class="muted">${MKT[c.market].label}</span> <span class="odds">${c.odds}</span>`).join(' <span class="muted">+</span> ');
     const corrTxt = r.corr>0.02?`legs cash together <b>+${(r.corr*100).toFixed(0)}%</b>` : r.corr<-0.02?`<span style="color:var(--warn)">work against each other ${(r.corr*100).toFixed(0)}%</span>` : `~independent`;
-    const upside = r.corr>0.02 && r.ceilEV>r.indepEV ? ` <span class="muted">→ up to +${(r.ceilEV*100).toFixed(0)}% if paid full</span>` : '';
-    html+=`<div style="border-top:1px solid var(--line);padding-top:7px">${r.indepEV>0?'<span class="star">★</span> ':`<span class="muted">${i+1}.</span> `}${legs}`+
-      `<div style="margin-top:3px;font-size:12px">${r.legs.length} legs · hits <b>${pct(r.jp)}</b> (${corrTxt}) · <b>fair <span class="odds">${probToAmerican(r.jp)}</span></b> · <span class="muted">full-odds pays ${amStr(decToAmerican(r.dec))}, EV ${r.indepEV>=0?'+':''}${(r.indepEV*100).toFixed(1)}% (ceiling)${upside}</span></div>`+
+    const longshot = r.jp<LONGSHOT ? ` · <span style="color:var(--warn)">🎲 longshot (hits &lt;2%)</span>` : '';
+    const upside = r.corr>0.02 && r.ceilEV>r.rankEV ? ` <span class="muted">→ up to +${(r.ceilEV*100).toFixed(0)}% if paid full</span>` : '';
+    const isPick = r.rankEV>0 && r.jp>=LONGSHOT;
+    html+=`<div style="border-top:1px solid var(--line);padding-top:7px">${isPick?'<span class="star">★</span> ':`<span class="muted">${i+1}.</span> `}${legs}`+
+      `<div style="margin-top:3px;font-size:12px">${r.legs.length} legs · hits <b>${pct(r.jp)}</b> (${corrTxt})${longshot} · <b>fair <span class="odds">${probToAmerican(r.jp)}</span></b> · <span class="muted">full-odds pays ${amStr(decToAmerican(r.dec))}, EV ${r.rankEV>=0?'+':''}${(r.rankEV*100).toFixed(1)}% (conservative)${upside}</span></div>`+
       `<div style="margin-top:4px;font-size:12px">↳ your book's actual SGP price: <input class="sgpin bookin" data-i="${i}" placeholder="+17042" style="width:100px;padding:4px 7px"> <span class="sgpres" data-i="${i}"></span></div></div>`;
   });
   html+='</div>'+parlayNote();
@@ -774,7 +786,7 @@ function sgpEV(i){
   res.innerHTML=`→ real EV <b class="${evcls}">${ev>=0?'+':''}${(ev*100).toFixed(1)}%</b> <span class="vbadge ${cls}" style="padding:1px 8px">${badge}</span> <span class="muted">vs fair ${probToAmerican(r.jp)}</span>${note}`;
 }
 function parlayNote(){ return `<div class="muted" style="margin-top:9px;font-size:12px;border-top:1px solid var(--line);padding-top:8px;line-height:1.5">`+
-  `<b>Reading this:</b> "hits %" is straight from the 10k sims (the share where <i>all</i> legs cash — correlation already included). "<b>EV at full odds</b>" treats it like a cross-game parlay (leg odds multiplied) — the conservative baseline used to rank. `+
+  `<b>Reading this:</b> "hits %" is straight from the 10k sims (the share where <i>all</i> legs cash — correlation already included). The ranked "<b>EV</b>" is the <b>conservative</b> one: the worse of treating the legs as independent and using the sim's true correlation — so a stack whose legs <b>fight each other</b> (like two opposing defenses) can't ride long odds to the top, and a <span style="color:var(--warn)">🎲 longshot</span> that hits &lt;2% is never starred. `+
   `<b>Why a "pass" leg appears:</b> a leg that's a pass on its own can still ride in a parlay carried by the strong leg — the parlay's edge isn't each leg standing alone. `+
   `<b class="v-flag">The catch:</b> every leg is one game, so these are <b>Same-Game Parlays</b>, and books <b>cut the payout</b> for correlated legs — so even "EV at full odds" is optimistic, and the correlation upside usually won't be paid. Enter your book's actual SGP price for the real number. `+
   `<b class="v-flag">And a big real EV is a red flag, not a jackpot:</b> per-leg model error <i>compounds</i> across legs, and this list is ranked by EV so it self-selects the parlays the model most overrates — a sharp SGP price sitting far wider than "fair" almost always means the sim is too high, not that the book is generous. Treat these as <b>candidates, not +EV locks</b>.</div>`; }
