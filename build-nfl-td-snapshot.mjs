@@ -189,7 +189,7 @@ function playerRec(pid, name, season) {
 }
 
 // league totals (for conversion-rate constants)
-const league = { gl5carry: 0, gl5td: 0, rzTgt: 0, rzTgtTD: 0, tgt: 0, tgtTD: 0, offTD: 0, teamGames: new Set(), points: 0, returnTD: 0, spreadResid: 0, spreadN: 0, byPos: { RB: 0, WR: 0, TE: 0, QB: 0 } };
+const league = { gl5carry: 0, gl5td: 0, rzTgt: 0, rzTgtTD: 0, tgt: 0, tgtTD: 0, offTD: 0, teamGames: new Set(), points: 0, returnTD: 0, spreadResid: 0, spreadN: 0, byPos: { RB: 0, WR: 0, TE: 0, QB: 0 }, rushAtt: 0, rushTDtot: 0 };
 
 // load nflverse rosters (newest first) -> espn<->gsis id maps + gsis->position.
 // Positions must be known BEFORE parsing PBP so we can bucket each TD scorer.
@@ -341,6 +341,7 @@ async function parseSeason(season) {
     }
 
     // ---- league conversion constants ----
+    if (isRush) { league.rushAtt++; if (rushTD) league.rushTDtot++; }
     if (isRush && yl > 0 && yl <= 5) { league.gl5carry++; if (rushTD) league.gl5td++; }
     if (isPass) {
       const tgtId = f[idx.receiver_player_id];
@@ -432,6 +433,7 @@ async function parseSeason(season) {
   const GLCONV = league.gl5carry ? league.gl5td / league.gl5carry : 0.5;      // P(TD | inside-5 carry)
   const RZTGTCONV = league.rzTgt ? league.rzTgtTD / league.rzTgt : 0.19;      // P(TD | RZ target)
   const TGTTD = league.tgt ? league.tgtTD / league.tgt : 0.05;               // P(TD | target)
+  const RUSHTDATT = league.rushAtt ? league.rushTDtot / league.rushAtt : 0.023; // P(TD | rush attempt) — carry-volume signal
 
   // league off TD/gm for the kappa (points -> off TD) map.
   // IMPORTANT: use only FULL seasons (>=200 team-games ~= >6 gm/team); the newest
@@ -520,14 +522,15 @@ async function parseSeason(season) {
     }
     const denom = wG + SHRINK_GAMES;     // shrink per-game rates toward 0 with pseudo-games
     const rushTDpg = wRushTD / denom, glPg = wGL / denom, recTDpg = wRecTD / denom;
-    const rzTgtPg = wRzTgt / denom, tgtPg = wTgt / denom, airPg = wAir / denom;
-    const rushScore = 0.55 * rushTDpg + 0.45 * (glPg * GLCONV);
-    const recScore = 0.45 * recTDpg + 0.35 * (rzTgtPg * RZTGTCONV) + 0.20 * (tgtPg * TGTTD);
+    const rzTgtPg = wRzTgt / denom, tgtPg = wTgt / denom, airPg = wAir / denom, rushAttPg = wRushAtt / denom;
+    // opportunity-weighted: lean more on stable usage (goal-line carries, carry volume,
+    // RZ + overall target share) and less on noisy realized TDs.
+    const rushScore = 0.40 * rushTDpg + 0.40 * (glPg * GLCONV) + 0.20 * (rushAttPg * RUSHTDATT);
+    const recScore = 0.35 * recTDpg + 0.35 * (rzTgtPg * RZTGTCONV) + 0.30 * (tgtPg * TGTTD);
     return {
       rushScore, recScore, games: wG,
       isQB: wPassAtt > wRushAtt * 1.5 && wPassAtt > 20,
-      glPg, rzTgtPg, tgtPg, rushAttPg: wRushAtt / (wG + SHRINK_GAMES),
-      airPg, rushTDpg, recTDpg,
+      glPg, rzTgtPg, tgtPg, rushAttPg, airPg, rushTDpg, recTDpg,
     };
   }
   const playerScores = new Map();
@@ -555,10 +558,11 @@ async function parseSeason(season) {
     const recTD = (s24 ? s24.recTD : 0) * W_PRIOR + (r ? r.recTD : 0) * W_CUR;
     const rzTgt = (s24 ? s24.rzTgt : 0) * W_PRIOR + (r ? r.rzTgt : 0) * W_CUR;
     const tgt = (s24 ? s24.tgt : 0) * W_PRIOR + (r ? r.tgt : 0) * W_CUR;
+    const rushAtt = (s24 ? s24.rushAtt : 0) * W_PRIOR + (r ? r.rushAtt : 0) * W_CUR;
     const d = g + SHRINK_GAMES;
     return {
-      rushScore: 0.55 * (rushTD / d) + 0.45 * ((glCar / d) * GLCONV),
-      recScore: 0.45 * (recTD / d) + 0.35 * ((rzTgt / d) * RZTGTCONV) + 0.20 * ((tgt / d) * TGTTD),
+      rushScore: 0.40 * (rushTD / d) + 0.40 * ((glCar / d) * GLCONV) + 0.20 * ((rushAtt / d) * RUSHTDATT),
+      recScore: 0.35 * (recTD / d) + 0.35 * ((rzTgt / d) * RZTGTCONV) + 0.30 * ((tgt / d) * TGTTD),
     };
   }
   function candTeamSplit(team) {
