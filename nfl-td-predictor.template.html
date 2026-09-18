@@ -711,9 +711,22 @@ function legOutcome(J, leg, s){ const b=s*J.M;
   return false; }
 function jointProb(J, legs){ let h=0; const n=J.nsims; for(let s=0;s<n;s++){ let all=true; for(let i=0;i<legs.length;i++){ if(!legOutcome(J,legs[i],s)){all=false;break;} } if(all)h++; } return h/n; }
 let parlayRows=[];   // the currently-shown parlays, so the SGP-price inputs can look up joint probs
+// a parlay leg has to be someone you'd actually rely on — not a deep longshot whose
+// tiny modeled edge on +1600 odds is just noise. Bar to ANCHOR a parlay:
+//   • a genuine scoring threat: model anytime >= 12% (a 9% dart doesn't anchor)
+//   • a real season role (snapMF) AND on the field last week (snapLast), so a guy
+//     who saw no snaps/role the previous game can't ride a stale season average
+const PARLAY_MIN_ANY=0.12;
+function parlayReliable(p){
+  if(p._status==='OUT') return false;
+  if((p._snapMF!=null?p._snapMF:1)<0.3) return false;           // no real season role
+  if(p.snapLast!=null && p.snapLast<0.12) return false;         // barely/didn't play last week
+  if((p.anytime||0)<PARLAY_MIN_ANY) return false;               // not a reliable enough scorer
+  return true;
+}
 function parlayCandidates(){
   const J=LAST.dst.joint, all=LAST.awayR.concat(LAST.homeR), cand=[];
-  for(const p of all){ if(p._status==='OUT')continue; if((p._snapMF!=null?p._snapMF:1)<0.3)continue; /* no real role -> never parlay */ const gi=J.playerIdx.get(p._key); if(gi==null)continue;
+  for(const p of all){ if(!parlayReliable(p))continue; const gi=J.playerIdx.get(p._key); if(gi==null)continue;
     for(const m of ['anytime','first','last','two']){ const o=LAST.bookMap[m+'|'+p._key], dec=oddsDec(o); if(!dec)continue;
       const r=evalBet(p[m],o); if(!r)continue;
       cand.push({who:p._key,label:p.name,abbr:p._abbr,market:m,gi,dec,odds:o,mp:p[m],ev:r.ev,tier:tierOf(p[m],r.edge,r.ev,!p.matched)}); } }
@@ -721,12 +734,13 @@ function parlayCandidates(){
     for(const m of ['anytime','first','last']){ const o=LAST.bookMap[m+'|DST|'+abbr], dec=oddsDec(o); if(!dec)continue;
       const r=evalBet(d[m],o); if(!r)continue;
       cand.push({who:'DST|'+abbr,label:S.teams[abbr].short+' D/ST',abbr,market:m,gi,dec,odds:o,mp:d[m],ev:r.ev,tier:tierOf(d[m],r.edge,r.ev,false)}); } }
-  return cand.filter(c=>c.tier!=='dart'&&c.tier!=='flag'&&c.mp>=0.08).sort((a,b)=>b.ev-a.ev).slice(0,12);
+  // per-leg: drop dart/flag tiers and thin sub-5% legs; player reliability is already gated above
+  return cand.filter(c=>c.tier!=='dart'&&c.tier!=='flag'&&c.mp>=0.05).sort((a,b)=>b.ev-a.ev).slice(0,12);
 }
 function computeParlays(){
   const body=$('parlayBody'); if(!LAST||!LAST.dst||!LAST.dst.joint||!body) return;
   const J=LAST.dst.joint, pool=parlayCandidates(), maxLegs=+(($('parlayLegs')&&$('parlayLegs').value)||3);
-  if(pool.length<2){ body.innerHTML=`Enter book odds on at least <b>2</b> model-liked legs (any markets, model prob ≥8%, no 🎲/⚠) and I'll rank the best parlays here.`+parlayNote(); return; }
+  if(pool.length<2){ body.innerHTML=`Enter book odds on at least <b>2</b> reliable legs (any markets, model <b>anytime ≥12%</b>, a real role &amp; a snap last week, no 🎲/⚠) and I'll rank the best parlays here.`+parlayNote(); return; }
   const combos=(arr,k)=>{ const out=[]; (function rec(st,acc){ if(acc.length===k){out.push(acc.slice());return;} for(let i=st;i<arr.length;i++){ if(acc.some(x=>x.who===arr[i].who))continue; acc.push(arr[i]); rec(i+1,acc); acc.pop(); } })(0,[]); return out; };
   const LONGSHOT=0.02;   // a parlay that hits <2% of sims is a lottery ticket, not a lead
   const isDST=c=>String(c.who).startsWith('DST|');
@@ -787,6 +801,7 @@ function sgpEV(i){
 }
 function parlayNote(){ return `<div class="muted" style="margin-top:9px;font-size:12px;border-top:1px solid var(--line);padding-top:8px;line-height:1.5">`+
   `<b>Reading this:</b> "hits %" is straight from the 10k sims (the share where <i>all</i> legs cash — correlation already included). The ranked "<b>EV</b>" is the <b>conservative</b> one: the worse of treating the legs as independent and using the sim's true correlation — so a stack whose legs <b>fight each other</b> (like two opposing defenses) can't ride long odds to the top, and a <span style="color:var(--warn)">🎲 longshot</span> that hits &lt;2% is never starred. `+
+  `<b>Which legs are eligible:</b> only players who are a real threat (model <b>anytime ≥12%</b>) with an actual role and a snap last week — a deep longshot whose thin edge on long odds is just noise can't anchor a parlay. `+
   `<b>Why a "pass" leg appears:</b> a leg that's a pass on its own can still ride in a parlay carried by the strong leg — the parlay's edge isn't each leg standing alone. `+
   `<b class="v-flag">The catch:</b> every leg is one game, so these are <b>Same-Game Parlays</b>, and books <b>cut the payout</b> for correlated legs — so even "EV at full odds" is optimistic, and the correlation upside usually won't be paid. Enter your book's actual SGP price for the real number. `+
   `<b class="v-flag">And a big real EV is a red flag, not a jackpot:</b> per-leg model error <i>compounds</i> across legs, and this list is ranked by EV so it self-selects the parlays the model most overrates — a sharp SGP price sitting far wider than "fair" almost always means the sim is too high, not that the book is generous. Treat these as <b>candidates, not +EV locks</b>.</div>`; }
