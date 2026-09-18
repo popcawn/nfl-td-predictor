@@ -177,7 +177,8 @@ function teamDefRec(team, season) {
   return r;
 }
 // gsis_id -> scoring-position bucket, and the ESPN<->gsis id maps (filled by loadRosters)
-const gsis2pos = new Map(), espn2gsis = new Map(), name2gsis = new Map();
+const gsis2pos = new Map(), espn2gsis = new Map(), name2gsis = new Map(), pfr2gsis = new Map();
+const snapByGsis = new Map();   // gsis -> {snapPct (recency-wtd), lastPct, lastWk} for the current season
 function posBucket(p) { p = (p || '').toUpperCase(); if (p === 'RB' || p === 'FB' || p === 'HB') return 'RB'; if (p === 'WR') return 'WR'; if (p === 'TE') return 'TE'; if (p === 'QB') return 'QB'; return null; }
 function playerRec(pid, name, season) {
   let p = players.get(pid);
@@ -206,13 +207,39 @@ async function loadRosters() {
       if (!line) continue;
       const f = splitCSV(line);
       const gsis = f[ix.gsis_id]; if (!gsis) continue;
-      const espn = f[ix.espn_id], full = f[ix.full_name], pos = f[ix.position];
+      const espn = f[ix.espn_id], full = f[ix.full_name], pos = f[ix.position], pfr = f[ix.pfr_id];
       if (espn && !espn2gsis.has(String(espn))) espn2gsis.set(String(espn), gsis);
       if (full) { const nn = normName(full); if (!name2gsis.has(nn)) name2gsis.set(nn, gsis); }
+      if (pfr && !pfr2gsis.has(pfr)) pfr2gsis.set(pfr, gsis);
       const bk = posBucket(pos); if (bk && !gsis2pos.has(gsis)) gsis2pos.set(gsis, bk);
     }
   }
-  log(`  roster maps: ${espn2gsis.size} espn ids, ${name2gsis.size} names, ${gsis2pos.size} positions`);
+  log(`  roster maps: ${espn2gsis.size} espn ids, ${name2gsis.size} names, ${gsis2pos.size} positions, ${pfr2gsis.size} pfr`);
+}
+
+// current-season offensive snap share per player (role signal): recency-weighted mean
+// of weekly offense_pct, plus the most recent week. Refreshed weekly like the PBP.
+async function loadSnaps() {
+  const season = Math.max(...SEASONS);
+  const url = `https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_${season}.csv`;
+  const dest = path.join(CACHE_DIR, `snaps_${season}.csv`);
+  try { curlToFile(url, dest); } catch { log('  ! snap counts unavailable (skipping role signal)'); return; }
+  const rl = readline.createInterface({ input: fs.createReadStream(dest), crlfDelay: Infinity });
+  let ix = null;
+  const agg = new Map();   // gsis -> {sumW, sumWP, lastWk, lastPct}
+  for await (const line of rl) {
+    if (ix === null) { const h = splitCSV(line); ix = {}; h.forEach((c, i) => { ix[c] = i; }); continue; }
+    if (!line) continue;
+    const f = splitCSV(line);
+    const gsis = pfr2gsis.get(f[ix.pfr_player_id]); if (!gsis) continue;
+    const wk = +f[ix.week]; if (!(wk > 0)) continue;
+    let pct = num(f[ix.offense_pct]); if (pct > 1) pct /= 100;   // normalize to 0..1
+    let a = agg.get(gsis); if (!a) { a = { sumW: 0, sumWP: 0, lastWk: 0, lastPct: 0 }; agg.set(gsis, a); }
+    a.sumW += wk; a.sumWP += wk * pct;                            // recency weight = week number
+    if (wk > a.lastWk) { a.lastWk = wk; a.lastPct = pct; }
+  }
+  for (const [g, a] of agg) snapByGsis.set(g, { snapPct: +(a.sumWP / a.sumW).toFixed(3), lastPct: +a.lastPct.toFixed(3), lastWk: a.lastWk });
+  log(`  snap counts: ${snapByGsis.size} players with ${season} snaps`);
 }
 
 // backtest capture (TEST_SEASON games) + rolling weekly accumulators for an
@@ -379,6 +406,7 @@ async function parseSeason(season) {
   log(`seasons: ${SEASONS.join(', ')}  |  backtest train ${TRAIN_SEASON} -> test ${TEST_SEASON}`);
 
   await loadRosters();   // positions must be ready before we bucket TD scorers
+  await loadSnaps();     // current-season snap share (role signal), needs pfr2gsis from loadRosters
   const gotSeasons = [];
   for (const s of SEASONS) if (await parseSeason(s)) gotSeasons.push(s);
   if (!gotSeasons.length) throw new Error('no PBP seasons parsed');
@@ -713,6 +741,7 @@ async function parseSeason(season) {
         // replacement-level priors so unmatched rookies aren't invisible at 0%
         const PRIOR = { RB: { rush: 0.055, rec: 0.03 }, FB: { rush: 0.02, rec: 0.012 }, WR: { rush: 0.004, rec: 0.045 }, TE: { rush: 0.002, rec: 0.035 }, QB: { rush: 0.035, rec: 0 } };
         const pr = PRIOR[pos] || { rush: 0, rec: 0 };
+        const snap = gsis ? snapByGsis.get(gsis) : null;   // current-season role
         rows.push({
           id: a.id, name: a.fullName, pos, jersey: a.jersey || '', status,
           rushScore: sc ? +sc.rushScore.toFixed(5) : pr.rush,
@@ -723,6 +752,8 @@ async function parseSeason(season) {
           rushTDpg: sc ? +sc.rushTDpg.toFixed(3) : 0,
           recTDpg: sc ? +sc.recTDpg.toFixed(3) : 0,
           matched: !!sc,
+          snapPct: snap ? snap.snapPct : null,     // null = no snaps recorded this season
+          snapLast: snap ? snap.lastPct : null,    // most recent week's offensive snap %
         });
       }
     }

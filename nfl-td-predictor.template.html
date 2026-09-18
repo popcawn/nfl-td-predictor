@@ -89,6 +89,9 @@
   .poscell{font-size:12px;padding:2px 7px;border-radius:6px;border:1px solid var(--line2);font-variant-numeric:tabular-nums;color:var(--ink2)}
   .pos-weak{color:#ffb454;border-color:rgba(255,180,84,.4);background:rgba(255,180,84,.10);font-weight:800}
   .pos-strong{color:var(--ink3);opacity:.8}
+  .snaptag{font-size:10px;color:var(--ink3);border:1px solid var(--line2);border-radius:5px;padding:0 4px;margin-left:1px;font-variant-numeric:tabular-nums}
+  .snaptag.low{color:#ffb454;border-color:rgba(255,180,84,.4)}
+  tr.lowsnap{opacity:.5}
   .star{color:var(--star)}
   .note{background:var(--panel2);border:1px solid var(--line2);border-left:3px solid var(--warn);border-radius:10px;padding:11px 14px;font-size:13px;color:var(--ink2);margin-top:14px}
   .note.info{border-left-color:var(--accent)}
@@ -202,7 +205,7 @@
         <tbody id="playerBody"></tbody>
       </table>
     </div>
-    <div class="legend">Status: <b>ACT</b> active · <b>Q</b> questionable (×0.85) · <b>DBT</b> doubtful (×0.35) · <b>OUT</b> zeroed. Change a status to instantly re-simulate. Pick a <b>pricing market</b> (Anytime / 1st TD / 2+ TD) above, then enter a book's American odds (e.g. <span class="odds">+150</span>) — Fair, Edge, EV and the verdict follow that market, and each market remembers its own odds.</div>
+    <div class="legend">Status: <b>ACT</b> active · <b>Q</b> questionable (×0.85) · <b>DBT</b> doubtful (×0.35) · <b>OUT</b> zeroed. The <span class="snaptag">72%</span> tag is recent <b>offensive snap share</b> — <span class="snaptag low">🪑 —</span> / low = healthy scratch or no real role, so they're downweighted (and can't be parlay legs). Change a status to instantly re-simulate. Pick a <b>pricing market</b> (Anytime / 1st TD / 2+ TD) above, then enter a book's American odds (e.g. <span class="odds">+150</span>) — Fair, Edge, EV and the verdict follow that market, and each market remembers its own odds.</div>
     <div class="legend" style="margin-top:6px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">Verdict key:
       <span><span class="vbadge vb-take">TAKE</span> real edge worth a look (green row)</span>
       <span><span class="vbadge vb-dart">🎲 dart</span> longshot / no-history guess — the EV is just the big payout, a lottery ticket</span>
@@ -281,6 +284,19 @@ function lighten(hex, amt){
 function teamColor(abbr){ const t=S.teams[abbr]; return t?t.color:'#888'; }
 function teamText(abbr){ const t=S.teams[abbr]; return t?lighten(t.color,0.45):'#ccc'; }
 function logo(abbr){ const t=S.teams[abbr]; return t&&t.logo?t.logo:''; }
+// role multiplier from recent offensive snap share: ~0 for scratches / no-role players,
+// full weight once they're an established role (~35%+ snaps). Doesn't punish RB rotation.
+function snapMF(p){
+  const eff = (p.snapPct==null) ? 0 : p.snapPct;      // null = no snaps recorded this season
+  let mf = clamp((eff-0.05)/0.30, 0, 1);              // 0 at <=5% snaps, full (1.0) at >=35%
+  if(mf<0.05 && (p.rushScore+p.recScore)>0.05) mf=0.05;  // role-loss guys stay barely visible, not gone
+  return mf;
+}
+function snapLow(p){ return p.snapPct==null || p.snapPct<0.15; }   // healthy scratch / no real role
+function snapTag(p){
+  if(p.snapPct==null) return '<span class="snaptag low" title="no offensive snaps recorded this season — scratch or no role">🪑 —</span>';
+  return `<span class="snaptag ${snapLow(p)?'low':''}" title="recent offensive snap share (season, recency-weighted)">${Math.round(p.snapPct*100)}%</span>`;
+}
 
 // ---------- RNG: normal / gamma / poisson / NB ----------
 function rnd(){ return Math.random(); }
@@ -474,9 +490,10 @@ function run(){
   }
   function mkRoster(abbr, oppDef){
     return S.rosters[abbr].map(p=>{
-      const key=abbr+'|'+p.id, mf=posMF(p.pos, oppDef);
+      const key=abbr+'|'+p.id, mf=posMF(p.pos, oppDef), sf=snapMF(p);
       return {...p, _abbr:abbr, _status: prevStatus[key] || p.status || 'ACT', _key:key,
-              rushScore:p.rushScore*mf, recScore:p.recScore*mf, _mf:+mf.toFixed(2)};
+              _base:p.rushScore+p.recScore,   // pre-scaling score, for visibility/flags
+              rushScore:p.rushScore*mf*sf, recScore:p.recScore*mf*sf, _mf:+mf.toFixed(2), _snapMF:+sf.toFixed(2)};
     });
   }
   const awayR=mkRoster(away, offH.def), homeR=mkRoster(home, offA.def);
@@ -530,8 +547,11 @@ const bkey=key=>MARKET+'|'+key;   // book-odds map is keyed per market
 function renderPlayers(){
   // show real contributors; keep notable injured players visible (greyed) so a
   // missing star is obvious, but hide zero-usage deep bench to reduce noise
-  const rows=LAST.awayR.concat(LAST.homeR).filter(p=>
-    p._status==='OUT' ? (p.rushScore+p.recScore)>0.08 : p.anytime>=0.012);
+  const rows=LAST.awayR.concat(LAST.homeR).filter(p=>{
+    if(p._status==='OUT') return p._base>0.10;
+    if(p.anytime>=0.012) return true;
+    return p._base>0.20 && snapLow(p);   // keep notable role-loss guys visible (greyed) so they're not silently dropped
+  });
   const pc=k=>(a,b)=>a[k]-b[k];
   const cmp={
     name:(a,b)=>a.name.localeCompare(b.name),
@@ -545,11 +565,12 @@ function renderPlayers(){
   const act=m=>MARKET===m?' active':'';
   for(const p of rows){
     const tr=document.createElement('tr');
-    if(p._status==='OUT') tr.className='out';
     const out=p._status==='OUT';
+    const lowsnap = !out && snapLow(p) && p.anytime<0.03;
+    tr.className = out?'out':(lowsnap?'lowsnap':'');
     const bookVal=(LAST.bookMap[bkey(p._key)]||'').replace(/"/g,'&quot;');
     tr.innerHTML=`
-      <td class="l"><div class="plname"><span class="accent" style="background:${teamColor(p._abbr)}"></span>${logo(p._abbr)?`<img src="${logo(p._abbr)}">`:''}<span>${p.name}</span><span class="pos">${p.pos}</span>${p.matched?'':'<span class="pos" title="no PBP history — prior-based" style="color:var(--warn)">◦</span>'}</div></td>
+      <td class="l"><div class="plname"><span class="accent" style="background:${teamColor(p._abbr)}"></span>${logo(p._abbr)?`<img src="${logo(p._abbr)}">`:''}<span>${p.name}</span><span class="pos">${p.pos}</span>${p.matched?'':'<span class="pos" title="no PBP history — prior-based" style="color:var(--warn)">◦</span>'}${snapTag(p)}</div></td>
       <td class="l hidecol" style="color:${teamText(p._abbr)};font-weight:700">${p._abbr}</td>
       <td><select class="statussel" data-key="${p._key}">${statuses.map(s=>`<option ${s===p._status?'selected':''}>${s}</option>`).join('')}</select></td>
       <td class="probcell${act('anytime')}">${out?'—':pct(p.anytime)}</td>
@@ -673,7 +694,7 @@ function jointProb(J, legs){ let h=0; const n=J.nsims; for(let s=0;s<n;s++){ let
 let parlayRows=[];   // the currently-shown parlays, so the SGP-price inputs can look up joint probs
 function parlayCandidates(){
   const J=LAST.dst.joint, all=LAST.awayR.concat(LAST.homeR), cand=[];
-  for(const p of all){ if(p._status==='OUT')continue; const gi=J.playerIdx.get(p._key); if(gi==null)continue;
+  for(const p of all){ if(p._status==='OUT')continue; if((p._snapMF!=null?p._snapMF:1)<0.3)continue; /* no real role -> never parlay */ const gi=J.playerIdx.get(p._key); if(gi==null)continue;
     for(const m of ['anytime','first','last','two']){ const o=LAST.bookMap[m+'|'+p._key], dec=oddsDec(o); if(!dec)continue;
       const r=evalBet(p[m],o); if(!r)continue;
       cand.push({who:p._key,label:p.name,abbr:p._abbr,market:m,gi,dec,odds:o,mp:p[m],ev:r.ev,tier:tierOf(p[m],r.edge,r.ev,!p.matched)}); } }
