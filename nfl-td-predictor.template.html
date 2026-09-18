@@ -154,7 +154,8 @@
       <span class="pill" id="wxStatus">🏟️ …</span>
       <label>Wind <input type="number" id="wind" value="0" min="0" max="60" step="1"> mph</label>
       <input type="checkbox" id="outdoor" style="display:none">
-      <span class="muted" id="impliedNote"></span>
+      <span class="muted" id="lineNote"></span>
+      <span class="muted" id="impliedNote" style="flex-basis:100%"></span>
     </div>
   </div>
 
@@ -355,8 +356,19 @@ async function setWeather(){
     if(LAST)run();
   }catch(e){ if(my===wxToken) $('wxStatus').innerHTML=`🏟️ ${name} · <b>outdoor</b> <span class="muted">— no live forecast (offline?); enter wind manually</span>`; }
 }
-$('awaySel').onchange=()=>{refreshFav();setWeather();};
-$('homeSel').onchange=()=>{refreshFav();setWeather();};
+// auto-fill total / spread / favorite from the current line when the matchup is scheduled,
+// so a wrong favorite (which distorts the whole slate) can't be entered by accident
+function setLine(){
+  const away=$('awaySel').value, home=$('homeSel').value, el=$('lineNote');
+  const game=(S.schedule||[]).find(g=>g.home===home && g.away===away);
+  if(!game || game.total==null){ if(el) el.textContent=''; return; }
+  $('total').value=game.total;
+  if(game.fav && (game.fav===home||game.fav===away) && game.spread!=null){ $('favSel').value=game.fav; $('spread').value=Math.abs(game.spread); }
+  if(el){ const fs=S.teams[game.fav]?(S.teams[game.fav].short||game.fav):game.fav;
+    el.innerHTML=`📉 line: <b>${fs} -${Math.abs(game.spread)}</b> · O/U <b>${game.total}</b> <span class="muted">(auto — edit if it moved)</span>`; }
+}
+$('awaySel').onchange=()=>{refreshFav();setLine();setWeather();};
+$('homeSel').onchange=()=>{refreshFav();setLine();setWeather();};
 refreshFav();
 
 // ---------- the model ----------
@@ -963,7 +975,7 @@ document.querySelectorAll('.mktbtn').forEach(b=>{
 
 $('simBtn').onclick=run;
 [['total','change'],['spread','change'],['favSel','change'],['outdoor','change'],['wind','change']].forEach(([id,ev])=> $(id).addEventListener(ev,maybeSim));
-run(); setWeather(); // initial sim, then auto-detect stadium + fetch live weather
+setLine(); run(); setWeather(); // auto-fill line, sim, then stadium + live weather
 })();
 </script>
 </body>

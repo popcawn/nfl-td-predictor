@@ -700,7 +700,14 @@ async function parseSeason(season) {
     schedule = (sb.events || []).map(e => {
       const c = e.competitions[0];
       const h = c.competitors.find(x => x.homeAway === 'home'), a = c.competitors.find(x => x.homeAway === 'away');
-      return { home: nflAbbr(h.team.abbreviation), away: nflAbbr(a.team.abbreviation), kickoff: e.date, indoor: !!(c.venue && c.venue.indoor), venue: (c.venue && c.venue.fullName) || '' };
+      // current line so the app can auto-fill total/spread/favorite (prevents wrong-favorite input errors)
+      const o = (c.odds || [])[0] || {};
+      const total = (o.overUnder != null && +o.overUnder > 20) ? +o.overUnder : null;
+      let fav = null, spread = null;
+      const m = o.details && o.details.match(/([A-Z]{2,3})\s*(-?\d+(?:\.\d)?)/);
+      if (m) { fav = nflAbbr(m[1]); spread = Math.abs(+m[2]); }
+      if (!fav) { if (o.homeTeamOdds && o.homeTeamOdds.favorite) fav = nflAbbr(h.team.abbreviation); else if (o.awayTeamOdds && o.awayTeamOdds.favorite) fav = nflAbbr(a.team.abbreviation); if (spread == null && o.spread != null) spread = Math.abs(+o.spread); }
+      return { home: nflAbbr(h.team.abbreviation), away: nflAbbr(a.team.abbreviation), kickoff: e.date, indoor: !!(c.venue && c.venue.indoor), venue: (c.venue && c.venue.fullName) || '', total, fav, spread };
     });
     log(`  schedule: ${schedule.length} games this week`);
   } catch { log('  ! schedule fetch failed'); }
