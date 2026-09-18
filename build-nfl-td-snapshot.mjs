@@ -64,6 +64,13 @@ fs.mkdirSync(CACHE_DIR, { recursive: true });
 
 const SHRINK_GAMES = 4;        // pseudo-games of zero blended into every per-game rate
 const SIM_META = { nsims: 10000 };
+// team TD overdispersion (gamma-Poisson) — MUST match the live sim's NB_SIZE in the
+// template. Thinning a gamma-Poisson team count by a fixed player share yields another
+// gamma-Poisson with the same size, so a player's anytime prob is exactly
+// 1 - (1 + exp/NB_SIZE)^(-NB_SIZE). The backtest uses this so it measures the SHIPPED
+// model, not a Poisson approximation that ran ~1-4pt hot on high-usage players.
+const NB_SIZE = 6;
+const nbAnytime = exp => 1 - Math.pow(1 + exp / NB_SIZE, -NB_SIZE);
 
 // ESPN abbr -> nflverse abbr
 const ESPN2NFL = { WSH: 'WAS', LAR: 'LA' };
@@ -611,7 +618,7 @@ async function parseSeason(season) {
         });
         for (const r of rows) {
           const exp = (sumR ? rushPart * r.rs / sumR : 0) + (sumC ? passPart * r.cs / sumC : 0);
-          let p = Math.min(1 - CLIP, Math.max(CLIP, 1 - Math.exp(-exp)));
+          let p = Math.min(1 - CLIP, Math.max(CLIP, nbAnytime(exp)));  // NB anytime = exact live-sim prob
           const y = g.scored.has(r.pid) ? 1 : 0;
           bt.n++; bt.positives += y; bt.sumP += p;
           bt.brier += (p - y) ** 2;

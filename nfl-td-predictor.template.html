@@ -390,7 +390,7 @@ function teamExpectations(off, oppDef, impPts, marginPts, outdoor, wind){
   // formula the backtest validated). A red-zone-matchup reshape used to sit here but
   // it was NOT in the backtest, so it ran the live model ~5-15% hot vs what was
   // validated — dropped for consistency until it can be tested properly.
-  let expOff = Math.max(0.35, impPts * C.KAPPA);
+  let expOff = Math.max(0.4, impPts * C.KAPPA);   // floor matches the backtest exactly
 
   // Stage 2 prep: run/pass TD split = team tendency, funnelled by opponent + game script + weather.
   let rushShare = off.rushShare;
