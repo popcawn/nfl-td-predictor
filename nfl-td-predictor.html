@@ -743,13 +743,22 @@ function sgpEV(i){
   const r=parlayRows[i]; const res=document.querySelector(`.sgpres[data-i="${i}"]`); if(!r||!res) return;
   const inp=document.querySelector(`.sgpin[data-i="${i}"]`); const dec=oddsDec(inp.value);
   if(!dec){ res.innerHTML=''; return; }
-  const ev=r.jp*dec-1, take=ev>0.02;
-  res.innerHTML=`→ real EV <b class="${ev>0?'ev-pos':'ev-neg'}">${ev>=0?'+':''}${(ev*100).toFixed(1)}%</b> <span class="vbadge ${take?'vb-take':'vb-pass'}" style="padding:1px 8px">${take?'TAKE':'PASS'}</span> <span class="muted">vs fair ${probToAmerican(r.jp)}</span>`;
+  const ev=r.jp*dec-1;
+  // Against a sharp SGP price, a large positive EV almost always means the sim is
+  // OVER-rating the parlay (per-leg model error compounds across legs, and this list
+  // is ranked by EV so it self-selects the model's biggest overrates) — not free money.
+  let badge, cls, evcls, note='';
+  if(ev>0.30){ badge='⚠ too good'; cls='vb-flag'; evcls='ev-dart';
+    note=` <span style="color:var(--warn)">— a book this far off fair means the model is likely overrating these legs, not the book being generous</span>`; }
+  else if(ev>0.02){ badge='TAKE'; cls='vb-take'; evcls='ev-pos'; }
+  else { badge='PASS'; cls='vb-pass'; evcls='ev-neg'; }
+  res.innerHTML=`→ real EV <b class="${evcls}">${ev>=0?'+':''}${(ev*100).toFixed(1)}%</b> <span class="vbadge ${cls}" style="padding:1px 8px">${badge}</span> <span class="muted">vs fair ${probToAmerican(r.jp)}</span>${note}`;
 }
 function parlayNote(){ return `<div class="muted" style="margin-top:9px;font-size:12px;border-top:1px solid var(--line);padding-top:8px;line-height:1.5">`+
   `<b>Reading this:</b> "hits %" is straight from the 10k sims (the share where <i>all</i> legs cash — correlation already included). "<b>EV at full odds</b>" treats it like a cross-game parlay (leg odds multiplied) — the conservative baseline used to rank. `+
   `<b>Why a "pass" leg appears:</b> a leg that's a pass on its own can still ride in a parlay carried by the strong leg — the parlay's edge isn't each leg standing alone. `+
-  `<b class="v-flag">The catch:</b> every leg is one game, so these are <b>Same-Game Parlays</b>, and books <b>cut the payout</b> for correlated legs — so even "EV at full odds" is optimistic, and the correlation upside usually won't be paid. Enter your book's actual SGP price for the real number; until then treat these as <b>candidates, not +EV locks</b>.</div>`; }
+  `<b class="v-flag">The catch:</b> every leg is one game, so these are <b>Same-Game Parlays</b>, and books <b>cut the payout</b> for correlated legs — so even "EV at full odds" is optimistic, and the correlation upside usually won't be paid. Enter your book's actual SGP price for the real number. `+
+  `<b class="v-flag">And a big real EV is a red flag, not a jackpot:</b> per-leg model error <i>compounds</i> across legs, and this list is ranked by EV so it self-selects the parlays the model most overrates — a sharp SGP price sitting far wider than "fair" almost always means the sim is too high, not that the book is generous. Treat these as <b>candidates, not +EV locks</b>.</div>`; }
 
 const dstKey=(abbr)=>MARKET+'|DST|'+abbr;   // D/ST book odds, per market
 function renderDST(){
