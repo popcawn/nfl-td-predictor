@@ -6,21 +6,23 @@
 <title>NFL Anytime TD Simulator</title>
 <style>
   :root{
-    --bg:#0c0f14; --panel:#141922; --panel2:#1b2230; --line:#26304050; --line2:#2b3546;
-    --ink:#e7edf5; --ink2:#9fb0c3; --ink3:#6b7c92;
-    --good:#31d07a; --goodbg:#0f2a1e; --bad:#ff5d6c; --warn:#ffcf4d; --star:#ffd54a;
-    --accent:#4da3ff;
-    --radius:14px; --mono:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
+    --bg:#0a0d12; --panel:#141b26; --panel2:#1b2431; --line:#2a35485c; --line2:#31405640;
+    --ink:#eef3fa; --ink2:#a6b7ca; --ink3:#74869d;
+    --good:#33d986; --goodbg:#0f2a1e; --bad:#ff5d6c; --warn:#ffcf4d; --star:#ffd54a;
+    --accent:#4da3ff; --accent2:#79bcff;
+    --radius:16px; --mono:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
     --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --shadow:0 1px 2px rgba(0,0,0,.35), 0 14px 34px -18px rgba(0,0,0,.7);
   }
   *{box-sizing:border-box}
-  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16.5px;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  body{background:radial-gradient(1200px 640px at 50% -160px, #16233612, transparent 70%), radial-gradient(760px 420px at 100% -40px, #1b28390d, transparent 70%), var(--bg);min-height:100vh}
   a{color:var(--accent)}
-  .wrap{max-width:1180px;margin:0 auto;padding:18px 16px 90px}
-  h1{font-size:24px;margin:0;letter-spacing:-.3px}
-  h2{font-size:15px;text-transform:uppercase;letter-spacing:.12em;color:var(--ink2);margin:26px 0 12px;font-weight:700}
-  .sub{color:var(--ink2);font-size:13px;margin-top:4px}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+  .wrap{max-width:1560px;margin:0 auto;padding:24px clamp(16px,3.2vw,36px) 96px}
+  h1{font-size:28px;margin:0;letter-spacing:-.5px;font-weight:800}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.14em;color:var(--ink2);margin:30px 0 13px;font-weight:800}
+  .sub{color:var(--ink2);font-size:14.5px;margin-top:5px}
+  .panel{background:linear-gradient(180deg,var(--panel),#121826);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow)}
   .muted{color:var(--ink3)}
   .pill{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line2);border-radius:999px;padding:3px 10px;font-size:12px;color:var(--ink2)}
   .cal{display:inline-flex;gap:14px;flex-wrap:wrap;align-items:center}
@@ -33,9 +35,9 @@
   .teampick{display:flex;align-items:center;gap:10px}
   .teampick img{width:34px;height:34px;object-fit:contain;flex:0 0 auto}
   .row3{display:grid;grid-template-columns:1.1fr 1fr 1fr auto;gap:12px;align-items:end;margin-top:14px}
-  .btn{background:var(--accent);color:#04121f;border:none;border-radius:11px;padding:12px 20px;font-weight:800;font-size:15px;cursor:pointer;white-space:nowrap}
-  .btn:hover{filter:brightness(1.08)}
-  .btn.sec{background:var(--panel2);color:var(--ink);border:1px solid var(--line2)}
+  .btn{background:linear-gradient(135deg,var(--accent2),var(--accent));color:#04121f;border:none;border-radius:12px;padding:12px 22px;font-weight:800;font-size:15px;cursor:pointer;white-space:nowrap;box-shadow:0 6px 18px -8px var(--accent);transition:transform .06s ease,filter .12s ease}
+  .btn:hover{filter:brightness(1.07)} .btn:active{transform:translateY(1px)}
+  .btn.sec{background:var(--panel2);color:var(--ink);border:1px solid var(--line2);box-shadow:none}
   .weather{display:flex;gap:16px;align-items:center;margin-top:12px;font-size:13px;color:var(--ink2);flex-wrap:wrap}
   .weather input[type=number]{width:80px;padding:6px 8px}
   .weather label{display:inline-flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;color:var(--ink2);font-size:13px;margin:0}
@@ -54,10 +56,11 @@
   .vs{display:flex;align-items:center;justify-content:center;color:var(--ink3);font-weight:800;font-size:13px}
   /* table */
   table{width:100%;border-collapse:collapse;margin-top:4px}
-  th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink2);text-align:right;padding:8px 10px;border-bottom:1px solid var(--line2);cursor:pointer;user-select:none;white-space:nowrap}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink2);text-align:right;padding:10px 11px;border-bottom:1px solid var(--line2);cursor:pointer;user-select:none;white-space:nowrap;position:sticky;top:0;background:var(--panel)}
   th.l{text-align:left}
   th.sorted{color:var(--ink)}
-  td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap}
+  td{padding:9px 11px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap}
+  tbody tr{transition:background .1s ease} tbody tr:hover td{background:rgba(120,160,220,.05)}
   td.l{text-align:left}
   tr.out{opacity:.4}
   .plname{display:flex;align-items:center;gap:9px}
@@ -65,10 +68,10 @@
   .accent{width:4px;height:26px;border-radius:3px;flex:0 0 auto}
   .pos{display:inline-block;min-width:30px;font-size:11px;color:var(--ink2);border:1px solid var(--line2);border-radius:6px;padding:1px 5px;text-align:center;margin-left:2px}
   .big{font-weight:800;font-size:15px}
-  .odds{font-family:var(--mono);font-size:13px}
+  .odds{font-family:var(--mono);font-size:14px}
   .statussel{background:var(--panel2);border:1px solid var(--line2);border-radius:7px;color:var(--ink2);font-size:11px;padding:3px 4px}
   .mktrow{display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap;font-size:13px;color:var(--ink2)}
-  .mktbtn{background:var(--panel2);border:1px solid var(--line2);color:var(--ink2);border-radius:8px;padding:5px 13px;font-size:13px;font-weight:700;cursor:pointer}
+  .mktbtn{background:var(--panel2);border:1px solid var(--line2);color:var(--ink2);border-radius:9px;padding:6px 15px;font-size:14px;font-weight:700;cursor:pointer;transition:border-color .1s,color .1s}
   .mktbtn:hover{border-color:var(--accent)}
   .mktbtn.active{background:var(--accent);color:#04121f;border-color:var(--accent)}
   td.probcell.active{color:var(--ink);font-weight:800}
@@ -93,10 +96,10 @@
   .snaptag.low{color:#ffb454;border-color:rgba(255,180,84,.4)}
   tr.lowsnap{opacity:.5}
   .star{color:var(--star)}
-  .note{background:var(--panel2);border:1px solid var(--line2);border-left:3px solid var(--warn);border-radius:10px;padding:11px 14px;font-size:13px;color:var(--ink2);margin-top:14px}
+  .note{background:var(--panel2);border:1px solid var(--line2);border-left:3px solid var(--warn);border-radius:12px;padding:13px 16px;font-size:14px;color:var(--ink2);margin-top:14px}
   .note.info{border-left-color:var(--accent)}
   .note b{color:var(--ink)}
-  .legend{font-size:12px;color:var(--ink3);margin-top:8px}
+  .legend{font-size:13px;color:var(--ink3);margin-top:8px}
   .hidden{display:none}
   .bar{height:6px;border-radius:4px;background:var(--line2);overflow:hidden;margin-top:6px}
   .bar>i{display:block;height:100%}
@@ -344,6 +347,21 @@ function refreshFav(){
 // ---------- auto weather: dome/outdoor from the home stadium + live game-day forecast ----------
 function fmtKick(iso){ try{ const d=new Date(iso); return d.toLocaleDateString([], {weekday:'short'})+' '+d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}); }catch(e){ return ''; } }
 function nearestHourIdx(times, whenMs){ const t=whenMs/1000; let best=-1,bd=Infinity; for(let i=0;i<times.length;i++){ const d=Math.abs(times[i]-t); if(d<bd){bd=d;best=i;} } return best; }
+// live game-time condition (drives the display AND a light run-lean nudge in bad weather).
+// precip type only shifts run/pass share — it never touches the Vegas-anchored scoring LEVEL
+// (that would need to be in the backtest), exactly like the wind adjustment.
+let WX={precip:'none', pp:0, temp:null, kind:'', icon:'🏟️'};
+// WMO weather_code -> {icon,label,precip}
+function wxKind(code, pp){
+  const c=+code;
+  if(c>=71&&c<=77 || c===85 || c===86) return {icon:'❄️', label:'snow', precip:'snow'};
+  if(c>=95) return {icon:'⛈️', label:'thunderstorm', precip:'rain'};
+  if(c>=51&&c<=67 || c>=80&&c<=82) return {icon:'🌧️', label:'rain', precip:'rain'};
+  if(c===45||c===48) return {icon:'🌫️', label:'fog', precip:'none'};
+  if(c===3) return {icon:'☁️', label:'overcast', precip:'none'};
+  if(c===2) return {icon:'⛅', label:'partly cloudy', precip:'none'};
+  return {icon:'☀️', label:'clear', precip:'none'};   // 0–1
+}
 let wxToken=0;
 async function setWeather(){
   const away=$('awaySel').value, home=$('homeSel').value;
@@ -352,22 +370,27 @@ async function setWeather(){
   const indoor = game ? game.indoor : (st ? st.dome : false);
   const name=(game&&game.venue)||(st&&st.name)||(S.teams[home]?(S.teams[home].short+' stadium'):'stadium');
   const my=++wxToken;   // ignore stale async responses if the matchup changed
+  WX={precip:'none', pp:0, temp:null, kind:'', icon:'🏟️'};   // reset until forecast lands
   $('outdoor').checked = !indoor;
-  if(indoor){ $('wind').value=0; $('wind').disabled=true; $('wxStatus').innerHTML=`🏟️ ${name} · <b>indoor</b> <span class="muted">— no weather</span>`; if(LAST)run(); return; }
+  if(indoor){ $('wind').value=0; $('wind').disabled=true; $('wxStatus').innerHTML=`🏟️ ${name} · <b>indoor</b> <span class="muted">— climate-controlled, no weather</span>`; if(LAST)run(); return; }
   $('wind').disabled=false;
   $('wxStatus').innerHTML=`🏟️ ${name} · <b>outdoor</b>${game?` · ${fmtKick(game.kickoff)}`:''} <span class="muted">— checking forecast…</span>`;
   if(LAST)run();
   if(!st){ $('wxStatus').innerHTML=`🏟️ ${name} · <b>outdoor</b> <span class="muted">— enter wind manually</span>`; return; }
   try{
-    const url=`https://api.open-meteo.com/v1/forecast?latitude=${st.lat}&longitude=${st.lon}&hourly=temperature_2m,wind_speed_10m,precipitation_probability&wind_speed_unit=mph&temperature_unit=fahrenheit&timeformat=unixtime&forecast_days=7`;
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${st.lat}&longitude=${st.lon}&hourly=temperature_2m,wind_speed_10m,precipitation_probability,weather_code&wind_speed_unit=mph&temperature_unit=fahrenheit&timeformat=unixtime&forecast_days=7`;
     const j=await (await fetch(url)).json();
     if(my!==wxToken) return;   // a newer matchup selection superseded this
     const whenMs = game ? new Date(game.kickoff).getTime() : Date.now();
     const i=nearestHourIdx(j.hourly.time, whenMs);
     if(i<0) throw 0;
     const wind=Math.round(j.hourly.wind_speed_10m[i]), temp=Math.round(j.hourly.temperature_2m[i]), pp=j.hourly.precipitation_probability[i]||0;
+    const k=wxKind(j.hourly.weather_code[i], pp);
+    WX={precip:k.precip, pp, temp, kind:k.label, icon:k.icon};
     $('wind').value=wind;
-    $('wxStatus').innerHTML=`🏟️ ${name} · <b>outdoor</b>${game?` · ${fmtKick(game.kickoff)}`:''} — <b>${wind} mph</b> wind · ${temp}°F${pp>=40?` · ${pp}% precip`:''} <span class="muted">(live)</span>`;
+    const cold = temp<=32?' 🥶':'';
+    const precipTxt = (k.precip!=='none'&&pp>=30)?` · ${pp}% chance`:'';
+    $('wxStatus').innerHTML=`${k.icon} ${name} · <b>${k.label}</b>${cold} · ${temp}°F · <b>${wind} mph</b> wind${precipTxt}${game?` · ${fmtKick(game.kickoff)}`:''} <span class="muted">(live)</span>`;
     if(LAST)run();
   }catch(e){ if(my===wxToken) $('wxStatus').innerHTML=`🏟️ ${name} · <b>outdoor</b> <span class="muted">— no live forecast (offline?); enter wind manually</span>`; }
 }
@@ -412,6 +435,7 @@ function teamExpectations(off, oppDef, impPts, marginPts, outdoor, wind){
   rushShare += 0.25*(oppDef.rushAllowShare - 0.5);          // opponent funnel
   rushShare += clamp(0.012*marginPts, -0.10, 0.12);          // favorites run, dogs pass (garbage time)
   if(outdoor && wind>12) rushShare += Math.min(0.09,(wind-12)*0.005); // wind suppresses passing TDs
+  if(outdoor && WX.pp>=50){ if(WX.precip==='snow') rushShare += 0.05; else if(WX.precip==='rain') rushShare += 0.03; } // wet/snow ball → lean run (share only, level unchanged)
   rushShare = clamp(rushShare, 0.24, 0.80);
 
   // D/ST return-TD rate for this team's own defense (run() also sets this explicitly)
@@ -772,7 +796,7 @@ function computeParlays(){
     // AND penalises anti-correlated stacks (legs that fight each other) that independent-EV
     // alone would reward. quality = a plausible (hits >= LONGSHOT) positive-EV pick.
     const rankEV=Math.min(indepEV,ceilEV);
-    results.push({legs:combo,jp,dec,indepEV,ceilEV,rankEV,corr:indepP>0?jp/indepP-1:0});
+    results.push({legs:combo,jp,ip:indepP,dec,indepEV,ceilEV,rankEV,corr:indepP>0?jp/indepP-1:0});
   }
   // plausible +EV picks first, then everything else by conservative EV — so a lottery-odds
   // stack (e.g. a defense + a long shot) can't outrank a solid, likely parlay
@@ -790,7 +814,7 @@ function computeParlays(){
     const upside = r.corr>0.02 && r.ceilEV>r.rankEV ? ` <span class="muted">→ up to +${(r.ceilEV*100).toFixed(0)}% if paid full</span>` : '';
     const isPick = r.rankEV>0 && r.jp>=LONGSHOT;
     html+=`<div style="border-top:1px solid var(--line);padding-top:7px">${isPick?'<span class="star">★</span> ':`<span class="muted">${i+1}.</span> `}${legs}`+
-      `<div style="margin-top:3px;font-size:12px">${r.legs.length} legs · hits <b>${pct(r.jp)}</b> (${corrTxt})${longshot} · <b>fair <span class="odds">${probToAmerican(r.jp)}</span></b> · <span class="muted">full-odds pays ${amStr(decToAmerican(r.dec))}, EV ${r.rankEV>=0?'+':''}${(r.rankEV*100).toFixed(1)}% (conservative)${upside}</span></div>`+
+      `<div style="margin-top:3px;font-size:12px">${r.legs.length} legs · hits <b>${pct(r.jp)}</b> (${corrTxt})${longshot} · <b>fair <span class="odds">${probToAmerican(Math.min(r.jp,r.ip))}</span></b> · <span class="muted">full-odds pays ${amStr(decToAmerican(r.dec))}, EV ${r.rankEV>=0?'+':''}${(r.rankEV*100).toFixed(1)}% (conservative)${upside}</span></div>`+
       `<div style="margin-top:4px;font-size:12px">↳ your book's actual SGP price: <input class="sgpin bookin" data-i="${i}" placeholder="+17042" style="width:100px;padding:4px 7px"> <span class="sgpres" data-i="${i}"></span></div></div>`;
   });
   html+='</div>'+parlayNote();
@@ -803,23 +827,28 @@ function sgpEV(i){
   const r=parlayRows[i]; const res=document.querySelector(`.sgpres[data-i="${i}"]`); if(!r||!res) return;
   const inp=document.querySelector(`.sgpin[data-i="${i}"]`); const dec=oddsDec(inp.value);
   if(!dec){ res.innerHTML=''; return; }
-  const ev=r.jp*dec-1;
-  // Against a sharp SGP price, a large positive EV almost always means the sim is
-  // OVER-rating the parlay (per-leg model error compounds across legs, and this list
-  // is ranked by EV so it self-selects the model's biggest overrates) — not free money.
+  // Use the CONSERVATIVE probability = min(true joint, independent joint), the same basis the
+  // ranking uses. For a positively-correlated SGP the model's jp is the tightest possible line
+  // (full correlation credit, no vig), so grading a book price against it made every normal
+  // price look "too good". min() strips the unproven correlation boost, so "fair" ≈ what the
+  // legs multiply to and a book paying near full odds now reads as roughly fair, not a jackpot.
+  const p=Math.min(r.jp, r.ip);
+  const ev=p*dec-1;
+  const overFull = dec > r.dec*1.02;   // book paying MORE than the legs multiplied = genuinely anomalous
   let badge, cls, evcls, note='';
-  if(ev>0.30){ badge='⚠ too good'; cls='vb-flag'; evcls='ev-dart';
-    note=` <span style="color:var(--warn)">— a book this far off fair means the model is likely overrating these legs, not the book being generous</span>`; }
-  else if(ev>0.02){ badge='TAKE'; cls='vb-take'; evcls='ev-pos'; }
+  if(overFull){ badge='⚠ too good'; cls='vb-flag'; evcls='ev-dart';
+    note=` <span style="color:var(--warn)">— pays over the full multiplied odds; a real book almost never does, so double-check the price/legs</span>`; }
+  else if(ev>0.02){ badge='TAKE'; cls='vb-take'; evcls='ev-pos';
+    note=` <span class="muted">— book is above fair here; the edge is the correlation the book didn't fully cut, so size it small</span>`; }
   else { badge='PASS'; cls='vb-pass'; evcls='ev-neg'; }
-  res.innerHTML=`→ real EV <b class="${evcls}">${ev>=0?'+':''}${(ev*100).toFixed(1)}%</b> <span class="vbadge ${cls}" style="padding:1px 8px">${badge}</span> <span class="muted">vs fair ${probToAmerican(r.jp)}</span>${note}`;
+  res.innerHTML=`→ real EV <b class="${evcls}">${ev>=0?'+':''}${(ev*100).toFixed(1)}%</b> <span class="vbadge ${cls}" style="padding:1px 8px">${badge}</span> <span class="muted">vs fair ${probToAmerican(p)} · full odds ${amStr(decToAmerican(r.dec))}</span>${note}`;
 }
 function parlayNote(){ return `<div class="muted" style="margin-top:9px;font-size:12px;border-top:1px solid var(--line);padding-top:8px;line-height:1.5">`+
   `<b>Reading this:</b> "hits %" is straight from the 10k sims (the share where <i>all</i> legs cash — correlation already included). The ranked "<b>EV</b>" is the <b>conservative</b> one: the worse of treating the legs as independent and using the sim's true correlation — so a stack whose legs <b>fight each other</b> (like two opposing defenses) can't ride long odds to the top, and a <span style="color:var(--warn)">🎲 longshot</span> that hits &lt;2% is never starred. `+
   `<b>Which legs are eligible:</b> only players who are a real threat (model <b>anytime ≥12%</b>) with an actual role and a snap last week — a deep longshot whose thin edge on long odds is just noise can't anchor a parlay. `+
   `<b>Why a "pass" leg appears:</b> a leg that's a pass on its own can still ride in a parlay carried by the strong leg — the parlay's edge isn't each leg standing alone. `+
   `<b class="v-flag">The catch:</b> every leg is one game, so these are <b>Same-Game Parlays</b>, and books <b>cut the payout</b> for correlated legs — so even "EV at full odds" is optimistic, and the correlation upside usually won't be paid. Enter your book's actual SGP price for the real number. `+
-  `<b class="v-flag">And a big real EV is a red flag, not a jackpot:</b> per-leg model error <i>compounds</i> across legs, and this list is ranked by EV so it self-selects the parlays the model most overrates — a sharp SGP price sitting far wider than "fair" almost always means the sim is too high, not that the book is generous. Treat these as <b>candidates, not +EV locks</b>.</div>`; }
+  `<b>How the real EV is graded:</b> your SGP price is scored against the <b>conservative</b> fair (no unproven correlation credit), so a book paying near the full multiplied odds reads as roughly fair — a small +EV, not "too good". <b class="v-flag">⚠ too good</b> now only fires when the book pays <i>more</i> than the legs multiplied, which is genuinely rare — so check the price/legs when it does. Treat these as <b>candidates, not +EV locks</b>.</div>`; }
 
 // ---------- cross-game slip: parlay legs from DIFFERENT games. These are independent
 // (no same-game correlation), so the joint prob is a clean product and the book pays the
