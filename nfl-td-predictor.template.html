@@ -256,6 +256,23 @@
       <div id="slipBody" class="legend"></div>
     </div>
 
+    <!-- BET LOG & CLV -->
+    <h2>Bet log &amp; CLV</h2>
+    <div class="panel" id="betPanel" style="padding:14px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:6px">📓 Log every bet — the sim's TD props <b>or your own player props</b> (yards, receptions, anything) — and track <b>CLV</b> (did you beat the closing line?) and <b>ROI</b>. This is the only honest read on whether the sim actually makes money — aim for 50–100 bets before trusting it.</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <select id="betPlayer" class="statussel" style="max-width:210px"></select>
+        <select id="betMarket" class="statussel"><option value="anytime">Anytime</option><option value="two">2+ TD</option><option value="first">1st TD</option><option value="last">Last TD</option><option value="custom">Custom prop…</option></select>
+        <input id="betCustom" type="text" placeholder="e.g. Bijan rush yds O 49.5" style="width:200px;display:none">
+        <input id="betOdds" type="text" placeholder="odds +150" style="width:110px">
+        <input id="betStake" type="number" step="0.5" placeholder="stake 1" style="width:95px">
+        <button class="btn" id="betAdd" style="padding:6px 14px;font-size:13px">Log bet</button>
+        <span id="betMsg" class="muted" style="font-size:12px"></span>
+        <button class="statussel" id="betClear" style="padding:6px 10px;font-size:12px;margin-left:auto">Clear log</button>
+      </div>
+      <div id="betBody" class="legend"></div>
+    </div>
+
     <div class="note" id="corrNote"><b>Same-game correlation:</b> two scorers on the same team are <b>positively correlated</b> (when an offense scores a lot, several of its players cash together). Treat multiple "TAKE"s on one team as a same-game parlay leg set, not as independent edges. A model edge much larger than the market's usually means a missed inactive or role change — verify before betting.</div>
     <div class="note"><b>Estimate-grade until inactives lock.</b> Props involving Q/DBT players are estimates until game-day actives are confirmed (~90 min before kickoff). Update each player's status above when the inactive list drops.</div>
   </div>
@@ -610,7 +627,7 @@ function run(){
 
   $('impliedNote').textContent = `Implied points — ${S.teams[away].short}: ${imp.away.toFixed(1)}, ${S.teams[home].short}: ${imp.home.toFixed(1)}  ·  exp. off. TDs ${awayExp.expOff.toFixed(2)} / ${homeExp.expOff.toFixed(2)}`;
   $('results').classList.remove('hidden');
-  renderTott(); renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder();
+  renderTott(); renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder(); refreshBetForm();
 }
 function maybeSim(){ if(LAST) run(); }
 
@@ -958,6 +975,76 @@ function renderSlip(){
   body.innerHTML=html;
 }
 
+// ---------- bet log & CLV: the honest scoreboard. Log any bet (the sim's TD props OR your own
+// player props), enter the closing line later, and it tracks CLV (did you beat the close — the
+// leading indicator of a real edge) + settled ROI. Persists via localStorage. ----
+let bets=[]; let betOptCache=[];
+function loadBets(){ try{ const s=localStorage.getItem('nfltd_bets'); if(s) bets=JSON.parse(s)||[]; }catch(e){ bets=[]; } if(!Array.isArray(bets)) bets=[]; }
+function saveBets(){ try{ localStorage.setItem('nfltd_bets', JSON.stringify(bets)); }catch(e){} }
+function betFlash(m){ const el=$('betMsg'); if(!el) return; el.textContent=m; el.style.color='var(--warn)'; setTimeout(()=>{ if(el.textContent===m){el.textContent='';el.style.color='';} },2600); }
+function betPlayerOptions(){
+  const out=[{key:'custom', name:'— custom / other prop —'}];
+  if(LAST){ LAST.awayR.concat(LAST.homeR).forEach(p=>{ if(p._status!=='OUT') out.push({key:p._key, name:p.name, abbr:p._abbr, p}); });
+    out.push({key:'DST|'+LAST.away, name:S.teams[LAST.away].short+' D/ST', abbr:LAST.away, dst:LAST.dst.dstAway});
+    out.push({key:'DST|'+LAST.home, name:S.teams[LAST.home].short+' D/ST', abbr:LAST.home, dst:LAST.dst.dstHome}); }
+  return out;
+}
+function refreshBetForm(){ const sel=$('betPlayer'); if(!sel) return; betOptCache=betPlayerOptions();
+  const keep=sel.value; sel.innerHTML=betOptCache.map((o,i)=>`<option value="${i}">${o.name}</option>`).join(''); if(keep&&betOptCache[+keep]) sel.value=keep; syncBetFormFields(); }
+function syncBetFormFields(){ const o=betOptCache[+$('betPlayer').value], mkt=$('betMarket').value;
+  const custom = mkt==='custom' || (o&&o.key==='custom'); $('betCustom').style.display = custom?'':'none';
+  if(!custom && o && LAST){ const bk = o.p ? LAST.bookMap[mkt+'|'+o.key] : LAST.bookMap[mkt+'|DST|'+o.abbr]; if(bk && !$('betOdds').value.trim()) $('betOdds').value=bk; } }
+function addBet(){
+  const o=betOptCache[+$('betPlayer').value], mkt=$('betMarket').value;
+  let odds=$('betOdds').value.trim(); if(/^\d/.test(odds)) odds='+'+odds;
+  const dec=oddsDec(odds); if(!dec){ betFlash('enter the price, e.g. +150'); return; }
+  const stake=Math.abs(parseFloat($('betStake').value))||1;
+  const custom = mkt==='custom' || (o&&o.key==='custom');
+  let player, market, key=null, mp=null; const game=LAST?LAST.away+'@'+LAST.home:'';
+  if(custom){ const c=$('betCustom').value.trim(); if(!c){ betFlash('describe the prop first'); return; } player=c; market='custom'; }
+  else { player=o.name; key=o.key; market=mkt; mp = o.p ? o.p[mkt] : (o.dst ? o.dst[mkt] : null); }
+  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*9999), ts:new Date().toISOString(), game, key, player, market, odds, modelProb:(mp!=null?+mp.toFixed(4):null), stake, closeOdds:'', result:'pending'});
+  saveBets(); $('betOdds').value=''; $('betCustom').value=''; renderBets(); betFlash('logged ✓');
+}
+function mktLabel(m){ return (MKT[m]&&MKT[m].label)||'Custom'; }
+function renderBets(){
+  const body=$('betBody'); if(!body) return;
+  if(!bets.length){ body.innerHTML='<div class="muted">No bets logged yet. Log a few (real or paper), fill in the closing line after kickoff, and your CLV + ROI build up here. Positive CLV over ~50–100 bets = a real edge; flat/negative = the market already had it priced.</div>'; return; }
+  let staked=0, net=0, w=0, l=0, pu=0, clvSum=0, clvN=0, clvPos=0;
+  const drows = bets.map(b=>{ const dec=oddsDec(b.odds), cd=oddsDec(b.closeOdds); let clv=null;
+    if(dec&&cd){ clv=dec/cd-1; clvSum+=clv; clvN++; if(clv>0)clvPos++; }
+    let pl=null; if(b.result==='win'){ w++; staked+=b.stake; pl=b.stake*((dec||1)-1); net+=pl; }
+    else if(b.result==='loss'){ l++; staked+=b.stake; pl=-b.stake; net+=pl; }
+    else if(b.result==='push'){ pu++; pl=0; }
+    return {b,dec,clv,pl}; });
+  const roi = staked? net/staked : null, avgClv = clvN? clvSum/clvN : null;
+  const g=v=>v>0?'ev-pos':(v<0?'ev-neg':''); const sgn=v=>(v>=0?'+':'')+v;
+  let html=`<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:baseline;margin-bottom:9px;padding:9px 11px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;font-size:13px">`+
+    `<span><b>${bets.length}</b> logged</span>`+
+    `<span>settled <b>${w}-${l}${pu?'-'+pu:''}</b></span>`+
+    `<span>staked <b>${staked.toFixed(1)}u</b></span>`+
+    `<span>net <b class="${g(net)}">${sgn(net.toFixed(2))}u</b></span>`+
+    `<span>ROI <b class="${g(roi)}">${roi==null?'—':sgn((roi*100).toFixed(1))+'%'}</b></span>`+
+    `<span>avg CLV <b class="${g(avgClv)}">${avgClv==null?'—':sgn((avgClv*100).toFixed(1))+'%'}</b>${clvN?` <span class="muted">(${Math.round(clvPos/clvN*100)}% beat close)</span>`:''}</span></div>`;
+  html+='<div style="overflow-x:auto"><table style="margin-top:0"><thead><tr>'+
+    ['Bet','Odds','Model','Close','CLV','Stake','Result','P/L',''].map((h,i)=>`<th class="${i===0?'l':''}" style="cursor:default;position:static">${h}</th>`).join('')+'</tr></thead><tbody>';
+  drows.forEach(({b,dec,clv,pl})=>{
+    const gm = b.game?`<span class="muted" style="font-size:11px">${fmtGame(b.game)}</span> `:'';
+    html+=`<tr><td class="l">${gm}<b>${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)}</span></td>`+
+      `<td class="odds">${b.odds}</td>`+
+      `<td>${b.modelProb!=null?pct(b.modelProb):'—'}</td>`+
+      `<td><input class="bookin betclose" data-id="${b.id}" value="${(b.closeOdds||'').replace(/"/g,'&quot;')}" placeholder="close" style="width:70px"></td>`+
+      `<td class="${clv!=null?g(clv):''}">${clv==null?'—':sgn((clv*100).toFixed(1))+'%'}</td>`+
+      `<td>${b.stake}u</td>`+
+      `<td><select class="statussel betres" data-id="${b.id}">${['pending','win','loss','push'].map(s=>`<option ${s===b.result?'selected':''}>${s}</option>`).join('')}</select></td>`+
+      `<td class="${pl!=null?g(pl):''}">${pl==null?'—':sgn(pl.toFixed(2))}</td>`+
+      `<td><button class="statussel betdel" data-id="${b.id}" style="padding:0 7px;color:var(--warn)">✕</button></td></tr>`;
+  });
+  html+='</tbody></table></div>'+
+    `<div class="muted" style="margin-top:8px;font-size:12px;line-height:1.5"><b>CLV</b> = how much better your price was than the closing line (dec you / dec close − 1). It's the leading indicator: beat the close consistently and profit follows; it shows up long before ROI does through the variance. <b>Model</b> is the sim's probability at log time (blank for props the sim doesn't cover). Fill <b>Close</b> after the line settles.</div>`;
+  body.innerHTML=html;
+}
+
 const dstKey=(abbr)=>MARKET+'|DST|'+abbr;   // D/ST book odds, per market
 function renderDST(){
   const {away,home,dst,awayExp,homeExp}=LAST;
@@ -1150,6 +1237,16 @@ $('slipAdd').onclick=()=>{ const i=$('slipPlayer').value; if(i==='') return; if(
 $('slipAddBest').onclick=()=>{ if(slipLegCache.length) addLeg(slipLegCache[0], $('slipMarket').value); };
 $('slipClear').onclick=()=>{ if(slip.length && confirm('Clear all '+slip.length+' cross-game slip legs?')){ slip=[]; saveSlip(); renderSlip(); } };
 $('slipBody').addEventListener('click', e=>{ const b=e.target.closest('.slipdel'); if(!b) return; slip.splice(+b.dataset.i,1); saveSlip(); renderSlip(); });
+// bet log wiring
+$('betMarket').onchange=syncBetFormFields;
+$('betPlayer').onchange=syncBetFormFields;
+$('betAdd').onclick=addBet;
+$('betClear').onclick=()=>{ if(bets.length && confirm('Clear all '+bets.length+' logged bets? This can\'t be undone.')){ bets=[]; saveBets(); renderBets(); } };
+$('betBody').addEventListener('change', e=>{ const id=e.target.dataset.id; if(!id) return; const b=bets.find(x=>x.id===id); if(!b) return;
+  if(e.target.classList.contains('betclose')) b.closeOdds=e.target.value.trim();
+  else if(e.target.classList.contains('betres')) b.result=e.target.value;
+  saveBets(); renderBets(); });
+$('betBody').addEventListener('click', e=>{ const d=e.target.closest('.betdel'); if(!d) return; bets=bets.filter(x=>x.id!==d.dataset.id); saveBets(); renderBets(); });
 $('oddsPaste').addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); applyPastedOdds(); }});
 // pricing-market switch: re-point Fair/Book/EV/Verdict + sort at the chosen market
 document.querySelectorAll('.mktbtn').forEach(b=>{
@@ -1169,6 +1266,7 @@ document.querySelectorAll('.mktbtn').forEach(b=>{
 $('simBtn').onclick=run;
 [['total','change'],['spread','change'],['favSel','change'],['outdoor','change'],['wind','change']].forEach(([id,ev])=> $(id).addEventListener(ev,maybeSim));
 loadSlip(); renderSlip();       // restore the cross-game slip from a previous visit
+loadBets(); renderBets();       // restore the bet log + CLV history
 setLine(); run(); setWeather(); // auto-fill line, sim, then stadium + live weather
 refreshLive();                  // then overlay today's ESPN line + injury status
 })();
