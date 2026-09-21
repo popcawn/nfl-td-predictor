@@ -394,6 +394,52 @@ async function setWeather(){
     if(LAST)run();
   }catch(e){ if(my===wxToken) $('wxStatus').innerHTML=`🏟️ ${name} · <b>outdoor</b> <span class="muted">— no live forecast (offline?); enter wind manually</span>`; }
 }
+// ---------- live daily refresh: today's line (total / spread / favorite) + injury status,
+// pulled straight from ESPN each visit so a snapshot built earlier in the week still shows
+// current numbers. Same live-fetch pattern as weather; matches teams by stable ESPN id (not
+// abbreviation) and players by athlete id (= our roster id). Silent fallback to baked values
+// when offline. ----
+const espnIdToAbbr=(()=>{ const m={}; for(const a of S.teamList){ const t=S.teams[a]; if(t&&t.id!=null) m[String(t.id)]=a; } return m; })();
+let liveToken=0;
+async function refreshLive(){
+  const away=$('awaySel').value, home=$('homeSel').value, my=++liveToken;
+  try{
+    const [sb, inj] = await Promise.all([
+      fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard').then(r=>r.json()),
+      fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries').then(r=>r.json())
+    ]);
+    if(my!==liveToken) return;   // a newer matchup selection superseded this
+    let changed=false;
+    // --- today's line: total / spread / favorite ---
+    for(const ev of (sb.events||[])){ const comp=ev.competitions&&ev.competitions[0]; if(!comp)continue;
+      const sd={}; for(const c of (comp.competitors||[])){ const ab=espnIdToAbbr[String(c.team&&c.team.id)]; if(ab) sd[c.homeAway]=ab; }
+      if(sd.home!==home || sd.away!==away) continue;
+      const o=(comp.odds||[])[0];
+      if(o){
+        if(o.overUnder>20){ $('total').value=o.overUnder; changed=true; }
+        let favSide=(o.homeTeamOdds&&o.homeTeamOdds.favorite)?'home':(o.awayTeamOdds&&o.awayTeamOdds.favorite)?'away':null;
+        let sp=(o.spread!=null && !isNaN(o.spread))?Math.abs(+o.spread):null;
+        if(sp==null && o.details){ const m=o.details.match(/-?(\d+(?:\.\d)?)/); if(m) sp=Math.abs(+m[1]); }
+        if(!favSide && o.spread!=null) favSide = (+o.spread<0)?'home':'away';   // ESPN spread = home line
+        if(favSide && sp!=null){ $('favSel').value = favSide==='home'?home:away; $('spread').value=sp; changed=true; }
+        const fs=S.teams[$('favSel').value]; if(fs) $('lineNote').innerHTML=`📈 live line: <b>${fs.short||fs.name} -${$('spread').value}</b> · O/U <b>${$('total').value}</b> <span class="muted">(live — refreshes each visit)</span>`;
+      }
+      break;
+    }
+    // --- injury status (authoritative; overrides baked + prior state for injured players) ---
+    const liveMap=new Map();
+    for(const tm of (inj.injuries||[])) for(const it of (tm.injuries||[])){ const id=it.athlete&&it.athlete.id; if(!id)continue;
+      const st=String(it.status||(it.type&&it.type.description)||'').toLowerCase(); let code=null;
+      if(/out|injured reserve|\bir\b|\bpup\b|suspend|inactive/.test(st)) code='OUT';
+      else if(/doubt/.test(st)) code='DBT';
+      else if(/quest/.test(st)) code='Q';
+      else if(/active|probable|available|healthy/.test(st)) code='ACT';
+      if(code) liveMap.set(String(id), code);
+    }
+    for(const ab of [away,home]) for(const p of (S.rosters[ab]||[])){ const c=liveMap.get(String(p.id)); if(c && c!==p.status){ p.status=c; if(LAST) LAST.statusMap[ab+'|'+p.id]=c; changed=true; } }
+    if(changed && LAST) run();
+  }catch(e){ /* offline / API hiccup: keep the baked line + status */ }
+}
 // auto-fill total / spread / favorite from the current line when the matchup is scheduled,
 // so a wrong favorite (which distorts the whole slate) can't be entered by accident
 function setLine(){
@@ -412,8 +458,8 @@ function clearOddsBoard(){
   if(LAST) LAST.bookMap={};
   $('oddsPaste').value=''; $('oddsMsg').textContent='';
 }
-$('awaySel').onchange=()=>{clearOddsBoard();refreshFav();setLine();setWeather();};
-$('homeSel').onchange=()=>{clearOddsBoard();refreshFav();setLine();setWeather();};
+$('awaySel').onchange=()=>{clearOddsBoard();refreshFav();setLine();setWeather();refreshLive();};
+$('homeSel').onchange=()=>{clearOddsBoard();refreshFav();setLine();setWeather();refreshLive();};
 refreshFav();
 
 // ---------- the model ----------
@@ -1124,6 +1170,7 @@ $('simBtn').onclick=run;
 [['total','change'],['spread','change'],['favSel','change'],['outdoor','change'],['wind','change']].forEach(([id,ev])=> $(id).addEventListener(ev,maybeSim));
 loadSlip(); renderSlip();       // restore the cross-game slip from a previous visit
 setLine(); run(); setWeather(); // auto-fill line, sim, then stadium + live weather
+refreshLive();                  // then overlay today's ESPN line + injury status
 })();
 </script>
 </body>

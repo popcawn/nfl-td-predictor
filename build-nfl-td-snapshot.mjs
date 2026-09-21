@@ -753,7 +753,7 @@ async function parseSeason(season) {
         if (injs.length) {
           const st = (injs[0].status || (injs[0].type && injs[0].type.description) || '').toLowerCase();
           if (/out|injured reserve|\bir\b/.test(st)) status = 'OUT';
-          else if (/doubt/.test(st)) status = 'DOUBT';
+          else if (/doubt/.test(st)) status = 'DBT';   // must match the template's status codes (ACT/Q/DBT/OUT)
           else if (/quest/.test(st)) status = 'Q';
         }
         // join to PBP scores by ID (exact); fall back to normalized name
