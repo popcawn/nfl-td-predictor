@@ -83,6 +83,8 @@ const MODEL = {
   posPow: 0.5,        // matchup exponent, only if posMF is re-enabled
   shrinkPrior: true,  // shrink thin samples toward the position-shaped prior instead of toward zero
   ps: 0.5,            // strength of that prior
+  snapFull: 0.35,     // snap share at which the role weight reaches 1
+  snapFloor: 0.2,     // minimum role weight for a player with any snaps
   qbSnapExempt: true, // the starting QB skips the snap weight (he plays every snap)
   snap: 'hybrid',     // snap-share role weight: min(1,max(0.2,snap/35%)); no snaps yet = unknown in the
                       //   first 2 weeks, then ~0 (likely scratch). The old 0-at-5% curve hurt accuracy.
@@ -704,11 +706,11 @@ async function parseSeason(season) {
             if (o.snap && (bk !== 'QB' || !o.qbSnapExempt)) { const a = snapRun.get(pid), has = a && a.sw, eff = has ? a.swp / a.sw : 0;
               let mf;
               if (o.snap === 'soft') mf = has ? Math.max(0.2, Math.min(1, eff / 0.35)) : 1;          // unknown = full; floor 0.2
-              else if (o.snap === 'hybrid') mf = has ? Math.max(0.2, Math.min(1, eff / 0.35)) : (wk <= 2 ? 1 : 0.05);  // no snaps 2+ weeks in = likely scratch
+              else if (o.snap === 'hybrid') mf = has ? Math.max(o.snapFloor, Math.min(1, eff / o.snapFull)) : (wk <= 2 ? 1 : 0.05);  // no snaps 2+ weeks in = likely scratch
               else { mf = Math.max(0, Math.min(1, (eff - 0.05) / 0.30)); if (mf < 0.05 && (r + c) > 0.05) mf = 0.05; }   // live snapMF
               r *= mf; c *= mf; }
             if (o.posMF && bk) { const mf = Math.pow(Math.max(0.55, Math.min(1.6, od.byPos[bk] / (trainLeagueByPos[bk] || 0.01))), o.posPow); r *= mf; c *= mf; }
-            sumR += r; sumC += c; return { pid, r, c, bk };
+            const sa = snapRun.get(pid); sumR += r; sumC += c; return { pid, r, c, bk, se: sa && sa.sw ? sa.swp / sa.sw : null };
           });
           for (const x of pl) {
             const exp = (sumR ? expOff * rs * x.r / sumR : 0) + (sumC ? expOff * (1 - rs) * x.c / sumC : 0);
@@ -716,7 +718,7 @@ async function parseSeason(season) {
             const y = g.scored.has(x.pid) ? 1 : 0;
             acc.n++; acc.pos += y; acc.sumP += p; acc.brier += (p - y) ** 2; acc.ll += -(y * Math.log(p) + (1 - y) * Math.log(1 - p));
             const b = bins[Math.min(9, Math.floor(p * 10))]; b.n++; b.y += y; b.p += p;
-            rows.push({ g: gid, pid: x.pid, p, y, bk: x.bk });
+            rows.push({ g: gid, pid: x.pid, p, y, bk: x.bk, se: x.se, wk });
           }
           let st = seen.get(team); if (!st) { st = new Set(); seen.set(team, st); }
           for (const pid of touched.keys()) st.add(pid);   // visible to LATER weeks only (used after this week's games)
@@ -735,6 +737,15 @@ async function parseSeason(season) {
     };
   }
 
+  // Role tier from prior-week snap share (same cut-points the app uses). The backtest showed the sim
+  // over-rates rotational players and QBs and under-rates full-timers; roleFactors() measures
+  // actual/predicted per tier so the app can recalibrate its displayed probabilities.
+  const roleTier = r => r.bk === 'QB' ? 'qb' : r.se == null ? 'none' : r.se >= 0.6 ? 'full' : r.se >= 0.35 ? 'rot' : 'part';
+  function roleFactors(rows) {
+    const t = {}; for (const r of rows) { const k = roleTier(r); const a = t[k] || (t[k] = { n: 0, p: 0, y: 0 }); a.n++; a.p += r.p; a.y += r.y; }
+    const f = {}; for (const [k, a] of Object.entries(t)) f[k] = a.n >= 150 && a.p > 0 ? +Math.max(0.75, Math.min(1.25, a.y / a.p)).toFixed(3) : 1;
+    return f;
+  }
   function byPosCal(rows) {   // per-position calibration: mean predicted vs actual scoring rate
     const t = {}; for (const r of rows) { const k = r.bk || '?'; const a = t[k] || (t[k] = { n: 0, p: 0, y: 0 }); a.n++; a.p += r.p; a.y += r.y; }
     return Object.entries(t).map(([k, a]) => `${k} ${(a.p / a.n * 100).toFixed(1)}->${(a.y / a.n * 100).toFixed(1)}%(${a.n})`).join('  ');
@@ -756,24 +767,59 @@ async function parseSeason(season) {
       const d1 = bri(o, H1) - bri(b, H1), d2 = bri(o, H2) - bri(b, H2);
       log(`  ${(k + ' -> ' + v + (k === 'snap' ? ' [roster]' : '')).padEnd(24)} H1 ${sg(d1)}  H2 ${sg(d2)}${d1 < 0 && d2 < 0 ? '   <-- better on both halves' : ''}`); }
     log(`  by position (pred->actual): ${byPosCal(runBacktest(cur).rows)}`);
+    // calibration by ROLE (prior-week snap share): are part-time players' probabilities trustworthy?
+    const tierOf = r => r.bk === 'QB' ? 'QB' : r.se == null ? 'no snap data' : r.se >= 0.6 ? 'full-time 60%+' : r.se >= 0.35 ? 'rotational 35-60%' : 'part-time <35%';
+    const calTier = rows => { const t = {}; for (const r of rows) { const k = tierOf(r); const a = t[k] || (t[k] = { n: 0, p: 0, y: 0, b: 0 }); a.n++; a.p += r.p; a.y += r.y; a.b += (r.p - r.y) ** 2; }
+      return Object.entries(t).map(([k, a]) => { const pr = a.p / a.n, ac = a.y / a.n, se = Math.sqrt(ac * (1 - ac) / a.n);
+        return `    ${k.padEnd(20)} n ${String(a.n).padStart(5)}  pred ${(pr * 100).toFixed(1).padStart(5)}%  actual ${(ac * 100).toFixed(1).padStart(5)}%  gap ${((ac - pr) * 100 >= 0 ? '+' : '') + ((ac - pr) * 100).toFixed(1)} pts (${((ac - pr) / (se || 1)).toFixed(1)} SE)`; }).join('\n'); };
+    // Cross-fit the role recalibration: learn per-role factors on one half, apply to the other.
+    for (const cand of ['touched', 'roster']) {
+      const a = runBacktest({ ...cur, cand, wk: H1 }).rows, b = runBacktest({ ...cur, cand, wk: H2 }).rows;
+      const br = rows => rows.reduce((s, r) => s + (r.p - r.y) ** 2, 0) / rows.length;
+      const apply = (rows, f) => rows.map(r => ({ ...r, p: Math.min(0.97, r.p * (f[roleTier(r)] || 1)) }));
+      const fa = roleFactors(a), fb = roleFactors(b);
+      const only = f => ({ rot: Math.min(1, f.rot || 1), qb: Math.min(1, f.qb || 1) });   // stable, down-only part
+      log(`  recalibration cross-fit [${cand}]: H2 ${br(b).toFixed(5)} -> all ${br(apply(b, fa)).toFixed(5)} | rot+qb ${br(apply(b, only(fa))).toFixed(5)} (factors from H1)   H1 ${br(a).toFixed(5)} -> all ${br(apply(a, fb)).toFixed(5)} | rot+qb ${br(apply(a, only(fb))).toFixed(5)} (factors from H2)`);
+      log(`    factors H1: ${JSON.stringify(fa)}   H2: ${JSON.stringify(fb)}`);
+    }
+    log(`  calibration by role, touched set:\n${calTier(runBacktest(cur).rows)}`);
+    log(`  calibration by role, roster set (players who may not play):\n${calTier(runBacktest({ ...cur, cand: 'roster' }).rows)}`);
     for (const q of [0.5, 0.7]) log(`  by position, qbCarry ${q}: ${byPosCal(runBacktest({ ...cur, qbCarry: q }).rows)}`);
     log(`  by position, QB not snap-exempt: ${byPosCal(runBacktest({ ...cur, qbSnapExempt: false }).rows)}\n`);
   }
 
   const mainBT = runBacktest({ ...MODEL, cand: 'touched' });
-  const btRows = mainBT.rows;
+  const rosterRows = runBacktest({ ...MODEL, cand: 'roster' }).rows;
+  // ROLE RECALIBRATION. The sim over-rates rotational players (35-60% snaps) and QBs; cross-fitting
+  // (factors learned on one half, applied to the other) improved the held-out half in all 4 checks,
+  // while also correcting full-/part-time didn't hold up. So only that stable, down-only part ships:
+  // the app multiplies those players' probabilities by the measured actual/predicted ratio.
+  const calFrom = (tRows, rRows) => { const ft = roleFactors(tRows), fr = roleFactors(rRows);
+    const avg = k => Math.min(1, ((ft[k] || 1) + (fr[k] || 1)) / 2); return { rot: +avg('rot').toFixed(3), qb: +avg('qb').toFixed(3) }; };
+  const ROLE_CAL = calFrom(mainBT.rows, rosterRows);   // full-season fit, shipped to the app
+  const recal = (r, f) => ({ ...r, p: Math.min(0.97, r.p * (roleTier(r) === 'rot' ? f.rot : roleTier(r) === 'qb' ? f.qb : 1)) });
+  // the headline is scored honestly: each half is recalibrated with factors learned on the OTHER half
+  const half = (rows, h) => rows.filter(r => h === 1 ? r.wk <= 9 : r.wk >= 10);
+  const fH1 = calFrom(half(mainBT.rows, 1), half(rosterRows, 1)), fH2 = calFrom(half(mainBT.rows, 2), half(rosterRows, 2));
+  const btRows = mainBT.rows.map(r => recal(r, r.wk <= 9 ? fH2 : fH1));
+  function summarize(rows) {
+    let n = 0, b = 0, ll = 0, pos = 0, sp = 0; const bins = Array.from({ length: 10 }, () => ({ n: 0, y: 0, p: 0 }));
+    for (const r of rows) { const p = Math.min(1 - CLIP, Math.max(CLIP, r.p)); n++; pos += r.y; sp += p; b += (p - r.y) ** 2; ll += -(r.y * Math.log(p) + (1 - r.y) * Math.log(1 - p));
+      const bb = bins[Math.min(9, Math.floor(p * 10))]; bb.n++; bb.y += r.y; bb.p += p; }
+    const base = n ? pos / n : 0.22;
+    return { n, brier: b / n, logloss: ll / n, baselineBrier: base * (1 - base), baseRate: base, meanPred: sp / n,
+      reliability: bins.filter(x => x.n >= 20).map(x => ({ pred: +(x.p / x.n).toFixed(3), actual: +(x.y / x.n).toFixed(3), n: x.n })) };
+  }
   const baseRate = mainBT.summary.baseRate;
   const backtest = {
     trainSeason: TRAIN_SEASON, testSeason: TEST_SEASON, method: 'rolling within-season, real closing lines',
-    ...mainBT.summary, model: MODEL,
+    ...summarize(btRows), kappa: mainBT.summary.kappa, rawBrier: mainBT.summary.brier, roleCal: ROLE_CAL, model: MODEL,
   };
   const skill = s => ((1 - s.brier / s.baselineBrier) * 100).toFixed(1) + '%';
-  log(`  backtest: N=${backtest.n} Brier=${backtest.brier?.toFixed(4)} (baseline ${backtest.baselineBrier.toFixed(4)}, skill ${skill(backtest)}) logloss=${backtest.logloss?.toFixed(4)} meanPred=${(backtest.meanPred*100).toFixed(1)}% base=${(baseRate*100).toFixed(1)}%`);
+  log(`  backtest: N=${backtest.n} Brier=${backtest.brier?.toFixed(4)} (baseline ${backtest.baselineBrier.toFixed(4)}, skill ${skill(backtest)}; before role recalibration ${mainBT.summary.brier.toFixed(4)}) logloss=${backtest.logloss?.toFixed(4)} meanPred=${(backtest.meanPred*100).toFixed(1)}% base=${(baseRate*100).toFixed(1)}%`);
+  log(`  role recalibration shipped: rotational x${ROLE_CAL.rot}, QB x${ROLE_CAL.qb} (cross-fit halves: H1 ${JSON.stringify(fH1)} H2 ${JSON.stringify(fH2)})`);
   log(`  reliability: ` + backtest.reliability.map(b => `${(b.pred*100)|0}->${(b.actual*100)|0}%(${b.n})`).join(' '));
   log(`  by position (pred->actual): ${byPosCal(btRows)}`);
-  // diagnostic only: scoring every player who'd played for the team earlier in the season adds many
-  // easy near-zero bench rows, so its skill reads HIGHER — the touched set above is the harder test.
-  { const rb = runBacktest({ ...MODEL, cand: 'roster' }).summary; log(`  (diagnostic) roster-candidate set: N=${rb.n} skill ${skill(rb)} — easier population, not a bound`); }
 
   // ---- market-universe backtest: restrict to players the sportsbook actually
   // priced an anytime-TD market on (ESPN BET boards). LINES, not prices — so this

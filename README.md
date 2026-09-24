@@ -20,6 +20,10 @@ silently to the baked snapshot when not.
 - **Weather** — domes and roofed stadiums are indoor (a curated roof table wins over ESPN's venue flag); outdoor
   games pull the [Open-Meteo](https://open-meteo.com) forecast at kickoff: condition (clear / cloudy / rain /
   snow / storm), temperature and wind.
+- **Your card** — the answer to "what do I bet?". Right under the paste box: a short list of bets in order, each with a
+  stake in units of your bankroll, plus why everything else was skipped. Ranked by **Kelly** (edge relative to the price),
+  not EV% — EV% always floats the longest shots to the top. ¼-Kelly stakes, at most 2 plays and 4% of bankroll per team
+  (same-team scorers win and lose together). One click logs the whole card to the bet log. Card picks get a ★ in the table.
 - **Four priceable markets** — the Anytime / 1st TD / Last TD / 2+ TD toggle re-points Fair / Book / Edge /
   EV / Verdict; each market remembers its own odds.
 - **Paste the board** into the ⚡ box (Ctrl/Cmd+Enter). FanDuel-style stacked blocks fill three markets at once:
@@ -90,10 +94,13 @@ on every 2025 game, using only 2024 data plus 2025 weeks *before* each game, anc
 line. κ and every baseline come from the training season only; no in-game information is used. It scores the
 players who got a touch in each game (plus the QB who dropped back), i.e. as if you knew the actives.
 
-- **Brier 0.1504** vs a 0.1642 base-rate baseline → **8.4% skill**; log loss 0.475; reliability tracks the
-  diagonal (predicted 14 / 24 / 34 / 44 / 53% → actual 15 / 23 / 33 / 42 / 53%).
-- By position (predicted → actual): RB 24.7 → 26.9%, WR 20.5 → 20.0%, QB 15.2 → 13.7%, TE 17.0 → 18.5% —
-  each within ~1–2 standard errors, so they're left alone rather than tuned to one season.
+- **Brier 0.1502** vs a 0.1642 base-rate baseline → **8.5% skill**; log loss 0.475; reliability on the diagonal
+  (predicted 14 / 24 / 34 / 44 / 53 / 63% → actual 15 / 24 / 35 / 44 / 53 / 63%).
+- **Role calibration.** By snap share, the raw sim over-rated **rotational players (35–60% snaps)** by ~2.6 pts and
+  **QBs** by ~1.5–2 pts. Correcting only those two tiers (×0.874 and ×0.846, down-only) improved the held-out half in
+  all four cross-fits (learn on weeks 1–9, test on 10–18 and vice versa); correcting full-/part-time players did not
+  hold up, so it isn't applied. The headline Brier is scored cross-fitted, never on the data the factors came from.
+  (Stretching the snap curve instead closed the gaps but made overall accuracy worse — wrong lever.)
 
 **Every model switch had to earn its place.** `BT_EXPERIMENTS=1` flips each switch and scores weeks 1–9 and
 10–18 separately; a change stays only if it helps on **both** halves. Kept: kneel exclusion, weather,
