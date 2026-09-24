@@ -580,6 +580,15 @@ function simulate(cfg){
 
 // ---------- run + render ----------
 let LAST=null;
+// which QB is tonight's starter, per team (session override). Default = the presumed starter
+// flagged at build time (most games). Picking a different QB (e.g. Penix in for a benched Rush)
+// gives THAT QB full weight and discounts the others, so his own production drives the model.
+const qbStarterPick={};
+function starterQBId(abbr){
+  if(qbStarterPick[abbr]!=null) return qbStarterPick[abbr];
+  const qbs=(S.rosters[abbr]||[]).filter(p=>p.pos==='QB');
+  const flagged=qbs.find(p=>p.starterQB); return flagged?flagged.id:(qbs[0]?qbs[0].id:null);
+}
 function run(){
   const away=$('awaySel').value, home=$('homeSel').value;
   if(away===home){ $('impliedNote').textContent='Pick two different teams.'; return; }
@@ -610,11 +619,20 @@ function run(){
     return Math.pow(clamp(r,0.55,1.6),0.5);   // sqrt-dampened: a 1.5x-weak D is ~1.22x here
   }
   function mkRoster(abbr, oppDef){
+    const starterId=String(starterQBId(abbr));
     return S.rosters[abbr].map(p=>{
-      const key=abbr+'|'+p.id, mf=posMF(p.pos, oppDef), sf=snapMF(p);
+      const key=abbr+'|'+p.id, mf=posMF(p.pos, oppDef);
+      const isStarterQB = p.pos==='QB' && String(p.id)===starterId;
+      // single-starter: only tonight's chosen QB carries full weight; other QBs discounted (they
+      // don't play unless he's out). Applied live so a QB swap uses the right QB's own production.
+      const qbMf = p.pos==='QB' ? (isStarterQB ? 1 : 0.06) : 1;
+      // a designated starting QB plays ~every offensive snap, so his role is full regardless of
+      // prior-week snap share (a QB about to start for the first time this season reads as 0 snaps).
+      const sf = isStarterQB ? 1 : snapMF(p);
       return {...p, _abbr:abbr, _status: prevStatus[key] || p.status || 'ACT', _key:key,
-              _base:p.rushScore+p.recScore,   // pre-scaling score, for visibility/flags
-              rushScore:p.rushScore*mf*sf, recScore:p.recScore*mf*sf, _mf:+mf.toFixed(2), _snapMF:+sf.toFixed(2)};
+              _base:(p.rushScore+p.recScore)*qbMf,   // pre-scaling score, for visibility/flags
+              rushScore:p.rushScore*mf*sf*qbMf, recScore:p.recScore*mf*sf*qbMf,
+              _mf:+mf.toFixed(2), _snapMF:+sf.toFixed(2), _isQB:p.pos==='QB', _isStarterQB:isStarterQB};
     });
   }
   const awayR=mkRoster(away, offH.def), homeR=mkRoster(home, offA.def);
@@ -637,8 +655,12 @@ function renderTott(){
   document.documentElement.style.setProperty('--homec',teamColor(home));
   function col(abbr,off,exp,impPts,oppDef,cls){
     const split=Math.round(exp.rushShare*100);
+    const qbs=(S.rosters[abbr]||[]).filter(p=>p.pos==='QB');
+    const stId=String(starterQBId(abbr));
+    const qbSel = qbs.length>1 ? `<div class="statline" style="border-bottom:none;padding:6px 0 4px"><span title="Set tonight's starting QB — the model gives him full weight (his own rushing/scoring) and discounts the other QBs. Use this when a backup starts, e.g. a benching, that the season data doesn't reflect yet.">🎙️ Starting QB <span class="muted">ⓘ</span></span><span><select class="statussel qbstarter" data-abbr="${abbr}">${qbs.map(q=>`<option value="${q.id}" ${String(q.id)===stId?'selected':''}>${q.name}${q.starterQB?'':' (bkp)'}</option>`).join('')}</select></span></div>` : '';
     return `<div class="totcol ${cls}" style="--${cls}c:${teamColor(abbr)}">
       <div class="tothead"><img src="${logo(abbr)}"><div><div class="nm" style="color:${teamText(abbr)}">${S.teams[abbr].name}</div><div class="im">implied ${impPts.toFixed(1)} pts · ${exp.expOff.toFixed(2)} exp off TD</div></div></div>
+      ${qbSel}
       <div class="statline"><span title="Recency-weighted across ${S.meta.seasons.join('–')}; the prior full seasons dominate — descriptive context, NOT the value the sim uses">Off TD/gm · wtd <span class="muted">ⓘ</span></span><span>${off.offTDpg.toFixed(2)}</span></div>
       <div class="statline"><span>Red-zone TD%</span><span>${(off.rzTDpct*100).toFixed(0)}%</span></div>
       <div class="statline"><span>Run / pass TD split</span><span>${split}% / ${100-split}%</span></div>
@@ -653,6 +675,7 @@ function renderTott(){
     col(away,offA,awayExp,imp.away,offH,'away') +
     `<div class="vs">@</div>` +
     col(home,offH,homeExp,imp.home,offA,'home');
+  document.querySelectorAll('.qbstarter').forEach(sel=>{ sel.onchange=e=>{ qbStarterPick[e.target.dataset.abbr]=e.target.value; run(); }; });
   const mx=Math.max(...S.meta.seasons);
   $('tottNote').innerHTML =
     `<b>“Off TD/gm · wtd”, RZ% and splits are recency-weighted over ${S.meta.seasons.join(', ')}</b> — early in ${mx} its handful of games barely move the blend, so the prior two full seasons dominate (that's intended). `+

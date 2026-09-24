@@ -783,11 +783,17 @@ async function parseSeason(season) {
     // heavily discounted since they don't play unless the starter is out (the
     // user can flip a starter to OUT to promote the backup). Without this, a
     // mobile QB2 can outrank the actual starter on rushing-TD weight.
+    // Presumed starter = the QB actually PLAYING most (recent snap share), then games, then score.
+    // Snap share beats "most games" because a high-games QB can be a stale/blended backup (e.g. a
+    // mid-season addition) who never took a snap for this team.
+    const qbSnap = q => (q.snapPct != null ? q.snapPct : (q.snapLast != null ? q.snapLast : 0));
     const qbs = rows.filter(r => r.pos === 'QB')
-      .sort((a, b) => (b.games - a.games) || ((b.rushScore + b.recScore) - (a.rushScore + a.recScore)));
-    qbs.forEach((q, i) => {
-      if (i > 0) { q.rushScore = +(q.rushScore * 0.06).toFixed(5); q.recScore = +(q.recScore * 0.06).toFixed(5); q.backupQB = true; }
-    });
+      .sort((a, b) => (qbSnap(b) - qbSnap(a)) || (b.games - a.games) || ((b.rushScore + b.recScore) - (a.rushScore + a.recScore)));
+    // Ship FULL QB scores plus a presumed-starter flag; the APP applies the single-starter
+    // discount to whoever ISN'T the chosen starter. That way a QB swap — injury OR a benching
+    // like Penix starting over Rush — is reflected live by picking the starter, using that QB's
+    // OWN production, instead of being frozen to whoever started the most games at build time.
+    qbs.forEach((q, i) => { q.starterQB = (i === 0); if (i > 0) q.backupQB = true; });
     // sort by combined scoring weight so the UI shows the meaningful players first
     rows.sort((a, b) => (b.rushScore + b.recScore) - (a.rushScore + a.recScore));
     rostersOut[abbr] = rows;
