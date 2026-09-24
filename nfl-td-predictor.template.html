@@ -79,7 +79,7 @@
   .ev-pos{color:var(--good);font-weight:800}
   .ev-neg{color:var(--ink3)}
   .verdict{font-weight:800;font-size:12px;letter-spacing:.04em}
-  .v-take{color:var(--good)} .v-pass{color:var(--ink3)} .v-flag{color:var(--warn)}
+  .v-flag{color:var(--warn)}
   .vbadge{display:inline-block;padding:2px 9px;border-radius:6px;font-size:11px;font-weight:800;letter-spacing:.02em;white-space:nowrap}
   .vb-take{background:var(--good);color:#04121f}
   .vb-dart{background:rgba(255,207,77,.14);color:var(--warn);border:1px solid var(--warn)}
@@ -101,11 +101,8 @@
   .note b{color:var(--ink)}
   .legend{font-size:13px;color:var(--ink3);margin-top:8px}
   .hidden{display:none}
-  .bar{height:6px;border-radius:4px;background:var(--line2);overflow:hidden;margin-top:6px}
-  .bar>i{display:block;height:100%}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   @media(max-width:760px){
-    .controls,.grid2{grid-template-columns:1fr}
+    .controls{grid-template-columns:1fr}
     .row3{grid-template-columns:1fr 1fr}
     .tott{grid-template-columns:1fr;}
     .vs{display:none}
@@ -128,6 +125,10 @@
 
   <!-- CONTROLS -->
   <div class="panel" style="margin-top:16px">
+    <div class="ctl" style="margin-bottom:4px">
+      <label>This week's games <span class="muted" style="text-transform:none;letter-spacing:0">— one click sets both teams, the line and the stadium</span></label>
+      <select id="gameSel"></select>
+    </div>
     <div class="controls">
       <div class="ctl">
         <label>Away team</label>
@@ -209,7 +210,7 @@
         <tbody id="playerBody"></tbody>
       </table>
     </div>
-    <div class="legend">Status: <b>ACT</b> active · <b>Q</b> questionable (×0.85) · <b>DBT</b> doubtful (×0.35) · <b>OUT</b> zeroed. The <span class="snaptag">72%</span> tag is recent <b>offensive snap share</b> — <span class="snaptag low">🪑 —</span> / low = healthy scratch or no real role, so they're downweighted (and can't be parlay legs). Change a status to instantly re-simulate. Pick a <b>pricing market</b> (Anytime / 1st TD / 2+ TD) above, then enter a book's American odds (e.g. <span class="odds">+150</span>) — Fair, Edge, EV and the verdict follow that market, and each market remembers its own odds.</div>
+    <div class="legend">Status: <b>ACT</b> active · <b>Q</b> questionable (×0.85) · <b>DBT</b> doubtful (×0.35) · <b>OUT</b> zeroed. The <span class="snaptag">72%</span> tag is this season's <b>offensive snap share</b> — a smaller role is scaled down (never below 20% weight), and <span class="snaptag low">🪑 —</span> = no snaps two-plus weeks in (a scratch / no role, nearly zeroed and never a parlay leg). Change a status to instantly re-simulate; if a starting QB is OUT, the next QB is promoted automatically. Pick a <b>pricing market</b> (Anytime / 1st TD / Last TD / 2+ TD) above, then enter a book's American odds (e.g. <span class="odds">+150</span>) — Fair, Edge, EV and the verdict follow that market, and each market remembers its own odds.</div>
     <div class="legend" style="margin-top:6px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">Verdict key:
       <span><span class="vbadge vb-take">TAKE</span> real edge worth a look (green row)</span>
       <span><span class="vbadge vb-dart">🎲 dart</span> longshot / no-history guess — the EV is just the big payout, a lottery ticket</span>
@@ -232,7 +233,7 @@
     <h2>Parlay picker</h2>
     <div class="panel" id="parlayPanel" style="padding:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
-        <div style="font-weight:700;font-size:13px">🎰 Parlay candidates from your priced legs — ranked by full-odds EV (a same-game ceiling)</div>
+        <div style="font-weight:700;font-size:13px">🎰 Same-game parlay candidates from your priced legs — ranked by conservative EV</div>
         <div style="display:flex;gap:10px;align-items:center">
           <label class="muted" style="font-size:12px">Max legs <select id="parlayLegs" class="statussel"><option>2</option><option selected>3</option><option>4</option></select></label>
           <button class="btn" id="findParlays" style="padding:7px 16px;font-size:13px">Find parlays</button>
@@ -320,22 +321,28 @@ function lighten(hex, amt){
 function teamColor(abbr){ const t=S.teams[abbr]; return t?t.color:'#888'; }
 function teamText(abbr){ const t=S.teams[abbr]; return t?lighten(t.color,0.45):'#ccc'; }
 function logo(abbr){ const t=S.teams[abbr]; return t&&t.logo?t.logo:''; }
-// role multiplier from recent offensive snap share: ~0 for scratches / no-role players,
-// full weight once they're an established role (~35%+ snaps). Doesn't punish RB rotation.
+// the model switches the backtest validated (shipped by the build) — the app applies exactly these
+const M = C.MODEL || {};
+const SNAP_WEEKS = (S.meta && S.meta.snapWeeks) || 0;   // weeks of this season's snap data so far
+// role multiplier from recent offensive snap share (backtested 'hybrid' curve): full at 35%+ snaps,
+// floor 0.2 for a real-but-small role. No snaps at all = unknown in the first two weeks (everyone),
+// then ~0 — two-plus weeks with zero snaps means a healthy scratch / no role.
 function snapMF(p){
-  const eff = (p.snapPct==null) ? 0 : p.snapPct;      // null = no snaps recorded this season
-  let mf = clamp((eff-0.05)/0.30, 0, 1);              // 0 at <=5% snaps, full (1.0) at >=35%
-  if(mf<0.05 && (p.rushScore+p.recScore)>0.05) mf=0.05;  // role-loss guys stay barely visible, not gone
-  return mf;
+  if(p.snapPct==null) return SNAP_WEEKS<2 ? 1 : 0.05;
+  return clamp(p.snapPct/0.35, 0.2, 1);
 }
-function snapLow(p){ return p.snapPct==null || p.snapPct<0.15; }   // healthy scratch / no real role
+function snapLow(p){ return p.snapPct==null ? SNAP_WEEKS>=2 : p.snapPct<0.15; }   // scratch / no real role
 function snapTag(p){
   if(p.snapPct==null) return '<span class="snaptag low" title="no offensive snaps recorded this season — scratch or no role">🪑 —</span>';
   return `<span class="snaptag ${snapLow(p)?'low':''}" title="recent offensive snap share (season, recency-weighted)">${Math.round(p.snapPct*100)}%</span>`;
 }
 
 // ---------- RNG: normal / gamma / poisson / NB ----------
-function rnd(){ return Math.random(); }
+// Seeded (mulberry32), re-seeded at the start of every simulation: identical inputs give identical
+// numbers, so re-clicking Simulate can't flip a TAKE to a PASS on Monte Carlo noise, and changing one
+// input (a status, the total) is compared on the same random draws.
+let _seed=1;
+function rnd(){ _seed=(_seed+0x6D2B79F5)|0; let t=Math.imul(_seed^(_seed>>>15),1|_seed); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; }
 function randn(){ let u=0,v=0; while(u===0)u=rnd(); while(v===0)v=rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
 function gamma(k){ // Marsaglia-Tsang, shape k>=1, scale 1
   if(k<1) k=1;
@@ -352,8 +359,17 @@ function nbCount(mean){ if(mean<=0) return 0; const lam=gamma(NB_SIZE)*(mean/NB_
 // ---------- populate team pickers ----------
 const teamList=S.teamList.slice().sort((a,b)=> S.teams[a].name.localeCompare(S.teams[b].name));
 function opt(sel,arr,val){ sel.innerHTML=arr.map(a=>`<option value="${a}">${S.teams[a].name}</option>`).join(''); if(val) sel.value=val; }
-opt($('awaySel'),teamList, teamList.includes('BUF')?'BUF':teamList[0]);
-opt($('homeSel'),teamList, teamList.includes('KC')?'KC':teamList[1]);
+// this week's games (kickoff order); the app opens on the next game to kick off, not a fixed matchup
+const SCHED=(S.schedule||[]).filter(g=>S.teams[g.home]&&S.teams[g.away]).sort((a,b)=>new Date(a.kickoff)-new Date(b.kickoff));
+const NEXT=SCHED.find(g=>new Date(g.kickoff).getTime()>Date.now()-3.5*3600e3)||SCHED[0];
+opt($('awaySel'),teamList, NEXT?NEXT.away:(teamList.includes('BUF')?'BUF':teamList[0]));
+opt($('homeSel'),teamList, NEXT?NEXT.home:(teamList.includes('KC')?'KC':teamList[1]));
+function gameLabel(g){
+  const line = g.total==null ? '' : ` · ${(!g.fav||!g.spread)?'PK':((S.teams[g.fav]||{short:g.fav}).short+' -'+g.spread)} / ${g.total}`;
+  return `${fmtKick(g.kickoff)} · ${S.teams[g.away].short} @ ${S.teams[g.home].short}${line}`;
+}
+$('gameSel').innerHTML=`<option value="">— or pick any two teams below —</option>`+SCHED.map((g,i)=>`<option value="${i}">${gameLabel(g)}</option>`).join('');
+function syncGameSel(){ const a=$('awaySel').value, h=$('homeSel').value; const i=SCHED.findIndex(g=>g.away===a&&g.home===h); $('gameSel').value=i>=0?String(i):''; }
 function refreshFav(){
   const a=$('awaySel').value, h=$('homeSel').value;
   $('awayLogo').src=logo(a); $('homeLogo').src=logo(h);
@@ -384,15 +400,16 @@ async function setWeather(){
   const away=$('awaySel').value, home=$('homeSel').value;
   const st=(S.stadiums&&S.stadiums[home])||null;
   const game=(S.schedule||[]).find(g=>g.home===home && g.away===away);
-  const indoor = game ? game.indoor : (st ? st.dome : false);
+  // curated roof table wins: ESPN flags some roofed venues (e.g. SoFi's fixed canopy) as outdoor
+  const indoor = !!((st && st.dome) || (game && game.indoor));
   const name=(game&&game.venue)||(st&&st.name)||(S.teams[home]?(S.teams[home].short+' stadium'):'stadium');
   const my=++wxToken;   // ignore stale async responses if the matchup changed
   WX={precip:'none', pp:0, temp:null, kind:'', icon:'🏟️'};   // reset until forecast lands
   $('outdoor').checked = !indoor;
-  if(indoor){ $('wind').value=0; $('wind').disabled=true; $('wxStatus').innerHTML=`🏟️ ${name} · <b>indoor</b> <span class="muted">— climate-controlled, no weather</span>`; if(LAST)run(); return; }
+  if(indoor){ $('wind').value=0; $('wind').disabled=true; $('wxStatus').innerHTML=`🏟️ ${name} · <b>indoor</b> <span class="muted">— climate-controlled, no weather</span>`; scheduleRun(); return; }
   $('wind').disabled=false;
   $('wxStatus').innerHTML=`🏟️ ${name} · <b>outdoor</b>${game?` · ${fmtKick(game.kickoff)}`:''} <span class="muted">— checking forecast…</span>`;
-  if(LAST)run();
+  scheduleRun();
   if(!st){ $('wxStatus').innerHTML=`🏟️ ${name} · <b>outdoor</b> <span class="muted">— enter wind manually</span>`; return; }
   try{
     const url=`https://api.open-meteo.com/v1/forecast?latitude=${st.lat}&longitude=${st.lon}&hourly=temperature_2m,wind_speed_10m,precipitation_probability,weather_code&wind_speed_unit=mph&temperature_unit=fahrenheit&timeformat=unixtime&forecast_days=7`;
@@ -408,7 +425,7 @@ async function setWeather(){
     const cold = temp<=32?' 🥶':'';
     const precipTxt = (k.precip!=='none'&&pp>=30)?` · ${pp}% chance`:'';
     $('wxStatus').innerHTML=`${k.icon} ${name} · <b>${k.label}</b>${cold} · ${temp}°F · <b>${wind} mph</b> wind${precipTxt}${game?` · ${fmtKick(game.kickoff)}`:''} <span class="muted">(live)</span>`;
-    if(LAST)run();
+    scheduleRun();
   }catch(e){ if(my===wxToken) $('wxStatus').innerHTML=`🏟️ ${name} · <b>outdoor</b> <span class="muted">— no live forecast (offline?); enter wind manually</span>`; }
 }
 // ---------- live daily refresh: today's line (total / spread / favorite) + injury status,
@@ -438,8 +455,10 @@ async function refreshLive(){
         let sp=(o.spread!=null && !isNaN(o.spread))?Math.abs(+o.spread):null;
         if(sp==null && o.details){ const m=o.details.match(/-?(\d+(?:\.\d)?)/); if(m) sp=Math.abs(+m[1]); }
         if(!favSide && o.spread!=null) favSide = (+o.spread<0)?'home':'away';   // ESPN spread = home line
-        if(favSide && sp!=null){ $('favSel').value = favSide==='home'?home:away; $('spread').value=sp; changed=true; }
-        const fs=S.teams[$('favSel').value]; if(fs) $('lineNote').innerHTML=`📈 live line: <b>${fs.short||fs.name} -${$('spread').value}</b> · O/U <b>${$('total').value}</b> <span class="muted">(live — refreshes each visit)</span>`;
+        if(sp===0){ $('spread').value=0; changed=true; }                                   // pick'em
+        else if(favSide && sp!=null){ $('favSel').value = favSide==='home'?home:away; $('spread').value=sp; changed=true; }
+        const fs=S.teams[$('favSel').value], pk=!(+$('spread').value);
+        if(fs) $('lineNote').innerHTML=`📈 live line: <b>${pk?'pick\'em':(fs.short||fs.name)+' -'+$('spread').value}</b> · O/U <b>${$('total').value}</b> <span class="muted">(live — refreshes each visit)</span>`;
       }
       break;
     }
@@ -454,7 +473,7 @@ async function refreshLive(){
       if(code) liveMap.set(String(id), code);
     }
     for(const ab of [away,home]) for(const p of (S.rosters[ab]||[])){ const c=liveMap.get(String(p.id)); if(c && c!==p.status){ p.status=c; if(LAST) LAST.statusMap[ab+'|'+p.id]=c; changed=true; } }
-    if(changed && LAST) run();
+    if(changed) scheduleRun();
   }catch(e){ /* offline / API hiccup: keep the baked line + status */ }
 }
 // auto-fill total / spread / favorite from the current line when the matchup is scheduled,
@@ -462,22 +481,35 @@ async function refreshLive(){
 function setLine(){
   const away=$('awaySel').value, home=$('homeSel').value, el=$('lineNote');
   const game=(S.schedule||[]).find(g=>g.home===home && g.away===away);
-  if(!game || game.total==null){ if(el) el.textContent=''; return; }
+  if(!game){
+    // teams picked the wrong way round: stadium, weather AND the implied-points split would all be wrong
+    const rev=(S.schedule||[]).find(g=>g.home===away && g.away===home);
+    if(rev && el){ el.innerHTML=`<span style="color:var(--warn)">⚠ This week it's ${S.teams[home].short} @ ${S.teams[away].short} — home/away are flipped (changes the stadium, weather and line).</span> <button class="statussel" id="flipBtn" style="padding:2px 9px">flip</button>`;
+      $('flipBtn').onclick=()=>{ $('awaySel').value=home; $('homeSel').value=away; onMatchupChange(); }; }
+    else if(el) el.textContent='';
+    return;
+  }
+  if(game.total==null){ if(el) el.textContent=''; return; }
   $('total').value=game.total;
-  if(game.fav && (game.fav===home||game.fav===away) && game.spread!=null){ $('favSel').value=game.fav; $('spread').value=Math.abs(game.spread); }
-  if(el){ const fs=S.teams[game.fav]?(S.teams[game.fav].short||game.fav):game.fav;
-    el.innerHTML=`📉 line: <b>${fs} -${Math.abs(game.spread)}</b> · O/U <b>${game.total}</b> <span class="muted">(auto — edit if it moved)</span>`; }
+  const pk = !game.fav || !game.spread;
+  if(pk) $('spread').value=0;
+  else if(game.fav===home||game.fav===away){ $('favSel').value=game.fav; $('spread').value=Math.abs(game.spread); }
+  if(el){ const fs=pk?'':(S.teams[game.fav]?(S.teams[game.fav].short||game.fav):game.fav);
+    el.innerHTML=`📉 line: <b>${pk?'pick\'em':fs+' -'+Math.abs(game.spread)}</b> · O/U <b>${game.total}</b> <span class="muted">(auto — edit if it moved)</span>`; }
 }
 // switching teams invalidates any odds pasted for the previous game — wipe the
 // board (bookMap + paste box) so stale prices can't bleed into the new slate's
 // EV / parlays. run() (via setWeather) then rebuilds every input empty.
 function clearOddsBoard(){
   if(LAST) LAST.bookMap={};
+  sgpMap={};
   $('oddsPaste').value=''; $('oddsMsg').textContent='';
 }
-$('awaySel').onchange=()=>{clearOddsBoard();refreshFav();setLine();setWeather();refreshLive();};
-$('homeSel').onchange=()=>{clearOddsBoard();refreshFav();setLine();setWeather();refreshLive();};
-refreshFav();
+function onMatchupChange(){ clearOddsBoard(); refreshFav(); syncGameSel(); setLine(); setWeather(); refreshLive(); }
+$('awaySel').onchange=onMatchupChange;
+$('homeSel').onchange=onMatchupChange;
+$('gameSel').onchange=()=>{ const g=SCHED[+$('gameSel').value]; if(!g||$('gameSel').value==='') return; $('awaySel').value=g.away; $('homeSel').value=g.home; onMatchupChange(); };
+refreshFav(); syncGameSel();
 
 // ---------- the model ----------
 function impliedPoints(total, spreadPts, favAbbr, home, away){
@@ -493,22 +525,25 @@ function teamExpectations(off, oppDef, impPts, marginPts, outdoor, wind){
   // validated — dropped for consistency until it can be tested properly.
   let expOff = Math.max(0.4, impPts * C.KAPPA);   // floor matches the backtest exactly
 
-  // Stage 2 prep: run/pass TD split = team tendency, funnelled by opponent + game script + weather.
+  // Stage 2 prep: run/pass TD split = team tendency, adjusted ONLY by the terms the backtest kept
+  // (M.*). Opponent funnel and game script were tested and hurt out-of-sample, so they're off.
   let rushShare = off.rushShare;
-  rushShare += 0.25*(oppDef.rushAllowShare - 0.5);          // opponent funnel
-  rushShare += clamp(0.012*marginPts, -0.10, 0.12);          // favorites run, dogs pass (garbage time)
-  if(outdoor && wind>12) rushShare += Math.min(0.09,(wind-12)*0.005); // wind suppresses passing TDs
-  if(outdoor && WX.pp>=50){ if(WX.precip==='snow') rushShare += 0.05; else if(WX.precip==='rain') rushShare += 0.03; } // wet/snow ball → lean run (share only, level unchanged)
+  if(M.funnel) rushShare += 0.25*(oppDef.rushAllowShare - 0.5);           // opponent funnel
+  if(M.script) rushShare += clamp(0.012*marginPts, -0.10, 0.12);           // favorites run, dogs pass
+  if(M.weather!==false && outdoor){
+    if(wind>12) rushShare += Math.min(0.09,(wind-12)*0.005);                  // wind suppresses passing TDs
+    if(WX.pp>=50){ if(WX.precip==='snow') rushShare += 0.05; else if(WX.precip==='rain') rushShare += 0.03; } // wet/snow ball
+  }
   rushShare = clamp(rushShare, 0.24, 0.80);
 
-  // D/ST return-TD rate for this team's own defense (run() also sets this explicitly)
+  // D/ST return-TD rate for this team's own defense
   return { expOff, rushShare, nonOff: clamp(off.def?off.def.nonOffTDpg:0.14, 0.05, 0.7) };
 }
 
 function buildWeights(roster){
   // status multipliers model play-probability, not just presence
   const mult={ACT:1, Q:0.85, DBT:0.35, OUT:0};
-  const rush=[], rec=[], idx=[];
+  const rush=[], rec=[];
   roster.forEach(p=>{
     const m=mult[p._status]||0;
     rush.push(p.rushScore*m);
@@ -521,10 +556,8 @@ function pick(cum){ if(cum.total<=0) return -1; const r=rnd()*cum.total; const c
 
 function simulate(cfg){
   const {awayR, homeR, awayExp, homeExp, nsims} = cfg;
+  _seed=0x2545F491;   // common random numbers across re-sims (see rnd)
   const sides=[{tag:'away',R:awayR,E:awayExp},{tag:'home',R:homeR,E:homeExp}];
-  // player index space
-  const players=[]; // {ref,side}
-  sides.forEach(sd=> sd.R.forEach((p,i)=>{ players.push({p,side:sd.tag}); }));
   // per-side cumulative weight arrays
   sides.forEach(sd=>{ const w=buildWeights(sd.R); sd.cumRush=cumulative(w.rush); sd.cumRec=cumulative(w.rec); });
 
@@ -584,10 +617,15 @@ let LAST=null;
 // flagged at build time (most games). Picking a different QB (e.g. Penix in for a benched Rush)
 // gives THAT QB full weight and discounts the others, so his own production drives the model.
 const qbStarterPick={};
-function starterQBId(abbr){
-  if(qbStarterPick[abbr]!=null) return qbStarterPick[abbr];
+// the chosen/flagged starter — unless he's OUT, in which case the next QB up (by snaps, then games)
+// takes over automatically, so an injured starter never leaves the team with no QB at all
+function starterQBId(abbr, statusOf){
   const qbs=(S.rosters[abbr]||[]).filter(p=>p.pos==='QB');
-  const flagged=qbs.find(p=>p.starterQB); return flagged?flagged.id:(qbs[0]?qbs[0].id:null);
+  const st=q=>(statusOf?statusOf(q):q.status)||'ACT';
+  const pick=qbStarterPick[abbr]!=null ? qbs.find(q=>String(q.id)===String(qbStarterPick[abbr])) : (qbs.find(q=>q.starterQB)||qbs[0]);
+  if(pick && st(pick)!=='OUT') return pick.id;
+  const next=qbs.filter(q=>st(q)!=='OUT').sort((a,b)=>((b.snapPct||0)-(a.snapPct||0))||(b.games-a.games))[0];
+  return next?next.id:(pick?pick.id:null);
 }
 function run(){
   const away=$('awaySel').value, home=$('homeSel').value;
@@ -603,8 +641,6 @@ function run(){
   const marginH = imp.home - imp.away;
   const awayExp=teamExpectations(offA, offH.def, imp.away, marginA, outdoor, wind);
   const homeExp=teamExpectations(offH, offA.def, imp.home, marginH, outdoor, wind);
-  awayExp.nonOff = clamp(offA.def.nonOffTDpg,0.05,0.7);
-  homeExp.nonOff = clamp(offH.def.nonOffTDpg,0.05,0.7);
 
   // fresh roster copies; preserve the user's status + book-odds overrides across
   // re-sims via persistent maps keyed by player (survives status toggles etc.)
@@ -616,12 +652,13 @@ function run(){
     const bk = pos==='RB'||pos==='FB'?'RB':pos==='WR'?'WR':pos==='TE'?'TE':pos==='QB'?'QB':null;
     if(!bk||!oppDef.byPos||!C.leagueByPos) return 1;
     const r=(oppDef.byPos[bk]||0)/(C.leagueByPos[bk]||0.01);
-    return Math.pow(clamp(r,0.55,1.6),0.5);   // sqrt-dampened: a 1.5x-weak D is ~1.22x here
+    return Math.pow(clamp(r,0.55,1.6), M.posPow||0.5);
   }
   function mkRoster(abbr, oppDef){
-    const starterId=String(starterQBId(abbr));
+    const statusOf=q=>prevStatus[abbr+'|'+q.id]||q.status||'ACT';
+    const starterId=String(starterQBId(abbr, statusOf));
     return S.rosters[abbr].map(p=>{
-      const key=abbr+'|'+p.id, mf=posMF(p.pos, oppDef);
+      const key=abbr+'|'+p.id, mf=M.posMF ? posMF(p.pos, oppDef) : 1;   // matchup nudge off: it hurt out-of-sample
       const isStarterQB = p.pos==='QB' && String(p.id)===starterId;
       // single-starter: only tonight's chosen QB carries full weight; other QBs discounted (they
       // don't play unless he's out). Applied live so a QB swap uses the right QB's own production.
@@ -648,6 +685,9 @@ function run(){
   renderTott(); renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder(); refreshBetForm();
 }
 function maybeSim(){ if(LAST) run(); }
+// several async updates (forecast, live line, injuries) can land together; batch them into one sim
+let runQueued=false;
+function scheduleRun(){ if(runQueued) return; runQueued=true; setTimeout(()=>{ runQueued=false; if(LAST) run(); }, 0); }
 
 function renderTott(){
   const {away,home,imp,offA,offH,awayExp,homeExp}=LAST;
@@ -656,7 +696,7 @@ function renderTott(){
   function col(abbr,off,exp,impPts,oppDef,cls){
     const split=Math.round(exp.rushShare*100);
     const qbs=(S.rosters[abbr]||[]).filter(p=>p.pos==='QB');
-    const stId=String(starterQBId(abbr));
+    const stId=String(starterQBId(abbr, q=>LAST.statusMap[abbr+'|'+q.id]||q.status||'ACT'));
     const qbSel = qbs.length>1 ? `<div class="statline" style="border-bottom:none;padding:6px 0 4px"><span title="Set tonight's starting QB — the model gives him full weight (his own rushing/scoring) and discounts the other QBs. Use this when a backup starts, e.g. a benching, that the season data doesn't reflect yet.">🎙️ Starting QB <span class="muted">ⓘ</span></span><span><select class="statussel qbstarter" data-abbr="${abbr}">${qbs.map(q=>`<option value="${q.id}" ${String(q.id)===stId?'selected':''}>${q.name}${q.starterQB?'':' (bkp)'}</option>`).join('')}</select></span></div>` : '';
     return `<div class="totcol ${cls}" style="--${cls}c:${teamColor(abbr)}">
       <div class="tothead"><img src="${logo(abbr)}"><div><div class="nm" style="color:${teamText(abbr)}">${S.teams[abbr].name}</div><div class="im">implied ${impPts.toFixed(1)} pts · ${exp.expOff.toFixed(2)} exp off TD</div></div></div>
@@ -680,7 +720,7 @@ function renderTott(){
   $('tottNote').innerHTML =
     `<b>“Off TD/gm · wtd”, RZ% and splits are recency-weighted over ${S.meta.seasons.join(', ')}</b> — early in ${mx} its handful of games barely move the blend, so the prior two full seasons dominate (that's intended). `+
     `The simulation itself doesn't use these raw rates: it anchors each team to its <b>Vegas-implied total</b> → <b>exp. off. TDs</b> (shown above), then distributes by player opportunity. `+
-    `<b>Opp D weak spots</b> = TDs/gm that defense allows to each position; <span class="poscell pos-weak" style="padding:0 5px">orange</span> means it allows more than league average (RB ${C.leagueByPos.RB} · WR ${C.leagueByPos.WR} · TE ${C.leagueByPos.TE} · QB ${C.leagueByPos.QB}) — a spot to target — and the sim now nudges each player's odds up or down for that matchup.`;
+    `<b>Opp D weak spots</b> = TDs/gm that defense allows to each position; <span class="poscell pos-weak" style="padding:0 5px">orange</span> means it allows more than league average (RB ${C.leagueByPos.RB} · WR ${C.leagueByPos.WR} · TE ${C.leagueByPos.TE} · QB ${C.leagueByPos.QB}). <b>Context only</b> — nudging player odds by this matchup was backtested and made predictions worse out-of-sample (it's mostly week-to-week noise), so the sim doesn't apply it.`;
 }
 
 // pricing market state — Fair / Book / Edge / EV / Verdict all follow this
@@ -732,7 +772,7 @@ function renderPlayers(){
   });
   // wire book odds inputs — persist to bookMap (per market) so odds survive re-sims/switches
   body.querySelectorAll('.bookin').forEach(inp=>{
-    inp.oninput=e=>{ if(LAST) LAST.bookMap[bkey(e.target.dataset.key)]=e.target.value; computeEV(); refreshSlipAdder(); };
+    inp.oninput=e=>{ if(LAST) LAST.bookMap[bkey(e.target.dataset.key)]=e.target.value; computeEV(); refreshSlipAdder(); parlaysSoon(); };
   });
   // header sort
   document.querySelectorAll('#playerTable th[data-k]').forEach(th=>{
@@ -749,12 +789,10 @@ function computeEV(){
     const p=all.find(x=>x._key===inp.dataset.key);
     const edC=tr.querySelector('.edge'), evC=tr.querySelector('.ev'), vC=tr.querySelector('.verdict');
     if(!p||p._status==='OUT'||!inp.value.trim()){ edC.textContent='—'; evC.textContent='—'; vC.textContent='—'; vC.className='verdict'; tr.classList.remove('rowtake'); return; }
-    const am=parseFloat(inp.value.replace('+','')); const amNum = inp.value.trim().startsWith('-')? am : (inp.value.trim().startsWith('+')? Math.abs(am): am);
-    const dec=americanToDec(amNum); const bimp=americanToProb(amNum);
-    if(!dec||!bimp){ edC.textContent='—'; evC.textContent='—'; vC.textContent='—'; return; }
     const mp=p[MARKET];   // model prob for the selected market
-    const ev=mp*(dec-1)-(1-mp);
-    const edge=mp-bimp;
+    const r=evalBet(mp, inp.value);
+    if(!r){ edC.textContent='—'; evC.textContent='—'; vC.textContent='—'; vC.className='verdict'; tr.classList.remove('rowtake'); return; }
+    const {ev, edge}=r;
     // tier the verdict so a mirage never shows as a plain green TAKE
     const tier=tierOf(mp, edge, ev, !p.matched);
     edC.textContent=(edge>=0?'+':'')+(edge*100).toFixed(1)+'%';
@@ -778,18 +816,24 @@ function tierOf(mp, edge, ev, prior){
   if(edge>0.22 || ev>1.0) return 'flag';     // implausible edge on a real player -> missed injury?
   return 'take';
 }
+// the single American-odds parser for every price box (table, D/ST, parlays, slip, bet log).
+// Rejects |odds| < 100 — not valid American odds (a typed "2.5" used to be read as +2.5).
+function parseAmerican(str){
+  const raw=String(str||'').trim().replace(/[−–—]/g,'-'); if(!raw) return null;
+  const am=parseFloat(raw.replace('+','')); if(isNaN(am)) return null;
+  const v=raw.startsWith('-')?-Math.abs(am):Math.abs(am);
+  return Math.abs(v)>=100 ? v : null;
+}
 function evalBet(mp, oddsStr){
-  const raw=String(oddsStr||'').trim(); if(!raw) return null;
-  const am=parseFloat(raw.replace('+','')); const amNum=raw.startsWith('-')?am:Math.abs(am);
+  const amNum=parseAmerican(oddsStr); if(amNum==null || mp==null) return null;
   const dec=americanToDec(amNum), bimp=americanToProb(amNum);
-  if(!dec||!bimp||isNaN(amNum)) return null;
-  return { ev: mp*(dec-1)-(1-mp), edge: mp-bimp, bimp };
+  return { ev: mp*(dec-1)-(1-mp), edge: mp-bimp, bimp, dec };
 }
 function evExplainer(){
   return `<div class="muted" style="margin-top:9px;font-size:12px;border-top:1px solid var(--line);padding-top:8px;line-height:1.5">
     <b>Edge</b> = how much more likely the model thinks it is than the book's price implies (in probability points). `+
     `<b>EV</b> = your expected profit per $1 staked <i>if the model is right</i> — this is the one to rank by. A <b>TAKE</b> is any bet with EV above +3%. `+
-    `A <b class="v-flag">TAKE⚠</b> means the edge is so large it's probably a missed inactive or role change — verify before trusting it. `+
+    `<span class="vbadge vb-flag">⚠ check</span> means the edge is so large it's probably a missed inactive or role change — verify before trusting it. `+
     `<b>Reality check:</b> this model roughly tracks the market, so treat these as <b>leads to verify</b> (injury / role / weather / your total &amp; spread), not locks. Bet small — TD props are high-variance.</div>`;
 }
 function computeTopPlays(){
@@ -826,7 +870,7 @@ function computeTopPlays(){
 
 // ---------- parlay picker: rank multi-leg parlays by EV using the sim's TRUE
 // joint hit-rate (share of sims where ALL legs hit -> captures correlation) ----------
-function oddsDec(str){ const raw=String(str||'').trim(); if(!raw) return null; const am=parseFloat(raw.replace('+','')); const amNum=raw.startsWith('-')?am:Math.abs(am); return isNaN(amNum)?null:americanToDec(amNum); }
+function oddsDec(str){ const a=parseAmerican(str); return a==null?null:americanToDec(a); }
 function amStr(a){ return a==null?'—':(a>0?'+':'')+a; }
 function legOutcome(J, leg, s){ const b=s*J.M;
   if(leg.market==='anytime') return J.countMat[b+leg.gi]>=1;
@@ -836,6 +880,10 @@ function legOutcome(J, leg, s){ const b=s*J.M;
   return false; }
 function jointProb(J, legs){ let h=0; const n=J.nsims; for(let s=0;s<n;s++){ let all=true; for(let i=0;i<legs.length;i++){ if(!legOutcome(J,legs[i],s)){all=false;break;} } if(all)h++; } return h/n; }
 let parlayRows=[];   // the currently-shown parlays, so the SGP-price inputs can look up joint probs
+let sgpMap={};       // typed SGP prices, keyed by the parlay's legs, so a re-sim doesn't wipe them
+// typing a price by hand re-ranks parlays too (debounced — the joint-prob search is the heavy part)
+function parlaysSoon(){ clearTimeout(parlaysSoon.t); parlaysSoon.t=setTimeout(computeParlays, 350); }
+const legSig=legs=>legs.map(c=>c.market+':'+c.who).sort().join('|');
 // a parlay leg has to be someone you'd actually rely on — not a deep longshot whose
 // tiny modeled edge on +1600 odds is just noise. Bar to ANCHOR a parlay:
 //   • a genuine scoring threat: model anytime >= 12% (a 9% dart doesn't anchor)
@@ -901,11 +949,13 @@ function computeParlays(){
     const isPick = r.rankEV>0 && r.jp>=LONGSHOT;
     html+=`<div style="border-top:1px solid var(--line);padding-top:7px">${isPick?'<span class="star">★</span> ':`<span class="muted">${i+1}.</span> `}${legs}`+
       `<div style="margin-top:3px;font-size:12px">${r.legs.length} legs · hits <b>${pct(r.jp)}</b> (${corrTxt})${longshot} · <b>fair <span class="odds">${probToAmerican(Math.min(r.jp,r.ip))}</span></b> · <span class="muted">full-odds pays ${amStr(decToAmerican(r.dec))}, EV ${r.rankEV>=0?'+':''}${(r.rankEV*100).toFixed(1)}% (conservative)${upside}</span></div>`+
-      `<div style="margin-top:4px;font-size:12px">↳ your book's actual SGP price: <input class="sgpin bookin" data-i="${i}" placeholder="+17042" style="width:100px;padding:4px 7px"> <span class="sgpres" data-i="${i}"></span></div></div>`;
+      `<div style="margin-top:4px;font-size:12px">↳ your book's actual SGP price: <input class="sgpin bookin" data-i="${i}" placeholder="book price" value="${esc(sgpMap[legSig(r.legs)]||'')}" style="width:100px;padding:4px 7px"> <span class="sgpres" data-i="${i}"></span></div></div>`;
   });
   html+='</div>'+parlayNote();
   body.innerHTML=html;
-  body.querySelectorAll('.sgpin').forEach(inp=>inp.oninput=()=>sgpEV(+inp.dataset.i));
+  body.querySelectorAll('.sgpin').forEach(inp=>{ const i=+inp.dataset.i;
+    inp.oninput=()=>{ sgpMap[legSig(parlayRows[i].legs)]=inp.value; sgpEV(i); };
+    if(inp.value) sgpEV(i); });   // restore the grade for prices typed before a re-sim
 }
 // real EV of a parlay against the book's ACTUAL same-game-parlay price (correlation-aware:
 // uses the sim's true joint probability, which is what the book's SGP price also reflects)
@@ -1023,8 +1073,9 @@ function addBet(){
   const dec=oddsDec(odds); if(!dec){ betFlash('enter the price, e.g. +150'); return; }
   const stake=Math.abs(parseFloat($('betStake').value))||1;
   const custom = mkt==='custom' || (o&&o.key==='custom');
-  let player, market, key=null, mp=null; const game=LAST?LAST.away+'@'+LAST.home:'';
-  if(custom){ const c=$('betCustom').value.trim(); if(!c){ betFlash('describe the prop first'); return; } player=c; market='custom'; }
+  let player, market, key=null, mp=null, game=LAST?LAST.away+'@'+LAST.home:'';
+  // a custom prop can be from any game — don't stamp it with whichever matchup happens to be open
+  if(custom){ const c=$('betCustom').value.trim(); if(!c){ betFlash('describe the prop first'); return; } player=c; market='custom'; game=''; }
   else { player=o.name; key=o.key; market=mkt; mp = o.p ? o.p[mkt] : (o.dst ? o.dst[mkt] : null); }
   bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*9999), ts:new Date().toISOString(), game, key, player, market, odds, modelProb:(mp!=null?+mp.toFixed(4):null), stake, closeOdds:'', result:'pending'});
   saveBets(); $('betOdds').value=''; $('betCustom').value=''; renderBets(); betFlash('logged ✓');
@@ -1041,6 +1092,9 @@ function renderBets(){
     else if(b.result==='push'){ pu++; pl=0; }
     return {b,dec,clv,pl}; });
   const roi = staked? net/staked : null, avgClv = clvN? clvSum/clvN : null;
+  // live calibration: on settled bets the sim priced, how many hits did it expect vs how many landed?
+  const cal=bets.filter(b=>b.modelProb!=null&&(b.result==='win'||b.result==='loss'));
+  const calExp=cal.reduce((a,b)=>a+b.modelProb,0), calHit=cal.filter(b=>b.result==='win').length;
   const g=v=>v>0?'ev-pos':(v<0?'ev-neg':''); const sgn=v=>(v>=0?'+':'')+v;
   let html=`<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:baseline;margin-bottom:9px;padding:9px 11px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;font-size:13px">`+
     `<span><b>${bets.length}</b> logged</span>`+
@@ -1048,7 +1102,8 @@ function renderBets(){
     `<span>staked <b>${staked.toFixed(1)}u</b></span>`+
     `<span>net <b class="${g(net)}">${sgn(net.toFixed(2))}u</b></span>`+
     `<span>ROI <b class="${g(roi)}">${roi==null?'—':sgn((roi*100).toFixed(1))+'%'}</b></span>`+
-    `<span>avg CLV <b class="${g(avgClv)}">${avgClv==null?'—':sgn((avgClv*100).toFixed(1))+'%'}</b>${clvN?` <span class="muted">(${Math.round(clvPos/clvN*100)}% beat close)</span>`:''}</span></div>`;
+    `<span>avg CLV <b class="${g(avgClv)}">${avgClv==null?'—':sgn((avgClv*100).toFixed(1))+'%'}</b>${clvN?` <span class="muted">(${Math.round(clvPos/clvN*100)}% beat close)</span>`:''}</span>`+
+    (cal.length?`<span title="Settled bets the sim priced: the sum of its probabilities is how many hits it expected. Much fewer actual hits = the model runs hot on the bets you pick.">model expected <b>${calExp.toFixed(1)}</b> hits, got <b>${calHit}</b> <span class="muted">of ${cal.length}</span></span>`:'')+`</div>`;
   html+='<div style="overflow-x:auto"><table style="margin-top:0"><thead><tr>'+
     ['Bet','Odds','Model','Close','CLV','Stake','Result','P/L',''].map((h,i)=>`<th class="${i===0?'l':''}" style="cursor:default;position:static">${h}</th>`).join('')+'</tr></thead><tbody>';
   drows.forEach(({b,dec,clv,pl})=>{
@@ -1089,7 +1144,7 @@ function renderDST(){
     body.appendChild(tr);
   });
   body.querySelectorAll('.bookin.dst').forEach(inp=>{
-    inp.oninput=e=>{ if(LAST) LAST.bookMap[dstKey(e.target.dataset.abbr)]=e.target.value; computeDstEV(); };
+    inp.oninput=e=>{ if(LAST) LAST.bookMap[dstKey(e.target.dataset.abbr)]=e.target.value; computeDstEV(); refreshSlipAdder(); parlaysSoon(); };
   });
   computeDstEV();
 }
@@ -1100,13 +1155,9 @@ function computeDstEV(){
     const evC=tr.querySelector('.ev'), vC=tr.querySelector('.verdict');
     const abbr=inp.dataset.abbr; const d= abbr===away?dst.dstAway:dst.dstHome;
     if(!hasMkt || !inp.value.trim()){ evC.textContent='—'; vC.textContent='—'; vC.className='verdict'; tr.classList.remove('rowtake'); return; }
-    const raw=inp.value.trim(); const am=parseFloat(raw.replace('+',''));
-    const amNum = raw.startsWith('-')? am : Math.abs(am);
-    const dec=americanToDec(amNum), bimp=americanToProb(amNum);
-    if(!dec){ evC.textContent='—'; vC.textContent='—'; tr.classList.remove('rowtake'); return; }
-    const mp=d[MARKET];
-    const ev=mp*(dec-1)-(1-mp);
-    const tier=tierOf(mp, mp-(bimp||0), ev, false);
+    const mp=d[MARKET], r=evalBet(mp, inp.value);
+    if(!r){ evC.textContent='—'; vC.textContent='—'; vC.className='verdict'; tr.classList.remove('rowtake'); return; }
+    const {ev}=r, tier=tierOf(mp, r.edge, ev, false);
     evC.textContent=(ev>=0?'+':'')+(ev*100).toFixed(1)+'%'; evC.className='ev '+(ev>0 ? (tier==='take'?'ev-pos':'ev-dart') : 'ev-neg');
     vC.innerHTML={pass:'<span class="vb-pass">pass</span>', dart:'<span class="vbadge vb-dart">🎲 dart</span>', flag:'<span class="vbadge vb-flag">⚠ check</span>', take:'<span class="vbadge vb-take">TAKE</span>'}[tier]; vC.className='verdict';
     tr.classList.toggle('rowtake', tier==='take');
@@ -1135,7 +1186,7 @@ function computeDstEV(){
   const m=S.meta;
   $('footer').innerHTML=`Data: ${m.source}. Seasons ${m.seasons.join(', ')} (recency-weighted). Snapshot built ${new Date(m.builtAt).toLocaleString()}. `+
     `Monte Carlo ${(m.nsims||10000).toLocaleString()} sims. Model anchors team totals to the Vegas line you enter, then distributes TDs by opportunity share. `+
-    `Backtest is out-of-sample (${bt.trainSeason} rates → ${bt.testSeason} games, real closing lines, base rate ${(bt.baseRate*100).toFixed(1)}%). `+
+    `Backtest is out-of-sample (${bt.trainSeason} rates + ${bt.testSeason} weeks before each game → every ${bt.testSeason} game, real closing lines, base rate ${(bt.baseRate*100).toFixed(1)}%) and replays the exact live model — same kappa, NB team counts, run/pass rules and snap weighting — with no in-game information; it scores the players who got a touch, i.e. as if you knew the actives. Each model switch was kept only if it improved accuracy on both halves of the season. `+
     (mb?`Market check: on ${mb.games} ${mb.season} games (wk ${mb.weeks}) the model scores Brier ${mb.brier.toFixed(4)} on the exact players ${mb.provider} priced an anytime-TD market for, which covered ${(mb.marketRecall*100).toFixed(0)}% of players who actually scored (avg ${Math.round(mb.avgListedPerGame)} listed/game). ESPN exposes the line, not the price, so this is a calibration/coverage check vs the market's player universe — NOT a beat-the-odds result. `:'')+
     `Not betting advice; star players' lines are efficient — edge lives in role/injury/game-script mismatches.`;
 })();

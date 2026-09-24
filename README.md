@@ -1,127 +1,119 @@
 # 🏈 NFL Anytime-TD Simulator
 
-A standalone, single-file web app that predicts **anytime-touchdown scorers** for any
-NFL matchup. Plug in two teams + the Vegas total/spread, and it runs a 10,000-game Monte
-Carlo simulation to produce each player's **anytime-TD %**, **fair American odds**, first-TD
-and 2+-TD probabilities, plus a **fair-odds / EV calculator** with a TAKE / PASS verdict —
-same spirit as a UFC fight simulator, adapted into an NFL player-prop model.
+A standalone, single-file web app that predicts **anytime-touchdown scorers** for any NFL matchup.
+Pick a game and it runs a 10,000-game Monte Carlo simulation to produce each player's **anytime-TD %**,
+**1st-TD / Last-TD / 2+-TD** probabilities and **fair American odds**, plus an **EV calculator** with a
+TAKE / PASS verdict, a same-game **parlay picker**, a **cross-game parlay slip** and a **bet log with CLV**.
 
-`nfl-td-predictor.html` is fully self-contained (data + logos embedded as base64) and runs
-**offline** — just double-click it. No server, no internet needed at run time.
+`nfl-td-predictor.html` is fully self-contained (data + logos embedded as base64) and runs **offline** —
+just double-click it. Live extras (today's line, injuries, forecast) load when online and fall back
+silently to the baked snapshot when not.
 
-**Four priceable markets:** a Pricing-market toggle (**Anytime / 1st TD / Last TD / 2+ TD**) above the
-table re-points the Fair / Book / Edge / EV / Verdict columns at whichever market you choose; each market
-remembers its own entered odds. All four probability columns are shown for reference.
-
-**Weather is automatic.** Pick the two teams and the app reads the **home stadium** — dome games show
-"indoor · no weather" (wind zeroed); outdoor games fetch the **live game-day forecast** (wind + temp) from
-[Open-Meteo](https://open-meteo.com) (free, no key) for that stadium at the scheduled kickoff, and fill the
-wind in for you. The stadium table and the current-week schedule are baked into the snapshot, so dome/outdoor
-detection works fully offline; only the live wind/temp needs internet (it falls back to manual entry when
-offline). You can still override the wind by hand for a what-if.
-
-**No typing prices one by one:** paste your sportsbook's board into the ⚡ box and hit **Apply**
-(or Ctrl/Cmd+Enter). It understands **FanDuel-style stacked blocks** — a player name followed by the
-Anytime / 1st / Last prices on their own lines — and fills all three of those markets in one go:
-```
-Jahmyr Gibbs
--330      ← Anytime
-+360      ← 1st TD
-+410      ← Last TD
-```
-A single price per name (e.g. `Josh Allen +150`) fills whichever market is currently selected — use that
-for FanDuel's separate **2+ TD** board (select 2+ TD first, then paste). Names are fuzzy-matched
-(unicode minus, bare numbers, fractional/decimal, `EVEN`, abbreviated names, `Buffalo Defense`); the
-result line says which markets were filled and lists anything it couldn't match. Pick the two teams in
-the matchup first so the paste has rows to fill. It fuzzy-matches names to players
-and fills every row at once — understands `Josh Allen +150`, multi-space, `-110`, unicode minus
-`−140`, bare numbers (`260`→+260), fractional (`11/4`), decimal, `EVEN`, abbreviated names
-(`P. Mahomes`), and `Bills D/ST +450`. Header lines are ignored; anything it can't match is
-listed back to you. **Clear** wipes all odds.
+## Using it
+- **This week's games** — one dropdown sets both teams, the line and the stadium. The app opens on the next
+  game to kick off. If you pick two teams by hand the wrong way round, it warns you and offers a one-click flip
+  (home/away changes the stadium, weather and the implied-points split).
+- **Live every visit** — the current **total, spread, favorite** and **injury status** are pulled from ESPN each
+  time you open the app or switch games (the snapshot can be days old; lines and injury reports aren't).
+- **Starting QB** — each team column has a 🎙️ Starting QB picker for benchings the data doesn't know about yet
+  (e.g. a backup named the starter midweek). If the starter is ruled OUT, the next QB up is promoted automatically.
+- **Weather** — domes and roofed stadiums are indoor (a curated roof table wins over ESPN's venue flag); outdoor
+  games pull the [Open-Meteo](https://open-meteo.com) forecast at kickoff: condition (clear / cloudy / rain /
+  snow / storm), temperature and wind.
+- **Four priceable markets** — the Anytime / 1st TD / Last TD / 2+ TD toggle re-points Fair / Book / Edge /
+  EV / Verdict; each market remembers its own odds.
+- **Paste the board** into the ⚡ box (Ctrl/Cmd+Enter). FanDuel-style stacked blocks fill three markets at once:
+  ```
+  Jahmyr Gibbs
+  -330      ← Anytime
+  +360      ← 1st TD
+  +410      ← Last TD
+  ```
+  One price per name (`Josh Allen +150`) fills the selected market — use that for the separate 2+ TD board.
+  Names are fuzzy-matched (abbreviations, suffixes, `Bills D/ST`); unicode minus, fractional, decimal and
+  `EVEN` prices are understood; anything unmatched is listed back. Switching games clears the board.
+- **Parlays** — the same-game picker ranks combos by a conservative EV (the worse of independent and
+  simulated-correlation EV); enter your book's actual SGP price for the real number. The **cross-game slip**
+  collects legs across games (independent legs, so books pay full odds and the EV is real) and persists.
+- **Bet log & CLV** — log any bet (the sim's TD props or your own props), enter the closing line and result;
+  it tracks CLV, ROI and a live calibration check (hits the model expected vs hits you got). Re-running the
+  sim with the same inputs gives the same numbers (seeded simulation), so a verdict can't flip on noise.
 
 ## Files
 | File | What it is |
 |---|---|
-| **`nfl-td-predictor.html`** | The deliverable. Open in any browser, works offline. |
-| **`build-nfl-td-snapshot.mjs`** | Node build script that refreshes the data snapshot. |
-| `build-market-lines.mjs` | Optional: scrapes ESPN's historical anytime-TD boards for the market-universe backtest. |
+| **`nfl-td-predictor.html`** | The deliverable. Open in any browser. |
+| **`build-nfl-td-snapshot.mjs`** | Node build script: refreshes the data snapshot and runs the backtest. |
+| `build-market-lines.mjs` | Optional: scrapes ESPN's historical anytime-TD boards for the market-universe check. |
 | `market_lines_<season>.json` | Cached output of the above (which players the book priced, per game). |
-| `nfl-td-predictor.template.html` | UI + model source (build injects the snapshot into it). |
+| `nfl-td-predictor.template.html` | UI + model source (the build injects the snapshot into it). |
 | `nfl-td-snapshot.json` | The compact data snapshot (also embedded in the HTML). |
+| `refresh.bat` | Runs the build and logs to `refresh.log` (for a weekly scheduled task). |
 
 ## Refreshing the data
 ```bash
-node build-nfl-td-snapshot.mjs                 # default seasons (2024, 2025, 2026)
-node build-nfl-td-snapshot.mjs 2023 2024 2025  # custom seasons
-SKIP_LOGOS=1 node build-nfl-td-snapshot.mjs    # faster, skip the 32 logo downloads
+node build-nfl-td-snapshot.mjs                    # default seasons (2024, 2025, 2026)
+node build-nfl-td-snapshot.mjs 2023 2024 2025     # custom seasons
+SKIP_LOGOS=1 node build-nfl-td-snapshot.mjs       # faster, skip the 32 logo downloads
+BT_EXPERIMENTS=1 node build-nfl-td-snapshot.mjs   # also run the model-switch validation harness
 ```
-Requires Node 18+ and `curl`. First run downloads ~185 MB of play-by-play (cached after).
-Re-run it during the season to pick up current rosters, injuries, and form.
+Requires Node 18+ and `curl`. First run downloads ~200 MB of play-by-play (cached; the current season is
+re-downloaded every run). Weekly is enough — lines and injuries refresh live in the app.
 
 ## Data sources
-- **[nflverse](https://github.com/nflverse/nflverse-data) play-by-play** — primary source for
-  every player/team rate (goal-line carries, red-zone targets, air yards, realized TD rates,
-  team run/pass TD splits, red-zone efficiency, defense allowed, return TDs). Also carries the
-  **real closing total/spread** used by the backtest.
-- **ESPN** unofficial API — current rosters, positions, jersey #, **injury status**, team
-  colors and logos (downloaded and embedded as base64 so the file stays offline).
-- Players are joined between ESPN and play-by-play by **ID** (`espn_id ↔ gsis_id` from the
-  nflverse roster), not by name — PBP abbreviates names (`J.Allen`), so ID matching is exact.
+- **[nflverse](https://github.com/nflverse/nflverse-data)** — play-by-play (every player/team rate, plus the
+  real closing total/spread and game weather used by the backtest), rosters (ID joins, positions) and snap counts.
+- **ESPN** unofficial API — rosters, injury status, colors/logos, this week's schedule and lines.
+- Players are joined ESPN ↔ play-by-play by **ID** (`espn_id ↔ gsis_id`), never by name.
 
-## The model (two stages)
-**Stage 1 — how many TDs each team scores.** Each team's expected offensive TDs are anchored
-to its **Vegas implied team total** (`total/2 ± spread/2`) × an empirical TD-per-point ratio,
-then reshaped (not re-leveled) by red-zone efficiency vs the opponent's red-zone defense — this
-shifts the TD-vs-FG mix without double-counting the market total. Team TD counts are drawn from
-a **negative-binomial** (realistic overdispersion vs a plain Poisson).
+## The model
+**Stage 1 — how many TDs each team scores.** Expected offensive TDs = the team's **Vegas implied total**
+(`total/2 ± spread/2`) × **κ**, the offensive-TDs-per-point rate measured directly off real closing lines.
+Team TD counts are **negative-binomial** (realistic overdispersion). Nothing else moves the level — the market
+total already prices the matchup, weather, QB, etc.
 
-**Stage 2 — who scores them.** Each team's TDs split into rushing vs passing by team tendency,
-funneled by the opponent's rush/pass TD-allowed profile and by **game script** (favorites run
-more near the goal line → lead RB; underdogs throw more, incl. garbage time → WRs), plus a mild
-wind effect. Each rushing TD is assigned to a ball-carrier weighted by goal-line carries / rush
-role (**rushing QBs included** — Allen/Hurts/Jackson types), each passing TD to a receiver
-weighted by red-zone targets / target share / air yards / TD rate. A **single-starter constraint**
-keeps a backup QB from outranking the starter.
+**Stage 2 — who scores them.** Each TD is rushing or passing by the team's recency-weighted run/pass TD split,
+nudged toward the run in **wind, rain or snow**. Rushing TDs go to ball carriers by goal-line carries, carry
+volume and TD rate (QB kneel-downs excluded); passing TDs to receivers by red-zone targets, target share, air
+yards and TD rate. Thin samples shrink toward a **position-shaped prior**, a small floor keeps every active
+player's odds above zero, and weights are scaled by **snap share** (full at 35%+, never below 20% for a real
+role; no snaps two-plus weeks in = a scratch). Only the chosen **starting QB** carries full weight.
 
-**Defense / special teams.** A per-team Poisson for pick-6 / fumble-return / kick-punt-return
-TDs, from each team's recent non-offensive TD rate.
+**Defense / special teams.** A per-team Poisson for pick-6 / fumble-return / kick-return TDs.
 
-Player rates are **recency-weighted** across seasons and **shrunk** toward zero for small samples.
+**Seasons** are weighted 1.0 (current) / 0.3 (last) / 0.09 (two ago) — the current season counts heavily,
+so early-season numbers react to hot starts (as the backtest does too).
 
 ## Honesty & calibration
-The model is **backtested out-of-sample**: for each game of the test season it predicts every
-player's anytime-TD probability using **only prior-season rates + that season's games *before*
-the game in question**, anchored to the **real closing line** — no leakage, no hardcoded outcomes.
-It mirrors exactly how the live model blends last season + season-to-date, so the calibration
-number describes the shipped model. Reported in the UI:
+The backtest replays the **exact live model** — same κ, NB counts, run/pass rules, shrinkage and snap weighting —
+on every 2025 game, using only 2024 data plus 2025 weeks *before* each game, anchored to the real closing
+line. κ and every baseline come from the training season only; no in-game information is used. It scores the
+players who got a touch in each game (plus the QB who dropped back), i.e. as if you knew the actives.
 
-- **Brier score ≈ 0.153** vs a 0.166 base-rate baseline (~7.5% skill) — this is a *probabilistic*
-  score, not an "accuracy %", because anytime-TD is inherently probabilistic.
-- **Log loss ≈ 0.48**, and a reliability curve that tracks the diagonal (predicted 14/24/34/44/54%
-  → actual 15/23/32/42/50%).
+- **Brier 0.1504** vs a 0.1642 base-rate baseline → **8.4% skill**; log loss 0.475; reliability tracks the
+  diagonal (predicted 14 / 24 / 34 / 44 / 53% → actual 15 / 23 / 33 / 42 / 53%).
+- By position (predicted → actual): RB 24.7 → 26.9%, WR 20.5 → 20.0%, QB 15.2 → 13.7%, TE 17.0 → 18.5% —
+  each within ~1–2 standard errors, so they're left alone rather than tuned to one season.
 
-### Market-universe backtest (lines, not prices)
-Run `node build-market-lines.mjs` (defaults: 2025, ~45 games; `MAXWEEK=13 node build-market-lines.mjs 2025 60`
-for a fuller sample). It scrapes ESPN BET's historical **"Anytime Touchdown Scorer"** boards — the exact
-set of players the sportsbook made an anytime-TD market on each game — and caches them. The next
-`node build-nfl-td-snapshot.mjs` then reports a second calibration line: the model's Brier restricted to
-**only the players the book priced**, plus what fraction of players who actually scored the book had listed.
+**Every model switch had to earn its place.** `BT_EXPERIMENTS=1` flips each switch and scores weeks 1–9 and
+10–18 separately; a change stays only if it helps on **both** halves. Kept: kneel exclusion, weather,
+empirical κ, position-shaped shrinkage, the small floor, heavier current-season weighting, and snap weighting
+(judged on a roster-wide candidate set, since its job is suppressing players who won't play). **Removed
+because they made predictions worse:** a spread-driven game-script adjustment, an opponent run/pass funnel,
+and the defense-vs-position matchup nudge (the weak-spot table is still shown as context). An earlier version
+of this backtest also gave every player who touched the ball in *that* game a small bonus — information the
+app never has — which flattered its number; that leak is gone and the honest model still scores better.
 
-Latest run (60 games, 2025 wk 1–13): **Brier 0.1514** on 1,056 priced players (base-rate baseline 0.1649),
-and the book listed **94% of players who actually scored**. Two honest caveats: (1) ESPN exposes the
-anytime-TD *line*, **not the price**, so this is a *calibration + coverage* check against the market's
-player universe — **not** a "beats the odds / positive-EV" result. A true price comparison needs a paid
-odds feed (e.g. the-odds-api's historical `player_anytime_td`). (2) ESPN BET's prop board is only archived
-through ~week 13; later weeks fall back to a game-lines-only provider.
+### Market-universe check (lines, not prices)
+`node build-market-lines.mjs` scrapes ESPN BET's historical "Anytime Touchdown Scorer" boards (2025, wk 1–13).
+Restricted to exactly the players the book priced: **Brier 0.1490** on 1,065 players (baseline 0.1639), and the
+book listed **94% of actual scorers**. ESPN exposes the line, **not the price**, so this is a calibration and
+coverage check — not a beat-the-odds result. A price comparison needs a paid odds feed.
 
-**Where the edge is (and isn't):** star players' anytime lines are efficient — the market nails
-the obvious guys. Real edge lives in **role players, injury-driven role changes** (a backup
-becoming the goal-line back), and **game-script mismatches**. The app flags a model-vs-market gap
-that's *too* large as a likely missed inactive → PASS, and reminds you that same-team scorers are
-**positively correlated** (a same-game parlay, not independent edges).
+**Where the edge is (and isn't).** The model tracks the market about as well as the market prices itself —
+it's a lead generator, not a line-beater. Edge, when it exists, lives in speed (repricing after injury news
+before the book moves), line shopping, and promos/boosts. The log's CLV column is how you find out.
 
-**Estimate-grade until inactives lock.** A player ruled OUT scores zero TDs, so props with
-questionable players are estimates until game-day actives confirm (~90 min before kickoff). Set
-each player's status (ACT / Q / DBT / OUT) in the table to update on the fly.
+**Estimate-grade until inactives lock** (~90 min before kickoff): set statuses as the inactive list drops.
 
 *Not betting advice.*
