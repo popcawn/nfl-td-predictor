@@ -229,11 +229,11 @@
     <h2>Defense / special-teams TD</h2>
     <div class="panel" style="padding:8px 8px 4px">
       <table>
-        <thead><tr><th class="l">Unit</th><th>Non-off/gm</th><th>Anytime</th><th>1st TD</th><th>Last TD</th><th>Fair <span class="muted" id="dstFairMkt">(Anytime)</span></th><th class="l">Book</th><th>EV</th><th>Verdict</th></tr></thead>
+        <thead><tr><th class="l">Unit</th><th title="expected D/ST touchdowns this game">TD rate/gm</th><th>Anytime</th><th>1st TD</th><th>Last TD</th><th>Fair <span class="muted" id="dstFairMkt">(Anytime)</span></th><th class="l">Book</th><th>EV</th><th>Verdict</th></tr></thead>
         <tbody id="dstBody"></tbody>
       </table>
     </div>
-    <div class="legend">Pick-6 / fumble-return / kick-punt-return TD, modeled as a per-team Poisson from recent non-offensive TD rate.</div>
+    <div class="legend" id="dstNote">Pick-6 / fumble-return / kick-return TDs.</div>
 
     <!-- PARLAY PICKER -->
     <h2>Parlay picker</h2>
@@ -530,7 +530,16 @@ function impliedPoints(total, spreadPts, favAbbr, home, away){
   return { home: total/2 + S_home/2, away: total/2 - S_home/2, S_home };
 }
 
-function teamExpectations(off, oppDef, impPts, marginPts, outdoor, wind){
+// D/ST TD rate per game (fit on 2024, validated on the unseen 2025 season): league base x the game line
+// (a favorite's defense scores more — the other side is trailing and throwing) x the OPPONENT's turnover
+// rate. A defense's own return-TD history barely repeats year to year, so it isn't used.
+function dstRate(marginPts, opp){
+  const D=C.DST_MODEL; if(!D) return 0.115;
+  const give=(opp&&opp.giveawayPg)||D.leagueGive;
+  return clamp(D.base*Math.exp(D.slope*marginPts)*Math.pow(give/D.leagueGive, D.giveExp), 0.02, 0.5);
+}
+function teamExpectations(off, opp, impPts, marginPts, outdoor, wind){
+  const oppDef=opp.def;
   // Stage 1: expected offensive TDs anchored to the implied team total (= the exact
   // formula the backtest validated). A red-zone-matchup reshape used to sit here but
   // it was NOT in the backtest, so it ran the live model ~5-15% hot vs what was
@@ -548,8 +557,8 @@ function teamExpectations(off, oppDef, impPts, marginPts, outdoor, wind){
   }
   rushShare = clamp(rushShare, 0.24, 0.80);
 
-  // D/ST return-TD rate for this team's own defense
-  return { expOff, rushShare, nonOff: clamp(off.def?off.def.nonOffTDpg:0.14, 0.05, 0.7) };
+  // this team's D/ST TD rate: driven by the line and by how turnover-prone the opposing offense is
+  return { expOff, rushShare, nonOff: dstRate(marginPts, opp) };
 }
 
 function buildWeights(roster){
@@ -651,8 +660,8 @@ function run(){
   const offA=S.profiles[away], offH=S.profiles[home];
   const marginA = imp.away - imp.home; // positive if away favored
   const marginH = imp.home - imp.away;
-  const awayExp=teamExpectations(offA, offH.def, imp.away, marginA, outdoor, wind);
-  const homeExp=teamExpectations(offH, offA.def, imp.home, marginH, outdoor, wind);
+  const awayExp=teamExpectations(offA, offH, imp.away, marginA, outdoor, wind);
+  const homeExp=teamExpectations(offH, offA, imp.home, marginH, outdoor, wind);
 
   // fresh roster copies; preserve the user's status + book-odds overrides across
   // re-sims via persistent maps keyed by player (survives status toggles etc.)
@@ -1210,7 +1219,11 @@ function renderDST(){
     const fair = hasMkt ? probToAmerican(d[MARKET]) : '—';
     const bookVal=(LAST.bookMap[dstKey(abbr)]||'').replace(/"/g,'&quot;');
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td class="l"><div class="plname"><span class="accent" style="background:${teamColor(abbr)}"></span>${logo(abbr)?`<img src="${logo(abbr)}">`:''}<span style="color:${teamText(abbr)};font-weight:700">${S.teams[abbr].short} D/ST</span></div></td>
+    // why this unit is rated where it is: the line + the opposing offense's turnover rate
+    const other=abbr===away?home:away, mg=abbr===away?LAST.imp.away-LAST.imp.home:LAST.imp.home-LAST.imp.away;
+    const og=(S.profiles[other]||{}).giveawayPg, lgv=(C.DST_MODEL||{}).leagueGive;
+    const why=`${Math.abs(mg)<0.5?'pick\'em':mg>0?'favored by '+mg.toFixed(1):'underdog by '+(-mg).toFixed(1)}`+(og?` · ${S.teams[other].short} give it away ${og.toFixed(2)}/gm${lgv?` (league ${lgv.toFixed(2)})`:''}`:'');
+    tr.innerHTML=`<td class="l"><div class="plname"><span class="accent" style="background:${teamColor(abbr)}"></span>${logo(abbr)?`<img src="${logo(abbr)}">`:''}<span><span style="color:${teamText(abbr)};font-weight:700">${S.teams[abbr].short} D/ST</span><br><span class="muted" style="font-size:11px">${why}</span></span></div></td>
       <td>${exp.nonOff.toFixed(2)}</td>
       <td class="probcell${act('anytime')}">${pct(d.anytime)}</td>
       <td class="probcell${act('first')}">${pct(d.first)}</td>
@@ -1252,6 +1265,9 @@ function computeDstEV(){
     `<span>Log loss <b>${bt.logloss!=null?bt.logloss.toFixed(4):'—'}</b></span>`+
     (skill!=null?`<span>Skill <b class="${skill>0?'ev-pos':'ev-neg'}">${(skill*100).toFixed(1)}%</b></span>`:'')+
     `<span class="muted">N=${bt.n.toLocaleString()}</span>`;
+  const db=S.dstBacktest;
+  $('dstNote').innerHTML=`Pick-6 / fumble-return / kick-return TDs. The rate starts at the league average and goes up for the <b>favorite</b> (the other side is trailing and throwing) and against a <b>turnover-prone offense</b>. A defense's own TD history is mostly luck — it barely repeats year to year — so it isn't used.`+
+    (db?` Tested on every ${bt.testSeason} game: Brier <b>${db.brier.toFixed(4)}</b> vs ${db.baselineBrier.toFixed(4)} for giving every defense the league average (the old history-based rate scored ${db.oldBrier.toFixed(4)} — worse than average). Predicted ${db.thirds.map(t=>(t.pred*100).toFixed(0)+'%').join(' / ')} → actual ${db.thirds.map(t=>(t.actual*100).toFixed(0)+'%').join(' / ')} by third.`:'');
   const mb=S.marketBacktest;
   if(mb){
     $('calBadge').innerHTML +=

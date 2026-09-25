@@ -197,7 +197,7 @@ const players = new Map();   // pid -> {name, seasons:{s:{games:Set,rushAtt,knee
 function teamOffRec(team, season) {
   const k = team + '|' + season;
   let r = teamOff.get(k);
-  if (!r) { r = { games: new Set(), offTD: 0, rushTD: 0, passTD: 0, offPlays: 0, rzTrips: 0, rzTD: 0 }; teamOff.set(k, r); }
+  if (!r) { r = { games: new Set(), offTD: 0, rushTD: 0, passTD: 0, offPlays: 0, rzTrips: 0, rzTD: 0, give: 0 }; teamOff.set(k, r); }
   return r;
 }
 function teamDefRec(team, season) {
@@ -309,7 +309,7 @@ function pwRec(pid, wk) {
 }
 function twRec(team, wk) {
   let m = tw.get(team); if (!m) { m = new Map(); tw.set(team, m); }
-  let r = m.get(wk); if (!r) { r = { rushTD: 0, passTD: 0, g: new Set() }; m.set(wk, r); }
+  let r = m.get(wk); if (!r) { r = { rushTD: 0, passTD: 0, give: 0, dst: 0, g: new Set() }; m.set(wk, r); }
   return r;
 }
 function dwRec(team, wk) {
@@ -394,6 +394,7 @@ async function parseSeason(season) {
       if (isRush || isPass) to.offPlays++;
       if (rushTD) { to.offTD++; to.rushTD++; }
       if (passTD) { to.offTD++; to.passTD++; }
+      if (isTrue(f[idx.interception]) || isTrue(f[idx.fumble_lost])) to.give++;   // giveaways -> opponent D/ST TD chances
       const td = teamDefRec(def, season);
       td.games.add(gid);
       if (rushTD) { td.tdAllow++; td.rushTDallow++; }
@@ -450,9 +451,10 @@ async function parseSeason(season) {
         g = { home, away, week: wk, total: num(f[idx.total_line]), spread: num(f[idx.spread_line]),
               outdoor: roof === 'outdoors' || roof === 'open', wind: num(f[idx.wind]),
               precip: /snow/.test(wx) ? 'snow' : /rain|shower|drizzle|storm/.test(wx) ? 'rain' : 'none',
-              side: { home: new Map(), away: new Map() }, scored: new Set() };
+              side: { home: new Map(), away: new Map() }, scored: new Set(), dst: { home: 0, away: 0 } };
         btGames.set(gid, g);
       }
+      if (retTD) { const tt = f[idx.td_team]; if (tt === home) g.dst.home++; else if (tt === away) g.dst.away++; if (tt) twRec(tt, wk).dst++; }
       const which = pos === home ? 'home' : pos === away ? 'away' : null;
       if (which) {
         const m = g.side[which];
@@ -462,6 +464,7 @@ async function parseSeason(season) {
         // only scores QBs in games where they rushed, and QB anytime overrating goes unpenalized
         if (qId && isPass) { const e = m.get(qId) || { rush: 0, rec: 0, name: f[idx.passer_player_name] }; m.set(qId, e); }
         const twk = twRec(pos, wk); if (rushTD) twk.rushTD++; if (passTD) twk.passTD++; twk.g.add(gid);
+        if (isTrue(f[idx.interception]) || isTrue(f[idx.fumble_lost])) twk.give++;
         const dwk = dwRec(def, wk); dwk.g.add(gid);
         if (rushTD) dwk.rushA++; if (passTD) dwk.passA++;
         if (rushTD || passTD) { const bk = gsis2pos.get(f[idx.td_player_id]); if (bk) dwk.byPos[bk]++; }
@@ -530,10 +533,16 @@ async function parseSeason(season) {
   const KAPPA = kappaFor(MODEL.kappa, kSeasons);
   log(`  kappa: emp=${kappaFor('emp', kSeasons).toFixed(4)} heur=${kappaFor('heur', kSeasons).toFixed(4)} -> using ${MODEL.kappa}; QB kneels excluded from carries: ${league.kneel} (${(league.kneel / league.rushAtt * 100).toFixed(1)}% of rush attempts)`);
 
-  // non-offensive TD per team per game (for def/ST Poisson)
-  let retTot = 0, retGames = 0;
-  for (const [k, r] of teamDef) { retTot += r.returnTDfor; retGames += r.games.size; }
-  const LEAGUE_NONOFF_TD_PG = retGames ? retTot / retGames : 0.14;
+  // D/ST (return) TDs and offensive giveaways per team-game, over full seasons
+  let retTot = 0, retGames = 0, giveTot = 0, giveGames = 0;
+  for (const [k, r] of teamDef) if (kSeasons.includes(+k.split('|')[1])) { retTot += r.returnTDfor; retGames += r.games.size; }
+  for (const [k, r] of teamOff) if (kSeasons.includes(+k.split('|')[1])) { giveTot += r.give; giveGames += r.games.size; }
+  const LEAGUE_NONOFF_TD_PG = retGames ? retTot / retGames : 0.115;
+  const LEAGUE_GIVE_PG = giveGames ? giveTot / giveGames : 1.3;
+  // D/ST TD model, fit on 2024 and validated on the unseen 2025 season: a defense's OWN return-TD history
+  // barely repeats year to year (r=0.20; the fit gave it zero weight), while the game line and the
+  // opponent's turnover rate do predict it. rate = base * e^(slope * points favored by) * (oppGive/league)^giveExp
+  const DST_MODEL = { base: +LEAGUE_NONOFF_TD_PG.toFixed(4), slope: 0.06, giveExp: 1, leagueGive: +LEAGUE_GIVE_PG.toFixed(4), shrinkGames: 8 };
 
   log(`  league constants: GLconv=${GLCONV.toFixed(3)} RZtgtTD=${RZTGTCONV.toFixed(3)} tgtTD=${TGTTD.toFixed(3)} offTD/gm=${leagueOffTDpg.toFixed(2)} kappa=${KAPPA.toFixed(4)} nonoffTD/gm=${LEAGUE_NONOFF_TD_PG.toFixed(3)}`);
 
@@ -543,15 +552,15 @@ async function parseSeason(season) {
   for (const k of teamOff.keys()) allTeams.add(k.split('|')[0]);
   for (const k of teamDef.keys()) allTeams.add(k.split('|')[0]);
   for (const team of allTeams) {
-    let wOffTD = 0, wRushTD = 0, wPassTD = 0, wPlays = 0, wG = 0, wRzTrips = 0, wRzTD = 0;
-    let wTdAllow = 0, wRushAllow = 0, wPassAllow = 0, wRzTripsA = 0, wRzTDA = 0, wRetFor = 0, wGD = 0;
+    let wOffTD = 0, wRushTD = 0, wPassTD = 0, wPlays = 0, wG = 0, wRzTrips = 0, wRzTD = 0, wGive = 0;
+    let wTdAllow = 0, wRushAllow = 0, wPassAllow = 0, wRzTripsA = 0, wRzTDA = 0, wGD = 0;
     const wByPos = { RB: 0, WR: 0, TE: 0, QB: 0 };
     for (const s of gotSeasons) {
       const w = SEASON_WEIGHT[s];
       const o = teamOff.get(team + '|' + s);
-      if (o) { const g = o.games.size; wG += w * g; wOffTD += w * o.offTD; wRushTD += w * o.rushTD; wPassTD += w * o.passTD; wPlays += w * o.offPlays; wRzTrips += w * o.rzTrips; wRzTD += w * o.rzTD; }
+      if (o) { const g = o.games.size; wG += w * g; wOffTD += w * o.offTD; wRushTD += w * o.rushTD; wPassTD += w * o.passTD; wPlays += w * o.offPlays; wRzTrips += w * o.rzTrips; wRzTD += w * o.rzTD; wGive += w * o.give; }
       const d = teamDef.get(team + '|' + s);
-      if (d) { const g = d.games.size; wGD += w * g; wTdAllow += w * d.tdAllow; wRushAllow += w * d.rushTDallow; wPassAllow += w * d.passTDallow; wRzTripsA += w * d.rzTripsAllow; wRzTDA += w * d.rzTDallow; wRetFor += w * d.returnTDfor; for (const k of ['RB', 'WR', 'TE', 'QB']) wByPos[k] += w * d.byPos[k]; }
+      if (d) { const g = d.games.size; wGD += w * g; wTdAllow += w * d.tdAllow; wRushAllow += w * d.rushTDallow; wPassAllow += w * d.passTDallow; wRzTripsA += w * d.rzTripsAllow; wRzTDA += w * d.rzTDallow; for (const k of ['RB', 'WR', 'TE', 'QB']) wByPos[k] += w * d.byPos[k]; }
     }
     if (wG < 1 && wGD < 1) continue;
     const rushPass = (wRushTD + wPassTD) || 1;
@@ -561,11 +570,12 @@ async function parseSeason(season) {
       rushShare: (wRushTD + 0.5) / (rushPass + 1),             // team run/pass TD split (shrunk)
       pacePlays: wG ? wPlays / wG : 63,
       rzTDpct: wRzTrips ? wRzTD / wRzTrips : 0.55,
+      // offensive giveaways/gm, shrunk toward league — drives the OPPONENT's D/ST TD chance
+      giveawayPg: +((wGive + DST_MODEL.shrinkGames * LEAGUE_GIVE_PG) / (wG + DST_MODEL.shrinkGames)).toFixed(3),
       def: {
         tdAllowPg: wGD ? wTdAllow / wGD : leagueOffTDpg,
         rushAllowShare: (wRushAllow + 0.5) / (rushAllowTot + 1),
         rzTDpctAllow: wRzTripsA ? wRzTDA / wRzTripsA : 0.55,
-        nonOffTDpg: wGD ? wRetFor / wGD : LEAGUE_NONOFF_TD_PG,
         // TDs allowed per game by scorer position — where this defense is weak
         byPos: {
           RB: +(wGD ? wByPos.RB / wGD : 0).toFixed(3),
@@ -821,6 +831,37 @@ async function parseSeason(season) {
   log(`  reliability: ` + backtest.reliability.map(b => `${(b.pred*100)|0}->${(b.actual*100)|0}%(${b.n})`).join(' '));
   log(`  by position (pred->actual): ${byPosCal(btRows)}`);
 
+  // ---- D/ST backtest (rolling, leak-free, TEST season): the shipped D/ST model vs giving every defense
+  // the league average vs the old own-history rate. Base + league giveaway rate from the TRAIN season only.
+  const dstBacktest = (() => {
+    let tg = 0, tgive = 0, tret = 0;
+    for (const [k, r] of teamOff) if (+k.split('|')[1] === TRAIN_SEASON) { tg += r.games.size; tgive += r.give; }
+    for (const [k, r] of teamDef) if (+k.split('|')[1] === TRAIN_SEASON) tret += r.returnTDfor;
+    const base = tret / tg, lg = tgive / tg, wP = MODEL.wPrior, zero = { g: 0, give: 0, dst: 0 };
+    const run = new Map();   // team -> TEST-season weeks already played
+    const acc = { n: 0, y: 0, bNew: 0, bBase: 0, bOld: 0 }, pts = [];
+    for (const wk of weeks) {
+      for (const g of [...btGames.values()].filter(g => g.week === wk && g.total > 20)) for (const side of ['home', 'away']) {
+        const me = side === 'home' ? g.home : g.away, opp = side === 'home' ? g.away : g.home, margin = side === 'home' ? g.spread : -g.spread;
+        const oo = teamOff.get(opp + '|' + TRAIN_SEASON), ro = run.get(opp) || zero;
+        const oppGive = ((oo ? oo.give : 0) * wP + ro.give + DST_MODEL.shrinkGames * lg) / ((oo ? oo.games.size : 0) * wP + ro.g + DST_MODEL.shrinkGames);
+        const pNew = 1 - Math.exp(-base * Math.exp(DST_MODEL.slope * margin) * Math.pow(oppGive / lg, DST_MODEL.giveExp));
+        const md = teamDef.get(me + '|' + TRAIN_SEASON), rm = run.get(me) || zero;
+        const mg = (md ? md.games.size : 0) * wP + rm.g, mret = (md ? md.returnTDfor : 0) * wP + rm.dst;
+        const pOld = 1 - Math.exp(-Math.max(0.05, Math.min(0.7, mg ? mret / mg : base)));   // what the sim used to do
+        const pBase = 1 - Math.exp(-base), y = g.dst[side] > 0 ? 1 : 0;
+        acc.n++; acc.y += y; acc.bNew += (pNew - y) ** 2; acc.bBase += (pBase - y) ** 2; acc.bOld += (pOld - y) ** 2; pts.push({ p: pNew, y });
+      }
+      for (const [team, m] of tw) { const w = m.get(wk); if (!w) continue; const a = run.get(team) || { g: 0, give: 0, dst: 0 }; a.g += w.g.size; a.give += w.give; a.dst += w.dst; run.set(team, a); }
+    }
+    pts.sort((a, b) => a.p - b.p); const n3 = Math.floor(pts.length / 3);
+    const third = sl => ({ pred: +(sl.reduce((t, x) => t + x.p, 0) / sl.length).toFixed(3), actual: +(sl.reduce((t, x) => t + x.y, 0) / sl.length).toFixed(3), n: sl.length });
+    return { n: acc.n, rate: +(acc.y / acc.n).toFixed(3), brier: acc.bNew / acc.n, baselineBrier: acc.bBase / acc.n, oldBrier: acc.bOld / acc.n,
+      thirds: [third(pts.slice(0, n3)), third(pts.slice(n3, 2 * n3)), third(pts.slice(2 * n3))] };
+  })();
+  log(`  D/ST backtest: N=${dstBacktest.n} Brier ${dstBacktest.brier.toFixed(5)} vs league-average ${dstBacktest.baselineBrier.toFixed(5)} vs old own-history ${dstBacktest.oldBrier.toFixed(5)}; by third (pred->actual): ` +
+    dstBacktest.thirds.map(t => `${(t.pred * 100).toFixed(1)}->${(t.actual * 100).toFixed(1)}%`).join(' '));
+
   // ---- market-universe backtest: restrict to players the sportsbook actually
   // priced an anytime-TD market on (ESPN BET boards). LINES, not prices — so this
   // is "is the model calibrated on the book's player set, and does it find the
@@ -993,7 +1034,7 @@ async function parseSeason(season) {
       nsims: SIM_META.nsims,
       snapWeeks,
     },
-    constants: { GLCONV, RZTGTCONV, TGTTD, RUSHTDATT, AIRYDTD, KAPPA, leagueOffTDpg, LEAGUE_NONOFF_TD_PG, baseRate, leagueByPos, MODEL },
+    constants: { GLCONV, RZTGTCONV, TGTTD, RUSHTDATT, AIRYDTD, KAPPA, leagueOffTDpg, LEAGUE_NONOFF_TD_PG, baseRate, leagueByPos, MODEL, DST_MODEL },
     teams: teamsOut,
     teamList,
     profiles: profilesOut,
@@ -1001,6 +1042,7 @@ async function parseSeason(season) {
     stadiums: STADIUMS,
     schedule,
     backtest,
+    dstBacktest,
     marketBacktest,
   };
 
