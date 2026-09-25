@@ -83,12 +83,14 @@ yards and TD rate. Thin samples shrink toward a **position-shaped prior**, a sma
 player's odds above zero, and weights are scaled by **snap share** (full at 35%+, never below 20% for a real
 role; no snaps two-plus weeks in = a scratch). Only the chosen **starting QB** carries full weight.
 
-**Defense / special teams.** Each D/ST's TD count is Poisson with rate = league average (~0.12/game)
-× e^(0.06 × points it's favored by) × (opponent's giveaways per game ÷ league average). A favorite's defense scores
-more because the other side is trailing and throwing; a turnover-prone offense feeds it. A defense's own return-TD
-history is **not** used: it barely repeats year to year (r = 0.20; special-teams returns r = 0.09). The weights were fit
-on 2024 and tested on the unseen 2025 season: Brier 0.0983 vs 0.0996 for giving every defense the league average — the
-old history-based rate scored 0.1029, worse than average, with its "hot" defenses scoring *less* often than its "cold" ones.
+**Defense.** Only **defensive TDs** (pick-6, fumble return) — books pay the defense prop on those, while a kick or
+punt return TD pays the **returner's** player prop. Defensive TD rate = league average (~8.6% a game) × e^(0.06 × points
+favored by) × (opponent's giveaways per game ÷ league average): a favorite's defense scores more because the other side is
+trailing and throwing, and a turnover-prone offense feeds it. A defense's own TD history isn't used — it barely repeats
+year to year (r = 0.20). Those weights beat the league average in **both** 2024 and 2025 (each scored leak-free); the old
+history-based rate was worse than average in both. **Special-teams return TDs** (~3.2% a game, 27% of non-offensive TDs)
+happen at the league rate and are credited to each team's returners by their share of recent returns (↩ in the table), so
+they count toward that player's anytime / 1st / last TD odds.
 
 **Seasons** are weighted 1.0 (current) / 0.3 (last) / 0.09 (two ago) — the current season counts heavily,
 so early-season numbers react to hot starts (as the backtest does too).

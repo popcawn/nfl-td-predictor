@@ -226,10 +226,10 @@
       <span><span class="vb-pass">pass</span> no value</span></div>
 
     <!-- DEFENSE / ST -->
-    <h2>Defense / special-teams TD</h2>
+    <h2>Defense TD</h2>
     <div class="panel" style="padding:8px 8px 4px">
       <table>
-        <thead><tr><th class="l">Unit</th><th title="expected D/ST touchdowns this game">TD rate/gm</th><th>Anytime</th><th>1st TD</th><th>Last TD</th><th>Fair <span class="muted" id="dstFairMkt">(Anytime)</span></th><th class="l">Book</th><th>EV</th><th>Verdict</th></tr></thead>
+        <thead><tr><th class="l">Unit</th><th title="expected defensive TDs this game (pick-6 / fumble return)">TD rate/gm</th><th>Anytime</th><th>1st TD</th><th>Last TD</th><th>Fair <span class="muted" id="dstFairMkt">(Anytime)</span></th><th class="l">Book</th><th>EV</th><th>Verdict</th></tr></thead>
         <tbody id="dstBody"></tbody>
       </table>
     </div>
@@ -557,20 +557,22 @@ function teamExpectations(off, opp, impPts, marginPts, outdoor, wind){
   }
   rushShare = clamp(rushShare, 0.24, 0.80);
 
-  // this team's D/ST TD rate: driven by the line and by how turnover-prone the opposing offense is
-  return { expOff, rushShare, nonOff: dstRate(marginPts, opp) };
+  // defense TD rate: driven by the line and by how turnover-prone the opposing offense is.
+  // kick/punt return TDs are separate (league rate) and go to this team's returners, not the defense.
+  return { expOff, rushShare, nonOff: dstRate(marginPts, opp), stRate: (C.DST_MODEL&&C.DST_MODEL.stBase)||0.03 };
 }
 
 function buildWeights(roster){
   // status multipliers model play-probability, not just presence
   const mult={ACT:1, Q:0.85, DBT:0.35, OUT:0};
-  const rush=[], rec=[];
+  const rush=[], rec=[], ret=[];
   roster.forEach(p=>{
     const m=mult[p._status]||0;
     rush.push(p.rushScore*m);
     rec.push(p.recScore*m);
+    ret.push((p.ret||0)*m);   // kick/punt return volume -> who gets a special-teams TD
   });
-  return {rush, rec};
+  return {rush, rec, ret};
 }
 function cumulative(w){ const c=[]; let s=0; for(const x of w){ s+=x; c.push(s);} return {c, total:s}; }
 function pick(cum){ if(cum.total<=0) return -1; const r=rnd()*cum.total; const c=cum.c; for(let i=0;i<c.length;i++) if(r<c[i]) return i; return c.length-1; }
@@ -580,7 +582,7 @@ function simulate(cfg){
   _seed=0x2545F491;   // common random numbers across re-sims (see rnd)
   const sides=[{tag:'away',R:awayR,E:awayExp},{tag:'home',R:homeR,E:homeExp}];
   // per-side cumulative weight arrays
-  sides.forEach(sd=>{ const w=buildWeights(sd.R); sd.cumRush=cumulative(w.rush); sd.cumRec=cumulative(w.rec); });
+  sides.forEach(sd=>{ const w=buildWeights(sd.R); sd.cumRush=cumulative(w.rush); sd.cumRec=cumulative(w.rec); sd.cumRet=cumulative(w.ret); });
 
   // tallies
   sides.forEach(sd=> sd.R.forEach(p=>{ p._any=0; p._two=0; p._first=0; p._last=0; }));
@@ -607,11 +609,19 @@ function simulate(cfg){
         if(t<bestT){ bestT=t; bestKind='p'; bestRef={sd,j}; }
         if(t>worstT){ worstT=t; worstKind='p'; worstRef={sd,j}; }
       }
-      // non-offensive (D/ST) TDs
+      // defensive TDs (pick-6 / fumble return) -> the defense prop
       const nd=poisson(sd.E.nonOff);
       for(let k=0;k<nd;k++){ dst[sd.tag].any_thisSim=true; const t=rnd();
         if(t<bestT){ bestT=t; bestKind='d'; bestRef={sd}; }
         if(t>worstT){ worstT=t; worstKind='d'; worstRef={sd}; } }
+      // kick/punt return TDs -> the returner's player prop (books don't pay the defense on these);
+      // if the team has no known returner the TD still happens, it just isn't a listed prop
+      const ns=poisson(sd.E.stRate||0);
+      for(let k=0;k<ns;k++){ const j=pick(sd.cumRet), t=rnd();
+        if(j>=0){ const key=sd.tag+':'+j; cnt.set(key,(cnt.get(key)||0)+1);
+          if(t<bestT){ bestT=t; bestKind='p'; bestRef={sd,j}; }
+          if(t>worstT){ worstT=t; worstKind='p'; worstRef={sd,j}; } }
+        else { if(t<bestT){ bestT=t; bestKind='x'; bestRef=null; } if(t>worstT){ worstT=t; worstKind='x'; worstRef=null; } } }
     }
     // tally D/ST anytime + reset flags (record per-sim outcome for joint probs)
     for(const sd of sides){ if(dst[sd.tag].any_thisSim){ dst[sd.tag].any++; countMat[s*M+(sd.tag==='away'?dA:dH)]=1; dst[sd.tag].any_thisSim=false; } }
@@ -779,7 +789,7 @@ function renderPlayers(){
     tr.className = out?'out':(lowsnap?'lowsnap':'');
     const bookVal=(LAST.bookMap[bkey(p._key)]||'').replace(/"/g,'&quot;');
     tr.innerHTML=`
-      <td class="l"><div class="plname"><span class="accent" style="background:${teamColor(p._abbr)}"></span>${logo(p._abbr)?`<img src="${logo(p._abbr)}">`:''}<span>${p.name}</span><span class="pos">${p.pos}</span>${p.matched?'':'<span class="pos" title="no PBP history — prior-based" style="color:var(--warn)">◦</span>'}${snapTag(p)}</div></td>
+      <td class="l"><div class="plname"><span class="accent" style="background:${teamColor(p._abbr)}"></span>${logo(p._abbr)?`<img src="${logo(p._abbr)}">`:''}<span>${p.name}</span><span class="pos">${p.pos}</span>${p.matched?'':'<span class="pos" title="no PBP history — prior-based" style="color:var(--warn)">◦</span>'}${snapTag(p)}${(p.ret||0)>=3?'<span class="pos" title="kick/punt returner — a return TD pays his player prop, so it\x27s included in his odds">↩</span>':''}</div></td>
       <td class="l hidecol" style="color:${teamText(p._abbr)};font-weight:700">${p._abbr}</td>
       <td><select class="statussel" data-key="${p._key}">${statuses.map(s=>`<option ${s===p._status?'selected':''}>${s}</option>`).join('')}</select></td>
       <td class="probcell${act('anytime')}">${out?'—':pct(p.anytime)}</td>
@@ -882,7 +892,7 @@ function computeTopPlays(){
       add({key:p._key, label:p.name, abbr:p._abbr, market:m, odds, mp:p[m], mpRaw:p[m]/f, prior:!p.matched, role:roleLabel(p), cal:f}); } }
   for(const [abbr,d] of [[LAST.away,LAST.dst.dstAway],[LAST.home,LAST.dst.dstHome]])
     for(const m of ['anytime','first','last']){ const odds=LAST.bookMap[m+'|DST|'+abbr]; if(!odds) continue;
-      add({key:'DST|'+abbr, label:S.teams[abbr].short+' D/ST', abbr, market:m, odds, mp:d[m], mpRaw:d[m], prior:false, role:'defense / special teams', cal:1}); }
+      add({key:'DST|'+abbr, label:S.teams[abbr].short+' Defense', abbr, market:m, odds, mp:d[m], mpRaw:d[m], prior:false, role:'defense (pick-6 / fumble return)', cal:1}); }
   if(!cand.length){ CARD=[]; el.innerHTML=`<div class="muted">Paste a board (or type prices in the table) and this turns it into a short list: which bets, in what order, and how many units each.</div>`+evExplainer(); markCardRows(); return; }
 
   const skipped=[];
@@ -992,7 +1002,7 @@ function parlayCandidates(){
   for(const [abbr,d] of [[LAST.away,LAST.dst.dstAway],[LAST.home,LAST.dst.dstHome]]){ const gi=abbr===LAST.away?J.dstAwayIdx:J.dstHomeIdx;
     for(const m of ['anytime','first','last']){ const o=LAST.bookMap[m+'|DST|'+abbr], dec=oddsDec(o); if(!dec)continue;
       const r=evalBet(d[m],o); if(!r)continue;
-      cand.push({who:'DST|'+abbr,label:S.teams[abbr].short+' D/ST',abbr,market:m,gi,dec,odds:o,mp:d[m],ev:r.ev,tier:tierOf(d[m],r.edge,r.ev,false)}); } }
+      cand.push({who:'DST|'+abbr,label:S.teams[abbr].short+' Defense',abbr,market:m,gi,dec,odds:o,mp:d[m],ev:r.ev,tier:tierOf(d[m],r.edge,r.ev,false)}); } }
   // per-leg: drop dart/flag tiers and thin sub-5% legs; player reliability is already gated above
   return cand.filter(c=>c.tier!=='dart'&&c.tier!=='flag'&&c.mp>=0.05).sort((a,b)=>b.ev-a.ev).slice(0,12);
 }
@@ -1088,8 +1098,8 @@ function priceableLegs(market){
   const out=[]; const add=(bookKey,key,name,abbr,mp)=>{ if(mp==null) return; const o=LAST.bookMap[bookKey]; if(!o) return; const r=evalBet(mp,o); if(!r) return; out.push({key,name,abbr,mp,odds:o,ev:r.ev}); };
   LAST.awayR.concat(LAST.homeR).forEach(p=>{ if(p._status==='OUT') return; add(market+'|'+p._key, p._key, p.name, p._abbr, p[market]); });
   if(market!=='two'){ // defenses have no 2+ market
-    add(market+'|DST|'+LAST.away, 'DST|'+LAST.away, S.teams[LAST.away].short+' D/ST', LAST.away, LAST.dst.dstAway[market]);
-    add(market+'|DST|'+LAST.home, 'DST|'+LAST.home, S.teams[LAST.home].short+' D/ST', LAST.home, LAST.dst.dstHome[market]);
+    add(market+'|DST|'+LAST.away, 'DST|'+LAST.away, S.teams[LAST.away].short+' Defense', LAST.away, LAST.dst.dstAway[market]);
+    add(market+'|DST|'+LAST.home, 'DST|'+LAST.home, S.teams[LAST.home].short+' Defense', LAST.home, LAST.dst.dstHome[market]);
   }
   return out.sort((a,b)=>b.ev-a.ev);
 }
@@ -1144,8 +1154,8 @@ function betFlash(m){ const el=$('betMsg'); if(!el) return; el.textContent=m; el
 function betPlayerOptions(){
   const out=[{key:'custom', name:'— custom / other prop —'}];
   if(LAST){ LAST.awayR.concat(LAST.homeR).forEach(p=>{ if(p._status!=='OUT') out.push({key:p._key, name:p.name, abbr:p._abbr, p}); });
-    out.push({key:'DST|'+LAST.away, name:S.teams[LAST.away].short+' D/ST', abbr:LAST.away, dst:LAST.dst.dstAway});
-    out.push({key:'DST|'+LAST.home, name:S.teams[LAST.home].short+' D/ST', abbr:LAST.home, dst:LAST.dst.dstHome}); }
+    out.push({key:'DST|'+LAST.away, name:S.teams[LAST.away].short+' Defense', abbr:LAST.away, dst:LAST.dst.dstAway});
+    out.push({key:'DST|'+LAST.home, name:S.teams[LAST.home].short+' Defense', abbr:LAST.home, dst:LAST.dst.dstHome}); }
   return out;
 }
 function refreshBetForm(){ const sel=$('betPlayer'); if(!sel) return; betOptCache=betPlayerOptions();
@@ -1223,7 +1233,7 @@ function renderDST(){
     const other=abbr===away?home:away, mg=abbr===away?LAST.imp.away-LAST.imp.home:LAST.imp.home-LAST.imp.away;
     const og=(S.profiles[other]||{}).giveawayPg, lgv=(C.DST_MODEL||{}).leagueGive;
     const why=`${Math.abs(mg)<0.5?'pick\'em':mg>0?'favored by '+mg.toFixed(1):'underdog by '+(-mg).toFixed(1)}`+(og?` · ${S.teams[other].short} give it away ${og.toFixed(2)}/gm${lgv?` (league ${lgv.toFixed(2)})`:''}`:'');
-    tr.innerHTML=`<td class="l"><div class="plname"><span class="accent" style="background:${teamColor(abbr)}"></span>${logo(abbr)?`<img src="${logo(abbr)}">`:''}<span><span style="color:${teamText(abbr)};font-weight:700">${S.teams[abbr].short} D/ST</span><br><span class="muted" style="font-size:11px">${why}</span></span></div></td>
+    tr.innerHTML=`<td class="l"><div class="plname"><span class="accent" style="background:${teamColor(abbr)}"></span>${logo(abbr)?`<img src="${logo(abbr)}">`:''}<span><span style="color:${teamText(abbr)};font-weight:700">${S.teams[abbr].short} Defense</span><br><span class="muted" style="font-size:11px">${why}</span></span></div></td>
       <td>${exp.nonOff.toFixed(2)}</td>
       <td class="probcell${act('anytime')}">${pct(d.anytime)}</td>
       <td class="probcell${act('first')}">${pct(d.first)}</td>
@@ -1266,7 +1276,7 @@ function computeDstEV(){
     (skill!=null?`<span>Skill <b class="${skill>0?'ev-pos':'ev-neg'}">${(skill*100).toFixed(1)}%</b></span>`:'')+
     `<span class="muted">N=${bt.n.toLocaleString()}</span>`;
   const db=S.dstBacktest;
-  $('dstNote').innerHTML=`Pick-6 / fumble-return / kick-return TDs. The rate starts at the league average and goes up for the <b>favorite</b> (the other side is trailing and throwing) and against a <b>turnover-prone offense</b>. A defense's own TD history is mostly luck — it barely repeats year to year — so it isn't used.`+
+  $('dstNote').innerHTML=`<b>Defensive TDs only</b> (pick-6 / fumble return) — books don't pay the defense prop on kick or punt return TDs; those go to the <b>returner's</b> player prop, so the sim credits them to each team's returners (<span class="pos">↩</span> in the table) at the league rate (${(((C.DST_MODEL||{}).stBase||0.03)*100).toFixed(1)}% a game). The defense rate starts at the league average (${(((C.DST_MODEL||{}).base||0.08)*100).toFixed(1)}% a game) and goes up for the <b>favorite</b> (the other side is trailing and throwing) and against a <b>turnover-prone offense</b>. A defense's own TD history is mostly luck — it barely repeats year to year — so it isn't used.`+
     (db?` Tested on every ${bt.testSeason} game: Brier <b>${db.brier.toFixed(4)}</b> vs ${db.baselineBrier.toFixed(4)} for giving every defense the league average (the old history-based rate scored ${db.oldBrier.toFixed(4)} — worse than average). Predicted ${db.thirds.map(t=>(t.pred*100).toFixed(0)+'%').join(' / ')} → actual ${db.thirds.map(t=>(t.actual*100).toFixed(0)+'%').join(' / ')} by third.`:'');
   const mb=S.marketBacktest;
   if(mb){

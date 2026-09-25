@@ -203,7 +203,7 @@ function teamOffRec(team, season) {
 function teamDefRec(team, season) {
   const k = team + '|' + season;
   let r = teamDef.get(k);
-  if (!r) { r = { games: new Set(), tdAllow: 0, rushTDallow: 0, passTDallow: 0, rzTripsAllow: 0, rzTDallow: 0, returnTDfor: 0, byPos: { RB: 0, WR: 0, TE: 0, QB: 0 } }; teamDef.set(k, r); }
+  if (!r) { r = { games: new Set(), tdAllow: 0, rushTDallow: 0, passTDallow: 0, rzTripsAllow: 0, rzTDallow: 0, returnTDfor: 0, stTDfor: 0, byPos: { RB: 0, WR: 0, TE: 0, QB: 0 } }; teamDef.set(k, r); }
   return r;
 }
 // gsis_id -> scoring-position bucket, and the ESPN<->gsis id maps (filled by loadRosters)
@@ -222,6 +222,8 @@ function playerRec(pid, name, season) {
 // league totals (for conversion-rate constants). kneel = QB kneel-downs, which nflverse
 // records as rush attempts but are not scoring opportunities.
 const league = { gl5carry: 0, gl5td: 0, rzTgt: 0, rzTgtTD: 0, tgt: 0, tgtTD: 0, offTD: 0, rushAtt: 0, kneel: 0, rushTDtot: 0, airYtot: 0 };
+// kick/punt returns per player per season -> who gets credited when a return goes for a TD
+const returns = new Map();   // gsis -> {season: returns}
 // every REG game's closing line + offensive TDs per side (all seasons) -> empirical kappa
 const gameLines = new Map();   // gid -> {season, total, spread, homeTD, awayTD}
 
@@ -401,11 +403,15 @@ async function parseSeason(season) {
       if (passTD) { td.tdAllow++; td.passTDallow++; }
       if (rushTD || passTD) { const bk = gsis2pos.get(f[idx.td_player_id]); if (bk) td.byPos[bk]++; }
     }
-    // non-offensive/return TD credited to the team that returned it (td_team on return plays)
+    // Non-offensive TDs, split the way books settle them: a pick-6 / fumble return on a scrimmage play pays
+    // the DEFENSE prop; a kick/punt return TD pays the RETURNER's player prop, not the defense.
+    const scrim = playType === 'pass' || playType === 'run' || playType === 'qb_kneel' || playType === 'qb_spike';
     if (retTD) {
       const tt = f[idx.td_team];
-      if (tt) teamDefRec(tt, season).returnTDfor++;
+      if (tt) { if (scrim) teamDefRec(tt, season).returnTDfor++; else teamDefRec(tt, season).stTDfor++; }
     }
+    if (playType === 'kickoff' || playType === 'punt') for (const rid of [f[idx.kickoff_returner_player_id], f[idx.punt_returner_player_id]]) if (rid) {
+      let m = returns.get(rid); if (!m) { m = {}; returns.set(rid, m); } m[season] = (m[season] || 0) + 1; }
 
     // ---- league conversion constants ----
     if (isRush) { league.rushAtt++; if (kneel) league.kneel++; if (rushTD) league.rushTDtot++; }
@@ -454,7 +460,7 @@ async function parseSeason(season) {
               side: { home: new Map(), away: new Map() }, scored: new Set(), dst: { home: 0, away: 0 } };
         btGames.set(gid, g);
       }
-      if (retTD) { const tt = f[idx.td_team]; if (tt === home) g.dst.home++; else if (tt === away) g.dst.away++; if (tt) twRec(tt, wk).dst++; }
+      if (retTD && (playType === 'pass' || playType === 'run' || playType === 'qb_kneel' || playType === 'qb_spike')) { const tt = f[idx.td_team]; if (tt === home) g.dst.home++; else if (tt === away) g.dst.away++; if (tt) twRec(tt, wk).dst++; }
       const which = pos === home ? 'home' : pos === away ? 'away' : null;
       if (which) {
         const m = g.side[which];
@@ -534,16 +540,20 @@ async function parseSeason(season) {
   log(`  kappa: emp=${kappaFor('emp', kSeasons).toFixed(4)} heur=${kappaFor('heur', kSeasons).toFixed(4)} -> using ${MODEL.kappa}; QB kneels excluded from carries: ${league.kneel} (${(league.kneel / league.rushAtt * 100).toFixed(1)}% of rush attempts)`);
 
   // D/ST (return) TDs and offensive giveaways per team-game, over full seasons
-  let retTot = 0, retGames = 0, giveTot = 0, giveGames = 0;
-  for (const [k, r] of teamDef) if (kSeasons.includes(+k.split('|')[1])) { retTot += r.returnTDfor; retGames += r.games.size; }
+  let retTot = 0, stTot = 0, retGames = 0, giveTot = 0, giveGames = 0;
+  for (const [k, r] of teamDef) if (kSeasons.includes(+k.split('|')[1])) { retTot += r.returnTDfor; stTot += r.stTDfor; retGames += r.games.size; }
   for (const [k, r] of teamOff) if (kSeasons.includes(+k.split('|')[1])) { giveTot += r.give; giveGames += r.games.size; }
-  const LEAGUE_NONOFF_TD_PG = retGames ? retTot / retGames : 0.115;
+  const LEAGUE_NONOFF_TD_PG = retGames ? retTot / retGames : 0.083;   // DEFENSIVE TDs per team-game
+  const LEAGUE_ST_TD_PG = retGames ? stTot / retGames : 0.03;          // kick/punt return TDs per team-game
   const LEAGUE_GIVE_PG = giveGames ? giveTot / giveGames : 1.3;
-  // D/ST TD model, fit on 2024 and validated on the unseen 2025 season: a defense's OWN return-TD history
+  // DEFENSE TD model (defensive TDs only — books settle kick/punt return TDs on the returner), checked on 2024
+  // AND 2025 (both leak-free; slope 0.05-0.07 / giveaway exp 0.75-1.5 beat league average in both seasons): a defense's OWN return-TD history
   // barely repeats year to year (r=0.20; the fit gave it zero weight), while the game line and the
   // opponent's turnover rate do predict it. rate = base * e^(slope * points favored by) * (oppGive/league)^giveExp
-  const DST_MODEL = { base: +LEAGUE_NONOFF_TD_PG.toFixed(4), slope: 0.06, giveExp: 1, leagueGive: +LEAGUE_GIVE_PG.toFixed(4), shrinkGames: 8 };
+  const DST_MODEL = { base: +LEAGUE_NONOFF_TD_PG.toFixed(4), slope: 0.06, giveExp: 1, leagueGive: +LEAGUE_GIVE_PG.toFixed(4), shrinkGames: 8,
+    stBase: +LEAGUE_ST_TD_PG.toFixed(4) };   // special-teams TDs: league rate (a team's own rate is noise, r=0.09), credited to returners
 
+  log(`  non-offensive TDs per team-game: defense ${LEAGUE_NONOFF_TD_PG.toFixed(3)}, special-teams returns ${LEAGUE_ST_TD_PG.toFixed(3)} (${(LEAGUE_ST_TD_PG / (LEAGUE_NONOFF_TD_PG + LEAGUE_ST_TD_PG) * 100).toFixed(0)}% of non-offensive TDs go to returners, not the defense prop)`);
   log(`  league constants: GLconv=${GLCONV.toFixed(3)} RZtgtTD=${RZTGTCONV.toFixed(3)} tgtTD=${TGTTD.toFixed(3)} offTD/gm=${leagueOffTDpg.toFixed(2)} kappa=${KAPPA.toFixed(4)} nonoffTD/gm=${LEAGUE_NONOFF_TD_PG.toFixed(3)}`);
 
   // -------- per-team blended profiles --------
@@ -992,6 +1002,8 @@ async function parseSeason(season) {
           matched: !!sc,
           snapPct: snap ? snap.snapPct : null,     // null = no snaps recorded this season
           snapLast: snap ? snap.lastPct : null,    // most recent week's offensive snap %
+          // kick/punt returns, recency-weighted: the app splits special-teams TDs by each player's share
+          ret: +(gsis && returns.get(gsis) ? Object.entries(returns.get(gsis)).reduce((a, [yr, n]) => a + (SEASON_WEIGHT[+yr] || 0) * n, 0) : 0).toFixed(2),
         });
       }
     }
