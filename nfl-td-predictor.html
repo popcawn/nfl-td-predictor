@@ -275,7 +275,12 @@
         <input id="betStake" type="number" step="0.5" placeholder="stake 1" style="width:95px">
         <button class="btn" id="betAdd" style="padding:6px 14px;font-size:13px">Log bet</button>
         <span id="betMsg" class="muted" style="font-size:12px"></span>
-        <button class="statussel" id="betClear" style="padding:6px 10px;font-size:12px;margin-left:auto">Clear log</button>
+        <span style="margin-left:auto;display:flex;gap:6px">
+          <button class="statussel" id="betExport" style="padding:6px 10px;font-size:12px" title="Save your bet log, cross-game slip and bankroll to a file — import it on another PC or browser">⬇ Export</button>
+          <button class="statussel" id="betImport" style="padding:6px 10px;font-size:12px" title="Load an exported file; merges with what's here (no duplicates)">⬆ Import</button>
+          <input type="file" id="betImportFile" accept=".json,application/json" style="display:none">
+          <button class="statussel" id="betClear" style="padding:6px 10px;font-size:12px">Clear log</button>
+        </span>
       </div>
       <div id="betBody" class="legend"></div>
     </div>
@@ -1177,6 +1182,34 @@ function addBet(){
   saveBets(); $('betOdds').value=''; $('betCustom').value=''; renderBets(); betFlash('logged ✓');
 }
 function mktLabel(m){ return (MKT[m]&&MKT[m].label)||'Custom'; }
+// Browser storage lives on ONE machine (and one address — the local file and the GitHub Pages copy are
+// separate even on the same PC). Export/import moves the log, slip and bankroll between them.
+function exportData(){
+  const data={app:'nfl-td-predictor', version:1, exportedAt:new Date().toISOString(), bets, slip, bankroll:getBankroll()};
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,1)],{type:'application/json'}));
+  a.download=`nfl-td-bets-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500);
+  betFlash(`exported ${bets.length} bets, ${slip.length} slip legs`);
+}
+function importData(file){
+  const rd=new FileReader();
+  rd.onload=()=>{ try{
+      const d=JSON.parse(rd.result); if(!d||d.app!=='nfl-td-predictor'||!Array.isArray(d.bets)) throw 0;
+      const byId=new Map(bets.map(b=>[b.id,b])); let added=0, updated=0, legs=0;
+      for(const b of d.bets){ if(!b||!b.id) continue; const cur=byId.get(b.id);
+        if(!cur){ bets.push(b); byId.set(b.id,b); added++; continue; }
+        // same bet on both machines: keep whichever copy knows more (settled result, closing line)
+        let ch=false; if(cur.result==='pending'&&b.result&&b.result!=='pending'){ cur.result=b.result; ch=true; }
+        if(!cur.closeOdds&&b.closeOdds){ cur.closeOdds=b.closeOdds; ch=true; } if(ch) updated++; }
+      bets.sort((x,y)=>String(y.ts).localeCompare(String(x.ts)));
+      for(const l of (d.slip||[])) if(l&&!slipHas(l.game,l.key,l.market)){ slip.push(l); legs++; }
+      if(d.bankroll>0){ $('bankroll').value=d.bankroll; try{ localStorage.setItem('nfltd_bankroll',d.bankroll); }catch(e){} }
+      saveBets(); saveSlip(); renderBets(); renderSlip(); if(LAST) computeTopPlays();
+      betFlash(`imported ${added} new bets${updated?`, updated ${updated}`:''}${legs?`, ${legs} slip legs`:''}`);
+    }catch(e){ betFlash('that file isn\'t an export from this app'); } };
+  rd.readAsText(file);
+}
 function renderBets(){
   const body=$('betBody'); if(!body) return;
   if(!bets.length){ body.innerHTML='<div class="muted">No bets logged yet. Log a few (real or paper), fill in the closing line after kickoff, and your CLV + ROI build up here. Positive CLV over ~50–100 bets = a real edge; flat/negative = the market already had it priced.</div>'; return; }
@@ -1418,6 +1451,9 @@ $('slipBody').addEventListener('click', e=>{ const b=e.target.closest('.slipdel'
 $('betMarket').onchange=syncBetFormFields;
 $('betPlayer').onchange=syncBetFormFields;
 $('betAdd').onclick=addBet;
+$('betExport').onclick=exportData;
+$('betImport').onclick=()=>$('betImportFile').click();
+$('betImportFile').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f) importData(f); e.target.value=''; };
 $('betClear').onclick=()=>{ if(bets.length && confirm('Clear all '+bets.length+' logged bets? This can\'t be undone.')){ bets=[]; saveBets(); renderBets(); } };
 $('betBody').addEventListener('change', e=>{ const id=e.target.dataset.id; if(!id) return; const b=bets.find(x=>x.id===id); if(!b) return;
   if(e.target.classList.contains('betclose')) b.closeOdds=e.target.value.trim();

@@ -9,6 +9,16 @@ TAKE / PASS verdict, a same-game **parlay picker**, a **cross-game parlay slip**
 just double-click it. Live extras (today's line, injuries, forecast) load when online and fall back
 silently to the baked snapshot when not.
 
+## On any PC or phone
+- **Just use it:** open **https://popcawn.github.io/nfl-td-predictor/** — nothing to install. The data is rebuilt on
+  GitHub every Tuesday and Friday (`.github/workflows/refresh.yml`); lines, injuries and weather refresh live.
+- **Your bet log / slip / bankroll** are saved in the browser you use, per machine. Move them with **⬇ Export** /
+  **⬆ Import** in the Bet log panel (imports merge — no duplicates; a settled result or closing line wins over a pending
+  copy). Tip: always use the Pages link rather than the local file, so each machine has one place to look.
+- **Work on the code:** install [Git](https://git-scm.com) and [Node 18+](https://nodejs.org), then
+  `git clone https://github.com/popcawn/nfl-td-predictor.git`. Run `git pull` before each session (the refresh bot
+  commits data twice a week). `CLAUDE.md` carries the project notes for Claude Code on any machine.
+
 ## Using it
 - **This week's games** — one dropdown sets both teams, the line and the stadium. The app opens on the next
   game to kick off. If you pick two teams by hand the wrong way round, it warns you and offers a one-click flip

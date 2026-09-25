@@ -1,0 +1,52 @@
+name: Refresh data
+
+# Rebuilds the snapshot on GitHub's servers and commits it, so the GitHub Pages copy stays current
+# without any PC being on. (Lines, injuries and weather also refresh live inside the app.)
+on:
+  schedule:
+    - cron: '0 12 * * 2'   # Tuesday 12:00 UTC — after Monday Night Football + nflverse's overnight update
+    - cron: '0 12 * * 5'   # Friday 12:00 UTC — picks up midweek roster moves before Sunday
+  workflow_dispatch:        # "Run workflow" button on the repo's Actions tab
+  push:
+    paths: ['.github/workflows/refresh.yml']   # runs once whenever this file changes
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # completed seasons' play-by-play never changes; keep it between runs (~200 MB)
+      - name: Restore nflverse cache
+        uses: actions/cache@v4
+        with:
+          path: ~/nflverse_cache
+          key: nflverse-${{ github.run_id }}
+          restore-keys: nflverse-
+
+      - name: Build snapshot
+        env:
+          NFL_CACHE_DIR: /home/runner/nflverse_cache
+        run: node --max-old-space-size=6144 build-nfl-td-snapshot.mjs
+
+      - name: Commit refreshed data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add nfl-td-predictor.html nfl-td-snapshot.json
+          if git diff --cached --quiet; then echo "No data changes."; exit 0; fi
+          git commit -m "Data refresh $(date -u +%Y-%m-%d)"
+          git pull --rebase origin main
+          git push
