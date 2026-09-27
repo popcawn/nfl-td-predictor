@@ -38,6 +38,13 @@ See README.md for what the model does and how it was validated.
   primary surface — keep new decision features there. Be honest that the model tracks the market; CLV in the bet
   log is how edge gets proven.
 
+## Decision features (heuristic, not backtested)
+- `legConfidence()` scores each pick 0–1; adjusted prob = book + conf × (model − book), so adjusted EV = conf × EV.
+  Card stakes and the slip both use it. Its weights are reasoned, NOT fitted — there are no historical prices to fit
+  them. Don't present them as validated; revisit once the bet log has enough settled bets.
+- The slip optimizer maximises Kelly log-growth over subsets (one leg per game, ≤6 legs, top 10 legs), never EV%.
+  Don't count total/spread/weather in confidence — they already drive the probability.
+
 ## Gotchas
 - In Git Bash, `node -e "..."` containing JS template-literal backticks gets mangled by command substitution —
   use the Edit tool or put the script in a file. `python` may be a Store stub that hangs.

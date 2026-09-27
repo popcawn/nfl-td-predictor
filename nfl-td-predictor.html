@@ -85,6 +85,9 @@
   .vb-dart{background:rgba(255,207,77,.14);color:var(--warn);border:1px solid var(--warn)}
   .vb-flag{background:rgba(255,207,77,.08);color:var(--warn);border:1px dashed var(--warn)}
   .vb-pass{color:var(--ink3);font-size:11px}
+  .conf-hi{background:rgba(51,217,134,.14);color:var(--good);border:1px solid rgba(51,217,134,.45)}
+  .conf-md{background:rgba(255,207,77,.10);color:var(--warn);border:1px solid rgba(255,207,77,.4)}
+  .conf-lo{background:rgba(255,93,108,.10);color:var(--bad);border:1px solid rgba(255,93,108,.4)}
   .ev-dart{color:var(--warn);font-weight:700}
   tr.rowtake td{background:rgba(49,208,122,.07)}
   tr.rowtake td:first-child{box-shadow:inset 3px 0 0 var(--good)}
@@ -251,13 +254,13 @@
     <!-- CROSS-GAME SLIP -->
     <h2>Cross-game parlay slip</h2>
     <div class="panel" id="slipPanel" style="padding:14px">
-      <div style="font-weight:700;font-size:13px;margin-bottom:6px">🧾 Build a parlay across <b>different games</b> — legs are independent, so books pay <b>full</b> odds and this EV is <b>real</b>, not a same-game ceiling. Add legs as you price each game; the slip stays put when you switch matchups.</div>
+      <div style="font-weight:700;font-size:13px;margin-bottom:6px">🧾 Add each game's top picks here (<b>➕ add these to slip</b> on Your card) — the slip keeps the best leg per game, scores each by <b>confidence</b>, and builds the parlay that <b>grows your bankroll fastest</b>. Different games are independent, so books pay full odds and the EV is real. The slip stays put when you switch games.</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
         <span class="muted" style="font-size:12px">Add from <b id="slipGameLbl">this game</b>:</span>
         <select id="slipMarket" class="statussel"><option value="anytime">Anytime</option><option value="two">2+ TD</option><option value="first">1st TD</option><option value="last">Last TD</option></select>
         <select id="slipPlayer" class="statussel" style="max-width:230px"></select>
         <button class="btn" id="slipAdd" style="padding:6px 14px;font-size:13px">➕ Add leg</button>
-        <button class="btn" id="slipAddBest" style="padding:6px 12px;font-size:12px" title="adds this game's highest-EV priced leg in the selected market">➕ Best EV</button>
+        <button class="btn" id="slipAddBest" style="padding:6px 12px;font-size:12px" title="adds this game's best pick in the selected market (confidence-adjusted)">➕ Best pick</button>
         <button class="statussel" id="slipClear" style="padding:6px 10px;font-size:12px;margin-left:auto">Clear slip</button>
       </div>
       <div id="slipBody" class="legend"></div>
@@ -349,6 +352,42 @@ function roleOf(p){ if(p.pos==='QB') return 'qb'; if(p.snapPct==null) return 'no
 function roleCalFactor(p){ const r=roleOf(p); return r==='qb'?(ROLE_CAL.qb||1) : r==='rot'?(ROLE_CAL.rot||1) : 1; }
 function roleLabel(p){ const r=roleOf(p), sn=p.snapPct!=null?` (${Math.round(p.snapPct*100)}% snaps)`:'';
   return ({qb:'QB', full:'full-time '+p.pos+sn, rot:'rotational '+p.pos+sn, part:'part-time '+p.pos+sn, none:p.pos+' (no snaps yet)'})[r]; }
+// ---------- confidence: how much of the model's edge to believe for THIS pick ----------
+// Total, spread and weather already shape each probability, so they are NOT counted again here.
+// Confidence covers what the probability can't: how reliable the model is for this kind of pick (by
+// role, from the backtest), how much history it has, availability, whether the market was ever
+// validated, and how far it sits from the book (huge gaps are usually missed news). The edge is then
+// scaled by it: adjusted prob = book implied + conf x (model - book), so adjusted EV = conf x EV.
+function legConfidence(o){   // o: {dst, role, pos, games, status, matched, market, edge, bimp, badWx}
+  const parts=[], f=(v,label)=>{ if(v<1) parts.push([label,v]); return v; };
+  let s=1;
+  if(o.dst) s*=f(0.7,'defensive TDs are rare — the defense model has modest skill');
+  else if(!o.matched) s*=f(0.45,'no play-by-play history — priced from a position prior');
+  else {
+    const R={full:[1,''], rot:[0.85,'rotational role — the model ran hot here (calibrated, still noisier)'], part:[0.7,'part-time role — small, noisy usage'],
+      qb:[0.8,'QB — the model ran hot on QBs (calibrated)'], none:SNAP_WEEKS<2?[0.8,'no snaps yet this season']:[0.5,'no snaps this season — may not play']}[o.role]||[0.7,'unknown role'];
+    s*=f(R[0],R[1]);
+    const g=o.games||0; s*=f(clamp(0.6+0.4*g/10,0.6,1), `thin history (${g.toFixed(1)} weighted games)`);
+  }
+  if(o.status==='Q') s*=f(0.75,'questionable'); else if(o.status==='DBT') s*=f(0.45,'doubtful');
+  if(o.market!=='anytime') s*=f(0.8, `${MKT[o.market].label} market was never backtested`);
+  if(o.bimp<0.06) s*=f(0.65,'lottery odds'); else if(o.bimp<0.12) s*=f(0.85,'long odds');
+  const e=o.edge;
+  if(e>0.20) s*=f(0.55,'edge far bigger than the market — usually missed news'); else if(e>0.12) s*=f(0.75,'big gap vs the market — check injury/role news'); else if(e>0.06) s*=f(0.9,'sizable gap vs the market');
+  if(o.badWx && /^(WR|TE|QB)$/.test(o.pos||'')) s*=f(0.9,'bad weather adds passing variance');
+  s=clamp(s,0.1,1);
+  return { score:+s.toFixed(2), label:s>=0.7?'High':s>=0.45?'Medium':'Low', parts };
+}
+function confFor(ref, market, r){   // ref = roster player, or {dst:true} for a defense
+  if(!ref || ref.dst) return legConfidence({dst:true, market, edge:r.edge, bimp:r.bimp});
+  const badWx=$('outdoor').checked && ((+$('wind').value||0)>=15 || (WX.pp>=50 && WX.precip!=='none'));
+  return legConfidence({role:ref.pos==='QB'?'qb':roleOf(ref), pos:ref.pos, games:ref.games, status:ref._status, matched:ref.matched, market, edge:r.edge, bimp:r.bimp, badWx});
+}
+function confBadge(c){
+  const cls=c.label==='High'?'conf-hi':c.label==='Medium'?'conf-md':'conf-lo';
+  const tip='Confidence '+Math.round(c.score*100)+' = how much of the model\'s edge to believe.\n'+(c.parts.length?c.parts.map(([l,v])=>'×'+v+'  '+l).join('\n'):'no reliability concerns');
+  return `<span class="vbadge ${cls}" style="font-size:11px" title="${esc(tip)}">${c.label} ${Math.round(c.score*100)}</span>`;
+}
 function snapTag(p){
   if(p.snapPct==null) return '<span class="snaptag low" title="no offensive snaps recorded this season — scratch or no role">🪑 —</span>';
   return `<span class="snaptag ${snapLow(p)?'low':''}" title="recent offensive snap share (season, recency-weighted)">${Math.round(p.snapPct*100)}%</span>`;
@@ -881,7 +920,7 @@ let CARD=[];   // current picks, for the table stars and the "log this card" but
 function evExplainer(){
   return `<div class="muted" style="margin-top:9px;font-size:12px;border-top:1px solid var(--line);padding-top:8px;line-height:1.5">`+
     `<b>How the card is built.</b> Ranked by <b>Kelly</b> — the edge relative to the price, edge ÷ (1 − book's implied %) — not by EV%. EV% grows with the payout, so it always pushes the longest shots to the top even when their edge is thin noise. `+
-    `Stakes are <b>¼ Kelly</b> of your bankroll (the model is an estimate), with at most <b>${MAX_PER_TEAM} plays per team</b> and <b>${TEAM_CAP*100}%</b> of bankroll per team, since same-team scorers win and lose together. `+
+    `Each pick has a <b>confidence</b> score (hover it): how much of the model's edge to believe, from role reliability in the backtest, history, injury status, market type and how far it sits from the book. Stakes are <b>¼ Kelly on the confidence-adjusted edge</b>, with at most <b>${MAX_PER_TEAM} plays per team</b> and <b>${TEAM_CAP*100}%</b> of bankroll per team, since same-team scorers win and lose together. `+
     `Probabilities are <b>role-calibrated</b>: rotational players (35–60% snaps) are scaled ×${ROLE_CAL.rot||1} and QBs ×${ROLE_CAL.qb||1}, because the backtest found the raw sim over-rates them (the fix improved accuracy on held-out games). `+
     `<span class="vbadge vb-dart">🎲 dart</span> = too rare or no history to price; <span class="vbadge vb-flag">⚠ check</span> = edge too big to trust (usually a missed injury or role change). `+
     `<b>Reality check:</b> the model tracks the market about as well as the market prices itself — these are leads, sized small. Log them and let CLV tell you whether it works.</div>`;
@@ -889,15 +928,15 @@ function evExplainer(){
 function computeTopPlays(){
   const el=$('cardBody'); if(!LAST||!el) return;
   const bank=getBankroll(), cand=[];
-  const add=o=>{ const r=evalBet(o.mp,o.odds); if(!r) return;
-    cand.push({...o, ...r, tier:tierOf(o.mp,r.edge,r.ev,o.prior), kelly:r.edge>0 ? r.edge/(1-r.bimp) : 0}); };
+  const add=o=>{ const r=evalBet(o.mp,o.odds); if(!r) return; const conf=confFor(o.ref,o.market,r);
+    cand.push({...o, ...r, conf, tier:tierOf(o.mp,r.edge,r.ev,o.prior), kelly:r.edge>0 ? conf.score*r.edge/(1-r.bimp) : 0}); };   // Kelly on the confidence-adjusted edge
   for(const p of LAST.awayR.concat(LAST.homeR)){ if(p._status==='OUT') continue;
     for(const m of ['anytime','first','last','two']){ const odds=LAST.bookMap[m+'|'+p._key]; if(!odds) continue;
       const f=m==='two'?(p._cal||1)**2:(p._cal||1);
-      add({key:p._key, label:p.name, abbr:p._abbr, market:m, odds, mp:p[m], mpRaw:p[m]/f, prior:!p.matched, role:roleLabel(p), cal:f}); } }
+      add({key:p._key, label:p.name, abbr:p._abbr, market:m, odds, mp:p[m], mpRaw:p[m]/f, prior:!p.matched, role:roleLabel(p), cal:f, ref:p}); } }
   for(const [abbr,d] of [[LAST.away,LAST.dst.dstAway],[LAST.home,LAST.dst.dstHome]])
     for(const m of ['anytime','first','last']){ const odds=LAST.bookMap[m+'|DST|'+abbr]; if(!odds) continue;
-      add({key:'DST|'+abbr, label:S.teams[abbr].short+' Defense', abbr, market:m, odds, mp:d[m], mpRaw:d[m], prior:false, role:'defense (pick-6 / fumble return)', cal:1}); }
+      add({key:'DST|'+abbr, label:S.teams[abbr].short+' Defense', abbr, market:m, odds, mp:d[m], mpRaw:d[m], prior:false, role:'defense (pick-6 / fumble return)', cal:1, ref:{dst:true}}); }
   if(!cand.length){ CARD=[]; el.innerHTML=`<div class="muted">Paste a board (or type prices in the table) and this turns it into a short list: which bets, in what order, and how many units each.</div>`+evExplainer(); markCardRows(); return; }
 
   const skipped=[];
@@ -934,7 +973,7 @@ function computeTopPlays(){
       `<span class="${i===0?'star':'muted'}" style="min-width:20px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
       `<b style="color:${teamText(c.abbr)};min-width:160px">${esc(c.label)}</b>`+
       `<span style="min-width:120px">${MKT[c.market].label} <span class="odds">${c.odds}</span></span>`+
-      `<span class="vbadge vb-take" style="font-size:12px">bet ${u(c.stake)}</span>`+
+      `<span class="vbadge vb-take" style="font-size:12px">bet ${u(c.stake)}</span> ${confBadge(c.conf)}`+
       `<span class="muted" style="font-size:12px">model ${pct(c.mp)} vs book ${pct(c.bimp)} · edge +${(c.edge*100).toFixed(1)} pts · ${c.role}${c.cal<1?` · calibrated ×${c.cal.toFixed(2)}`:''}${c.capped?' · scaled to team cap':''}</span></div>`; });
     html+='</div>';
     const teams={}, cnt={}; picks.forEach(c=>{ teams[c.abbr]=(teams[c.abbr]||0)+c.stake; cnt[c.abbr]=(cnt[c.abbr]||0)+1; });
@@ -942,6 +981,7 @@ function computeTopPlays(){
     html+=`<div class="muted" style="margin-top:8px;font-size:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">`+
       `<span>Total <b>${u(tot)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll) · ${Object.entries(teams).map(([t,v])=>`${S.teams[t].short} ${u(v)}`).join(' · ')}`+
       `${Object.values(cnt).some(n=>n>1)?' · same-team plays win and lose together':''}</span>`+
+      `<button class="statussel" id="cardToSlip" style="padding:3px 11px" title="send every pick above to the cross-game slip — do this for each game, then let the slip pick the parlay">➕ add these to slip</button>`+
       `<button class="statussel" id="logCard" style="padding:3px 11px">📓 log this card</button></div>`;
   } else {
     html+=`<div style="margin-top:4px"><b>No bets on this card.</b> Nothing you've priced clears the bar after calibration and sizing — the normal case, since the market is efficient on most props. (If everything's a pass, sanity-check the total/spread up top.)</div>`;
@@ -952,6 +992,7 @@ function computeTopPlays(){
       .map(s=>`${esc(s.c.label)} ${MKT[s.c.market].label} <span class="odds">${s.c.odds}</span> — ${s.why}`).join(' · ')+'</div>'; }
   el.innerHTML=html+evExplainer();
   const lc=$('logCard'); if(lc) lc.onclick=logCard;
+  const cs=$('cardToSlip'); if(cs) cs.onclick=cardToSlip;
   markCardRows();
 }
 // star the card's picks in the table so both views agree
@@ -960,6 +1001,12 @@ function markCardRows(){
     const on=CARD.some(c=>c.key===inp.dataset.key && c.market===MARKET), st=v.querySelector('.cardstar');
     tr.classList.toggle('oncard', on);
     if(on&&!st) v.insertAdjacentHTML('afterbegin','<span class="cardstar star" title="on your card">★ </span>'); else if(!on&&st) st.remove(); });
+}
+// one click: every card pick goes to the cross-game slip (with its confidence + game context)
+function cardToSlip(){
+  let n=0; for(const c of CARD){ const ref=c.ref||{dst:true};
+    if(addLeg({key:c.key, name:c.label, abbr:c.abbr, mp:c.mp, odds:c.odds, ref, conf:c.conf}, c.market)) n++; }
+  const b=$('cardToSlip'); if(b) b.textContent=n?`✓ added ${n} to slip`:'already in slip';
 }
 // one click: every card pick goes into the bet log with its stake (skips ones already logged)
 function logCard(){
@@ -1097,55 +1144,123 @@ function loadSlip(){ try{ const s=localStorage.getItem('nfltd_slip'); if(s) slip
 function saveSlip(){ try{ localStorage.setItem('nfltd_slip', JSON.stringify(slip)); }catch(e){} }
 function curGameId(){ return LAST ? LAST.away+'@'+LAST.home : null; }
 function fmtGame(g){ const [a,h]=String(g).split('@'); const sh=x=>S.teams[x]?(S.teams[x].short||x):x; return sh(a)+' @ '+sh(h); }
-// current game's priced legs for one market, sorted best-EV first (players + D/ST)
+// current game's priced legs for one market, best confidence-adjusted Kelly first (players + defenses)
 function priceableLegs(market){
   if(!LAST) return [];
-  const out=[]; const add=(bookKey,key,name,abbr,mp)=>{ if(mp==null) return; const o=LAST.bookMap[bookKey]; if(!o) return; const r=evalBet(mp,o); if(!r) return; out.push({key,name,abbr,mp,odds:o,ev:r.ev}); };
-  LAST.awayR.concat(LAST.homeR).forEach(p=>{ if(p._status==='OUT') return; add(market+'|'+p._key, p._key, p.name, p._abbr, p[market]); });
+  const out=[]; const add=(bookKey,key,name,abbr,mp,ref)=>{ if(mp==null) return; const o=LAST.bookMap[bookKey]; if(!o) return; const r=evalBet(mp,o); if(!r) return;
+    const conf=confFor(ref,market,r); out.push({key,name,abbr,mp,odds:o,ev:r.ev,ref,conf,rank:r.edge>0?conf.score*r.edge/(1-r.bimp):r.ev-1}); };
+  LAST.awayR.concat(LAST.homeR).forEach(p=>{ if(p._status==='OUT') return; add(market+'|'+p._key, p._key, p.name, p._abbr, p[market], p); });
   if(market!=='two'){ // defenses have no 2+ market
-    add(market+'|DST|'+LAST.away, 'DST|'+LAST.away, S.teams[LAST.away].short+' Defense', LAST.away, LAST.dst.dstAway[market]);
-    add(market+'|DST|'+LAST.home, 'DST|'+LAST.home, S.teams[LAST.home].short+' Defense', LAST.home, LAST.dst.dstHome[market]);
+    add(market+'|DST|'+LAST.away, 'DST|'+LAST.away, S.teams[LAST.away].short+' Defense', LAST.away, LAST.dst.dstAway[market], {dst:true});
+    add(market+'|DST|'+LAST.home, 'DST|'+LAST.home, S.teams[LAST.home].short+' Defense', LAST.home, LAST.dst.dstHome[market], {dst:true});
   }
-  return out.sort((a,b)=>b.ev-a.ev);
+  return out.sort((a,b)=>b.rank-a.rank);
 }
 function slipHas(game,key,market){ return slip.some(l=>l.game===game&&l.key===key&&l.market===market); }
-function addLeg(leg,market){ const game=curGameId(); if(!game||!leg) return false;
+// the game context a leg was priced in (shown on the slip — it already shaped the probability)
+function slipCtx(abbr){
+  if(!LAST) return '';
+  const mine=abbr===LAST.away?LAST.imp.away:LAST.imp.home, theirs=abbr===LAST.away?LAST.imp.home:LAST.imp.away, m=mine-theirs;
+  const wx=$('outdoor').checked ? `${+$('wind').value||0} mph${WX.kind?' '+WX.kind:''}` : 'indoor';
+  return `${Math.abs(m)<0.5?'pick\'em':m>0?'fav by '+m.toFixed(1):'dog by '+(-m).toFixed(1)} · O/U ${LAST.total} · ${wx}`;
+}
+// snapshot a leg with everything the optimizer needs, so the game never has to be reloaded
+function addLeg(leg,market){
+  const game=curGameId(); if(!game||!leg) return false;
   if(slipHas(game,leg.key,market)) return false;
-  slip.push({game,key:leg.key,name:leg.name,abbr:leg.abbr,market,mp:leg.mp,odds:leg.odds}); saveSlip(); renderSlip(); return true; }
+  const r=evalBet(leg.mp, leg.odds); if(!r) return false;
+  const g=(S.schedule||[]).find(x=>x.away===LAST.away&&x.home===LAST.home);
+  slip.push({game, key:leg.key, name:leg.name, abbr:leg.abbr, market, mp:+leg.mp.toFixed(4), odds:leg.odds,
+    conf:leg.conf||confFor(leg.ref,market,r), ctx:slipCtx(leg.abbr), kickoff:g?g.kickoff:null});
+  saveSlip(); renderSlip(); return true;
+}
 function refreshSlipAdder(){
   const msel=$('slipMarket'), psel=$('slipPlayer'); if(!msel||!psel) return;
   $('slipGameLbl').textContent = LAST ? fmtGame(curGameId()) : 'this game';
   const mkt=msel.value; slipLegCache=priceableLegs(mkt);
   psel.innerHTML = slipLegCache.length
-    ? slipLegCache.map((l,i)=>`<option value="${i}">${l.name} · ${l.odds} · EV ${(l.ev*100).toFixed(0)}%</option>`).join('')
+    ? slipLegCache.map((l,i)=>`<option value="${i}">${l.name} · ${l.odds} · EV ${(l.ev*100).toFixed(0)}% · conf ${Math.round(l.conf.score*100)}</option>`).join('')
     : `<option value="">— no priced ${MKT[mkt].label} legs in this game —</option>`;
+}
+
+// ---------- slip optimizer: which legs to keep, and how to bet them ----------
+// Legs from different games are independent, so a parlay's hit chance is the product and the book pays
+// the product of the odds. EV% always rises as you add +EV legs, but the chance of cashing collapses and
+// so does how fast a bankroll actually grows. So the parlay is chosen to maximise expected log-growth at
+// Kelly (the standard measure of bankroll growth per bet), using confidence-adjusted probabilities —
+// which naturally favours 2-3 strong, likely legs over a long lottery ticket.
+const kellyGrowth=(p,d)=>{ const f=(p*d-1)/(d-1); return !(f>0) ? 0 : p*Math.log(1+f*(d-1))+(1-p)*Math.log(1-f); };
+const kellyFrac=(p,d)=>Math.max(0,(p*d-1)/(d-1));
+function legView(l){
+  const dec=oddsDec(l.odds); if(!dec) return {l, bad:true, conf:l.conf||{score:0.6,label:'Medium',parts:[]}};
+  const conf=l.conf||{score:0.6,label:'Medium',parts:[['added before confidence scores existed',0.6]]};
+  const bimp=1/dec, pAdj=bimp+conf.score*(l.mp-bimp);
+  const started=!!(l.kickoff && Date.now()>new Date(l.kickoff).getTime());
+  return {l, conf, dec, bimp, pAdj, ev:l.mp*dec-1, evAdj:pAdj*dec-1, g:kellyGrowth(pAdj,dec), started};
+}
+function bestParlay(V){
+  const drop=[], elig=[];
+  for(const v of V){
+    if(v.bad) drop.push([v,'odds unreadable']);
+    else if(v.started) drop.push([v,'game already kicked off']);
+    else if(!(v.evAdj>0.005)) drop.push([v, v.ev>0 ? 'edge too small once confidence is applied' : 'no edge at this price']);
+    else elig.push(v);
+  }
+  // one leg per game: same-game legs are correlated, and the slip can't price that correlation
+  const byGame={}; elig.forEach(v=>(byGame[v.l.game]=byGame[v.l.game]||[]).push(v));
+  const kept=[];
+  for(const list of Object.values(byGame)){ list.sort((a,b)=>b.g-a.g); kept.push(list[0]);
+    list.slice(1).forEach(v=>drop.push([v,`same game as ${list[0].l.name} — one leg per game keeps the legs independent`])); }
+  kept.sort((a,b)=>b.g-a.g);
+  const pool=kept.slice(0,10); kept.slice(10).forEach(v=>drop.push([v,'outside the top 10 legs']));
+  const all=[];
+  (function rec(s,acc){
+    if(acc.length>=2){ const P=acc.reduce((a,v)=>a*v.pAdj,1), D=acc.reduce((a,v)=>a*v.dec,1), g=kellyGrowth(P,D); if(g>0) all.push({legs:acc.slice(),P,D,g}); }
+    if(acc.length===6) return;
+    for(let i=s;i<pool.length;i++){ acc.push(pool[i]); rec(i+1,acc); acc.pop(); }
+  })(0,[]);
+  all.sort((a,b)=>b.g-a.g);
+  const best=all[0]||null;
+  // a bigger-payout alternative that still keeps at least half the best parlay's growth
+  const bigger=best ? all.filter(x=>x.legs.length>best.legs.length && x.g>=0.5*best.g).sort((a,b)=>b.D-a.D)[0]||null : null;
+  if(best) pool.forEach(v=>{ if(!best.legs.includes(v)) drop.push([v, bigger&&bigger.legs.includes(v) ? 'only in the bigger-payout option below' : 'adding it lowers the parlay\'s growth — its edge doesn\'t pay for the extra risk']); });
+  return {best, bigger, pool, drop};
 }
 function renderSlip(){
   const body=$('slipBody'); if(!body) return;
-  if(!slip.length){ body.innerHTML=`<div class="muted">No legs yet. Price a game above, pick a leg (or hit <b>➕ Best EV</b>), then switch games and keep adding — the slip stays put across matchups. Pull the best 2+ TD from each 1 o'clock game into one parlay without going back.</div>`; return; }
-  let html='<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:9px">';
-  slip.forEach((l,i)=>{ html+=`<div style="display:flex;gap:8px;align-items:center;font-size:13px;flex-wrap:wrap">`+
+  if(!slip.length){ body.innerHTML=`<div class="muted">No legs yet. Price a game, then hit <b>➕ add these to slip</b> on Your card (or pick legs here). Do that for every game you like — the slip keeps the best leg per game and builds the parlay that grows your bankroll fastest.</div>`; return; }
+  const V=slip.map(legView), bank=getBankroll(), u=v=>(Math.round(v*10)/10).toFixed(1)+'u';
+  const legLine=v=>`<b style="color:${teamText(v.l.abbr)}">${esc(v.l.name)}</b> <span class="muted">${MKT[v.l.market].label}</span> <span class="odds">${v.l.odds}</span> ${confBadge(v.conf)}`;
+  let html='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">';
+  V.forEach((v,i)=>{ html+=`<div style="display:flex;gap:8px;align-items:center;font-size:13px;flex-wrap:wrap${v.started?';opacity:.5':''}">`+
     `<button class="statussel slipdel" data-i="${i}" style="padding:0 8px;color:var(--warn);font-weight:700" title="remove leg">✕</button>`+
-    `<span class="muted" style="min-width:96px">${fmtGame(l.game)}</span>`+
-    `<b style="color:${teamText(l.abbr)}">${l.name}</b> <span class="muted">${MKT[l.market].label}</span> <span class="odds">${l.odds}</span>`+
-    `<span class="muted">· model ${pct(l.mp)}</span></div>`; });
+    `<span class="muted" style="min-width:100px">${fmtGame(v.l.game)}</span>${legLine(v)}`+
+    (v.bad?'':`<span class="muted" style="font-size:12px">model ${pct(v.l.mp)} · EV ${v.ev>=0?'+':''}${(v.ev*100).toFixed(1)}% → <b class="${v.evAdj>0?'ev-pos':'ev-neg'}">${v.evAdj>=0?'+':''}${(v.evAdj*100).toFixed(1)}%</b> after confidence${v.l.ctx?' · '+v.l.ctx:''}${v.started?' · <b>started</b>':''}</span>`)+`</div>`; });
   html+='</div>';
-  // independent joint across games
-  const gc={}; slip.forEach(l=>gc[l.game]=(gc[l.game]||0)+1); const dupes=Object.entries(gc).filter(([,n])=>n>1);
-  const jp=slip.reduce((a,l)=>a*l.mp,1);
-  const dec=slip.reduce((a,l)=>{ const d=oddsDec(l.odds); return a*(d||1); },1);
-  const evFull=slip.reduce((a,l)=>{ const d=oddsDec(l.odds); return a*(l.mp*(d||1)); },1)-1;
-  let badge,cls,evcls,note='';
-  if(dupes.length){ badge='⚠ same-game legs'; cls='vb-flag'; evcls='ev-dart';
-    note=` <span style="color:var(--warn)">— ${dupes.map(([g,n])=>`${n} legs in ${fmtGame(g)}`).join(', ')} are in the SAME game, so they're correlated — this cross-game EV assumes independence and is wrong for them. Price same-game stacks in the Parlay picker above instead.</span>`; }
-  else if(evFull>0.50){ badge='⚠ verify legs'; cls='vb-flag'; evcls='ev-dart';
-    note=` <span style="color:var(--warn)">— cross-game books DO pay full odds, so this is real if the model's right; but a huge EV means per-leg error is compounding. Verify each leg (injury / role) before trusting it.</span>`; }
-  else if(evFull>0.03){ badge='TAKE'; cls='vb-take'; evcls='ev-pos'; }
-  else { badge='PASS'; cls='vb-pass'; evcls='ev-neg'; }
-  html+=`<div style="border-top:1px solid var(--line);padding-top:8px;font-size:13px">`+
-    `<b>${slip.length}-leg cross-game parlay</b> · hits <b>${pct(jp)}</b> · fair <span class="odds">${probToAmerican(jp)}</span> · pays <span class="odds">${amStr(decToAmerican(dec))}</span> at full odds`+
-    ` · real EV <b class="${evcls}">${evFull>=0?'+':''}${(evFull*100).toFixed(1)}%</b> <span class="vbadge ${cls}" style="padding:1px 8px">${badge}</span>${note}</div>`+
-    `<div class="muted" style="margin-top:7px;font-size:12px;line-height:1.5">Different-game legs don't influence each other, so the book pays the full multiplied price and this EV is the honest number (unlike a same-game parlay). It's still per-leg model edges multiplied, so a big EV can be compounded overrating — treat as leads, size small.</div>`;
+
+  const {best, bigger, pool, drop}=bestParlay(V);
+  const pBlock=(r,title)=>{ const stake=0.25*kellyFrac(r.P,r.D)*bank, evModel=r.legs.reduce((a,v)=>a*v.l.mp*v.dec,1)-1;
+    return `<div style="margin-top:8px;padding:10px 12px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px">`+
+      `<div style="font-weight:800;margin-bottom:5px">${title}</div>`+
+      r.legs.map(v=>`<div style="font-size:13px;margin:2px 0"><span class="muted" style="display:inline-block;min-width:100px">${fmtGame(v.l.game)}</span>${legLine(v)}</div>`).join('')+
+      `<div style="margin-top:6px;font-size:13px">hits <b>${pct(r.P)}</b> · fair <span class="odds">${probToAmerican(r.P)}</span> · pays <span class="odds">${amStr(decToAmerican(r.D))}</span> · EV <b class="ev-pos">+${((r.P*r.D-1)*100).toFixed(1)}%</b> <span class="muted">(model alone says +${(evModel*100).toFixed(1)}%)</span> · <span class="vbadge vb-take" style="font-size:12px">bet ${u(stake)}</span> <span class="muted" style="font-size:12px">¼ Kelly</span></div></div>`; };
+  if(best){
+    html+=pBlock(best, `🧠 Best parlay from your slip — ${best.legs.length} legs`);
+    if(bigger) html+=pBlock(bigger, `💰 Bigger payout option — ${bigger.legs.length} legs (grows a bankroll ${(best.g/bigger.g).toFixed(1)}× slower, bet it smaller)`);
+    const sG=pool.reduce((a,v)=>a+v.g,0);
+    html+=`<div style="margin-top:9px;font-size:13px;line-height:1.55"><b>Honest math:</b> betting these ${pool.length} legs as <b>singles</b> grows a bankroll about <b>${(sG/best.g).toFixed(1)}× faster</b> than the parlay — `+
+      pool.map(v=>`${esc(v.l.name)} ${u(0.25*kellyFrac(v.pAdj,v.dec)*bank)}`).join(' · ')+
+      `. A parlay trades growth for a bigger payout, so keep it small next to the singles.</div>`;
+  } else if(pool.length===1){
+    const v=pool[0]; html+=`<div style="margin-top:8px;font-size:13px"><b>Only one leg has an edge after confidence</b> (${legLine(v)}) — bet it as a single: <span class="vbadge vb-take" style="font-size:12px">bet ${u(0.25*kellyFrac(v.pAdj,v.dec)*bank)}</span> — a parlay needs two +EV legs from different games.</div>`;
+  } else {
+    html+=`<div style="margin-top:8px;font-size:13px"><b>No parlay worth building yet</b> — it needs at least two legs from different games that still have an edge after confidence.</div>`;
+  }
+  if(drop.length){ const seen=new Set();
+    html+=`<div class="muted" style="margin-top:8px;font-size:12px;line-height:1.55"><b>Left out:</b> `+
+      drop.filter(([v])=>{ const k=v.l.game+v.l.key+v.l.market; if(seen.has(k)) return false; seen.add(k); return true; })
+        .map(([v,why])=>`${esc(v.l.name)} ${MKT[v.l.market].label} — ${why}`).join(' · ')+`</div>`; }
+  html+=`<div class="muted" style="margin-top:9px;font-size:12px;line-height:1.5">How it chooses: each leg's edge is scaled by its <b>confidence</b> (role reliability from the backtest, history, injury status, market type, and how far it sits from the book — total, spread and weather already shaped the probability, so they aren't counted twice). Then it keeps the best leg per game and picks the combination that <b>grows a bankroll fastest</b> — not the highest EV%, which always favours piling on legs that almost never all hit.</div>`;
   body.innerHTML=html;
 }
 
@@ -1477,7 +1592,7 @@ document.querySelectorAll('.mktbtn').forEach(b=>{
 });
 
 try{ $('bankroll').value=localStorage.getItem('nfltd_bankroll')||100; }catch(e){ $('bankroll').value=100; }
-$('bankroll').addEventListener('input',()=>{ try{ localStorage.setItem('nfltd_bankroll',$('bankroll').value); }catch(e){} if(LAST) computeTopPlays(); });
+$('bankroll').addEventListener('input',()=>{ try{ localStorage.setItem('nfltd_bankroll',$('bankroll').value); }catch(e){} if(LAST) computeTopPlays(); renderSlip(); });
 $('simBtn').onclick=run;
 [['total','change'],['spread','change'],['favSel','change'],['outdoor','change'],['wind','change']].forEach(([id,ev])=> $(id).addEventListener(ev,maybeSim));
 loadSlip(); renderSlip();       // restore the cross-game slip from a previous visit

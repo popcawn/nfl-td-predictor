@@ -46,6 +46,13 @@ silently to the baked snapshot when not.
   One price per name (`Josh Allen +150`) fills the selected market — use that for the separate 2+ TD board.
   Names are fuzzy-matched (abbreviations, suffixes, `Bills D/ST`); unicode minus, fractional, decimal and
   `EVEN` prices are understood; anything unmatched is listed back. Switching games clears the board.
+- **Confidence + slip optimizer** — every pick gets a **confidence score** (how much of the model's edge to believe: role
+  reliability from the backtest, history, injury status, market type, distance from the book; total/spread/weather already
+  shape the probability so they aren't counted twice). The edge is scaled by it (adjusted EV = confidence × EV). Hit
+  **➕ add these to slip** on each game's card; the slip keeps the best leg per game, drops started games, and picks the
+  parlay that **grows a bankroll fastest** (Kelly growth), not the highest EV% — plus a bigger-payout option and an honest
+  comparison with betting the same legs as singles (usually 2–3× faster growth). Confidence weights are a reasoned
+  heuristic, not fitted (no historical prices exist to fit them); the bet log's CLV is how they get checked.
 - **Parlays** — the same-game picker ranks combos by a conservative EV (the worse of independent and
   simulated-correlation EV); enter your book's actual SGP price for the real number. The **cross-game slip**
   collects legs across games (independent legs, so books pay full odds and the EV is real) and persists.
