@@ -42,6 +42,9 @@ See README.md for what the model does and how it was validated.
 - `legConfidence()` scores each pick 0–1; adjusted prob = book + conf × (model − book), so adjusted EV = conf × EV.
   Card stakes and the slip both use it. Its weights are reasoned, NOT fitted — there are no historical prices to fit
   them. Don't present them as validated; revisit once the bet log has enough settled bets.
+- 2+ TD market (checked 2026-09-28 via BT_EXPERIMENTS): calibrated overall, but predictions ~24% landed ~18-19%.
+  A top-end correction held in the touched set (x0.83-0.86 both halves) but flipped in the roster set, so the
+  PROBABILITY is unchanged; confidence applies x0.8 to 2+ picks >=15% instead. Re-test with more seasons.
 - The slip optimizer maximises Kelly log-growth over subsets (one leg per game, ≤6 legs, top 10 legs), never EV%.
   Don't count total/spread/weather in confidence — they already drive the probability.
 

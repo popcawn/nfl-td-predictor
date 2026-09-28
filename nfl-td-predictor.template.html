@@ -285,6 +285,16 @@
           <button class="statussel" id="betClear" style="padding:6px 10px;font-size:12px">Clear log</button>
         </span>
       </div>
+      <details id="closeBox" style="margin:2px 0 10px">
+        <summary style="cursor:pointer;font-size:13px;font-weight:700">📋 Paste closing lines <span class="muted" style="font-weight:400">— right before kickoff, copy the board again and paste it here; it fills <b>Close</b> on your bets so CLV works</span></summary>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap">
+          <select id="closeMarket" class="statussel"><option value="anytime">one price per name = Anytime</option><option value="two">one price per name = 2+ TD</option><option value="first">one price per name = 1st TD</option><option value="last">one price per name = Last TD</option></select>
+          <button class="btn" id="closeApply" style="padding:6px 14px;font-size:13px">Fill closes</button>
+          <span id="closeMsg" class="muted" style="font-size:12px"></span>
+        </div>
+        <textarea id="closePaste" rows="3" spellcheck="false" placeholder="Same format as the odds paste — stacked Anytime / 1st / Last blocks, or one price per name for the market chosen above."
+          style="width:100%;margin-top:7px;background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:10px;padding:9px;font-family:var(--mono);font-size:13px;resize:vertical"></textarea>
+      </details>
       <div id="betBody" class="legend"></div>
     </div>
 
@@ -358,7 +368,7 @@ function roleLabel(p){ const r=roleOf(p), sn=p.snapPct!=null?` (${Math.round(p.s
 // role, from the backtest), how much history it has, availability, whether the market was ever
 // validated, and how far it sits from the book (huge gaps are usually missed news). The edge is then
 // scaled by it: adjusted prob = book implied + conf x (model - book), so adjusted EV = conf x EV.
-function legConfidence(o){   // o: {dst, role, pos, games, status, matched, market, edge, bimp, badWx}
+function legConfidence(o){   // o: {dst, role, pos, games, status, matched, market, edge, bimp, mp, badWx}
   const parts=[], f=(v,label)=>{ if(v<1) parts.push([label,v]); return v; };
   let s=1;
   if(o.dst) s*=f(0.7,'defensive TDs are rare — the defense model has modest skill');
@@ -370,7 +380,10 @@ function legConfidence(o){   // o: {dst, role, pos, games, status, matched, mark
     const g=o.games||0; s*=f(clamp(0.6+0.4*g/10,0.6,1), `thin history (${g.toFixed(1)} weighted games)`);
   }
   if(o.status==='Q') s*=f(0.75,'questionable'); else if(o.status==='DBT') s*=f(0.45,'doubtful');
-  if(o.market!=='anytime') s*=f(0.8, `${MKT[o.market].label} market was never backtested`);
+  if(o.market!=='anytime') s*=f(0.8, `${MKT[o.market].label} market isn't validated like anytime`);
+  // 2+ TD: the backtest found its highest predictions (~24%) landed ~18-19% — consistent when the player is
+  // known active, mixed otherwise — so it's a caution here rather than a change to the probability
+  if(o.market==='two' && o.mp>=0.15) s*=f(0.8, 'big 2+ TD numbers ran hot in the backtest (predicted ~24%, happened ~18-19%)');
   if(o.bimp<0.06) s*=f(0.65,'lottery odds'); else if(o.bimp<0.12) s*=f(0.85,'long odds');
   const e=o.edge;
   if(e>0.20) s*=f(0.55,'edge far bigger than the market — usually missed news'); else if(e>0.12) s*=f(0.75,'big gap vs the market — check injury/role news'); else if(e>0.06) s*=f(0.9,'sizable gap vs the market');
@@ -379,9 +392,9 @@ function legConfidence(o){   // o: {dst, role, pos, games, status, matched, mark
   return { score:+s.toFixed(2), label:s>=0.7?'High':s>=0.45?'Medium':'Low', parts };
 }
 function confFor(ref, market, r){   // ref = roster player, or {dst:true} for a defense
-  if(!ref || ref.dst) return legConfidence({dst:true, market, edge:r.edge, bimp:r.bimp});
+  if(!ref || ref.dst) return legConfidence({dst:true, market, edge:r.edge, bimp:r.bimp, mp:r.bimp+r.edge});
   const badWx=$('outdoor').checked && ((+$('wind').value||0)>=15 || (WX.pp>=50 && WX.precip!=='none'));
-  return legConfidence({role:ref.pos==='QB'?'qb':roleOf(ref), pos:ref.pos, games:ref.games, status:ref._status, matched:ref.matched, market, edge:r.edge, bimp:r.bimp, badWx});
+  return legConfidence({role:ref.pos==='QB'?'qb':roleOf(ref), pos:ref.pos, games:ref.games, status:ref._status, matched:ref.matched, market, edge:r.edge, bimp:r.bimp, mp:r.bimp+r.edge, badWx});
 }
 function confBadge(c){
   const cls=c.label==='High'?'conf-hi':c.label==='Medium'?'conf-md':'conf-lo';
@@ -1297,6 +1310,26 @@ function addBet(){
   saveBets(); $('betOdds').value=''; $('betCustom').value=''; renderBets(); betFlash('logged ✓');
 }
 function mktLabel(m){ return (MKT[m]&&MKT[m].label)||'Custom'; }
+// Fill Close from a pasted board: matches your OPEN bets (pending, or logged in the last 2 days without a
+// close) by player + market, so last week's settled bets for the same player are never overwritten.
+function applyClosingPaste(){
+  const parsed=parseOddsBlock($('closePaste').value||''); const msg=$('closeMsg');
+  if(!parsed.length){ msg.textContent='nothing to read — paste a name then a price'; return; }
+  const open=bets.filter(b=>b.market!=='custom' && (b.result==='pending' || (!b.closeOdds && Date.now()-new Date(b.ts).getTime()<2*86400e3)));
+  const fmt=v=>(v>0?'+':'')+v, sel=$('closeMarket').value, filled=new Set();
+  const lastTok=s=>{ const t=String(s).trim().split(/\s+/).filter(Boolean); let i=t.length-1; if(i>0&&/^(jr|sr|ii|iii|iv|v)\.?$/i.test(t[i])) i--; return normName(t[i]||''); };
+  for(const {name,prices,raw} of parsed){ if(!prices.length) continue;
+    const mk=prices.length>=3?['anytime','first','last']:prices.length===2?['anytime','first']:[sel];
+    let hits;
+    if(/d.?st|def/i.test(raw)){ const nn=normName(raw); hits=open.filter(b=>String(b.key).startsWith('DST|') && (()=>{ const t=S.teams[b.key.slice(4)]; return t && (nn.includes(normName(t.short))||nn.includes(normName(t.name))); })()); }
+    else { const n=normName(name); hits=open.filter(b=>normName(b.player)===n);
+      if(!hits.length){ const byLast=open.filter(b=>!String(b.key).startsWith('DST|') && lastTok(b.player)===lastTok(name)); if(new Set(byLast.map(b=>normName(b.player))).size===1) hits=byLast; } }
+    mk.forEach((m,i)=>{ if(prices[i]==null) return; hits.filter(b=>b.market===m).forEach(b=>{ b.closeOdds=fmt(prices[i]); filled.add(b.id); }); });
+  }
+  saveBets(); renderBets();
+  const missing=open.filter(b=>!b.closeOdds);
+  msg.innerHTML=`filled <b>${filled.size}</b> closing line${filled.size===1?'':'s'}`+(missing.length?` · still missing a close: ${missing.slice(0,6).map(b=>esc(b.player)+' '+mktLabel(b.market)).join(', ')}${missing.length>6?'…':''}`:open.length?' · every open bet has a close ✓':'');
+}
 // Browser storage lives on ONE machine (and one address — the local file and the GitHub Pages copy are
 // separate even on the same PC). Export/import moves the log, slip and bankroll between them.
 function exportData(){
@@ -1347,7 +1380,19 @@ function renderBets(){
     `<span>net <b class="${g(net)}">${sgn(net.toFixed(2))}u</b></span>`+
     `<span>ROI <b class="${g(roi)}">${roi==null?'—':sgn((roi*100).toFixed(1))+'%'}</b></span>`+
     `<span>avg CLV <b class="${g(avgClv)}">${avgClv==null?'—':sgn((avgClv*100).toFixed(1))+'%'}</b>${clvN?` <span class="muted">(${Math.round(clvPos/clvN*100)}% beat close)</span>`:''}</span>`+
-    (cal.length?`<span title="Settled bets the sim priced: the sum of its probabilities is how many hits it expected. Much fewer actual hits = the model runs hot on the bets you pick.">model expected <b>${calExp.toFixed(1)}</b> hits, got <b>${calHit}</b> <span class="muted">of ${cal.length}</span></span>`:'')+`</div>`;
+    `</div>`;
+  // scoreboard: the book's prices need a certain number of hits to break even; the model claims more.
+  // Results only become meaningful once the gap is bigger than luck — this says how far along you are.
+  if(cal.length){
+    const decs=cal.map(b=>oddsDec(b.odds)||2), be=decs.reduce((a,d)=>a+1/d,0);
+    const sd=Math.sqrt(cal.reduce((a,b)=>a+b.modelProb*(1-b.modelProb),0));
+    const lo=Math.max(0,Math.round(calExp-1.28*sd)), hi=Math.round(calExp+1.28*sd);
+    const gap=(calExp-be)/cal.length, need=gap>0?Math.round((2*sd/Math.sqrt(cal.length)/gap)**2):null;
+    const verdict = calHit<lo ? '<b style="color:var(--bad)">below the normal range — worth a look</b>' : calHit>hi ? '<b class="ev-pos">above the normal range</b>' : 'inside the normal range for these bets';
+    html+=`<div style="margin:-2px 0 10px;padding:9px 11px;border:1px dashed var(--line2);border-radius:10px;font-size:13px;line-height:1.55">`+
+      `<b>Scoreboard</b> <span class="muted">(${cal.length} settled bets the sim priced)</span> — your prices needed <b>${be.toFixed(1)}</b> hits to break even · the model expected <b>${calExp.toFixed(1)}</b> · you got <b>${calHit}</b>, ${verdict} (${lo}–${hi}).`+
+      (need?` <span class="muted">At this edge it takes about <b>${need}</b> settled bets before results alone can tell skill from luck (${Math.min(100,Math.round(cal.length/need*100))}% of the way) — ${clvN?'CLV below gets there much sooner.':'fill the <b>Close</b> column (paste the closing board above) — CLV tells you far sooner.'}</span>`:' <span class="muted">The model isn\'t claiming an edge on these prices.</span>')+`</div>`;
+  }
   html+='<div style="overflow-x:auto"><table style="margin-top:0"><thead><tr>'+
     ['Bet','Odds','Model','Close','CLV','Stake','Result','P/L',''].map((h,i)=>`<th class="${i===0?'l':''}" style="cursor:default;position:static">${h}</th>`).join('')+'</tr></thead><tbody>';
   drows.forEach(({b,dec,clv,pl})=>{
@@ -1567,6 +1612,7 @@ $('betMarket').onchange=syncBetFormFields;
 $('betPlayer').onchange=syncBetFormFields;
 $('betAdd').onclick=addBet;
 $('betExport').onclick=exportData;
+$('closeApply').onclick=applyClosingPaste;
 $('betImport').onclick=()=>$('betImportFile').click();
 $('betImportFile').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f) importData(f); e.target.value=''; };
 $('betClear').onclick=()=>{ if(bets.length && confirm('Clear all '+bets.length+' logged bets? This can\'t be undone.')){ bets=[]; saveBets(); renderBets(); } };

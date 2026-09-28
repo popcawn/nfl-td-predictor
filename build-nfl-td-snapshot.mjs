@@ -457,7 +457,7 @@ async function parseSeason(season) {
         g = { home, away, week: wk, total: num(f[idx.total_line]), spread: num(f[idx.spread_line]),
               outdoor: roof === 'outdoors' || roof === 'open', wind: num(f[idx.wind]),
               precip: /snow/.test(wx) ? 'snow' : /rain|shower|drizzle|storm/.test(wx) ? 'rain' : 'none',
-              side: { home: new Map(), away: new Map() }, scored: new Set(), dst: { home: 0, away: 0 } };
+              side: { home: new Map(), away: new Map() }, scored: new Set(), tdn: new Map(), dst: { home: 0, away: 0 } };
         btGames.set(gid, g);
       }
       if (retTD && (playType === 'pass' || playType === 'run' || playType === 'qb_kneel' || playType === 'qb_spike')) { const tt = f[idx.td_team]; if (tt === home) g.dst.home++; else if (tt === away) g.dst.away++; if (tt) twRec(tt, wk).dst++; }
@@ -478,7 +478,7 @@ async function parseSeason(season) {
       if (rId && isRush) { const r = pwRec(rId, wk); r.g = 1; r.rushAtt++; if (kneel) r.kneel++; if (yl > 0 && yl <= 5) r.glCarry++; if (rushTD && f[idx.td_player_id] === rId) r.rushTD++; }
       if (cId && isPass) { const r = pwRec(cId, wk); r.g = 1; r.tgt++; r.airY += Math.max(0, num(f[idx.air_yards])); if (yl > 0 && yl <= 20) r.rzTgt++; if (passTD && f[idx.td_player_id] === cId) r.recTD++; }
       const tdp = f[idx.td_player_id];
-      if (tdp && (rushTD || passTD)) g.scored.add(tdp);
+      if (tdp && (rushTD || passTD)) { g.scored.add(tdp); g.tdn.set(tdp, (g.tdn.get(tdp) || 0) + 1); }   // counts -> 2+ TD check
     }
   }
   return true;
@@ -738,7 +738,7 @@ async function parseSeason(season) {
             const y = g.scored.has(x.pid) ? 1 : 0;
             acc.n++; acc.pos += y; acc.sumP += p; acc.brier += (p - y) ** 2; acc.ll += -(y * Math.log(p) + (1 - y) * Math.log(1 - p));
             const b = bins[Math.min(9, Math.floor(p * 10))]; b.n++; b.y += y; b.p += p;
-            rows.push({ g: gid, pid: x.pid, p, y, bk: x.bk, se: x.se, wk });
+            rows.push({ g: gid, pid: x.pid, p, y, bk: x.bk, se: x.se, wk, exp, n: g.tdn.get(x.pid) || 0 });
           }
           let st = seen.get(team); if (!st) { st = new Set(); seen.set(team, st); }
           for (const pid of touched.keys()) st.add(pid);   // visible to LATER weeks only (used after this week's games)
@@ -804,6 +804,34 @@ async function parseSeason(season) {
     }
     log(`  calibration by role, touched set:\n${calTier(runBacktest(cur).rows)}`);
     log(`  calibration by role, roster set (players who may not play):\n${calTier(runBacktest({ ...cur, cand: 'roster' }).rows)}`);
+    // ---- 2+ TD market check. The sim's per-player TD count is NB(mean exp, size NB_SIZE) (thinning keeps the
+    // size), so P(2+) = 1 - P(0) - P(1). Grade it against real multi-TD games for several dispersion sizes.
+    {
+      const pAny = (m, r) => !isFinite(r) ? 1 - Math.exp(-m) : 1 - Math.pow(1 + m / r, -r);
+      const pTwo = (m, r) => { if (!isFinite(r)) return 1 - Math.exp(-m) * (1 + m); const p0 = Math.pow(r / (r + m), r); return 1 - p0 - r * (m / (r + m)) * p0; };
+      for (const cand of ['touched', 'roster']) {
+        const rows = runBacktest({ ...cur, cand }).rows, N = rows.length;
+        const rf = roleFactors(rows), fac = x => { const t = roleTier(x); return t === 'rot' ? Math.min(1, rf.rot) : t === 'qb' ? Math.min(1, rf.qb) : 1; };
+        log(`  2+ TD check [${cand}] N=${N}, actual 2+ rate ${(rows.filter(x => x.n >= 2).length / N * 100).toFixed(2)}%:`);
+        for (const r of [2, 3, 4, 6, 10, 20, Infinity]) {
+          let b1 = 0, b2 = 0, b2c = 0, s2 = 0;
+          const bins = [[0, .05], [.05, .10], [.10, .15], [.15, .20], [.20, 1]].map(([lo, hi]) => ({ lo, hi, n: 0, p: 0, y: 0 }));
+          for (const x of rows) { const a = pAny(x.exp, r), t = pTwo(x.exp, r), y2 = x.n >= 2 ? 1 : 0, f = fac(x);
+            b1 += (a - x.y) ** 2; b2 += (t - y2) ** 2; b2c += (t * f * f - y2) ** 2; s2 += t;
+            const bb = bins.find(z => t >= z.lo && t < z.hi); if (bb) { bb.n++; bb.p += t; bb.y += y2; } }
+          log(`    size ${String(r).padEnd(8)} anytime ${(b1 / N).toFixed(5)}  2+ ${(b2 / N).toFixed(5)} (role-cal ${(b2c / N).toFixed(5)})  mean 2+ ${(s2 / N * 100).toFixed(2)}%  ` +
+            bins.filter(z => z.n >= 30).map(z => `${(z.p / z.n * 100).toFixed(1)}->${(z.y / z.n * 100).toFixed(1)}%(${z.n})`).join(' '));
+        }
+        // cross-fit a top-end correction: learn actual/predicted for 2+ predictions >= CUT on one half, apply to the other
+        for (const CUT of [0.10, 0.15]) {
+          const half = h => rows.filter(x => h === 1 ? x.wk <= 9 : x.wk >= 10), two = x => pTwo(x.exp, NB_SIZE);
+          const fit = rs => { const t = rs.filter(x => two(x) >= CUT); const pp = t.reduce((a, x) => a + two(x), 0), yy = t.filter(x => x.n >= 2).length; return pp ? Math.max(0.5, Math.min(1.2, yy / pp)) : 1; };
+          const br = (rs, f) => rs.reduce((a, x) => { const t = two(x), q = t >= CUT ? t * f : t; return a + (q - (x.n >= 2 ? 1 : 0)) ** 2; }, 0) / rs.length;
+          const a = half(1), b = half(2), fa = fit(a), fb = fit(b);
+          log(`    top-end fix (2+ >= ${CUT * 100}%): H2 ${br(b, 1).toFixed(5)} -> ${br(b, fa).toFixed(5)} with x${fa.toFixed(2)} from H1 | H1 ${br(a, 1).toFixed(5)} -> ${br(a, fb).toFixed(5)} with x${fb.toFixed(2)} from H2`);
+        }
+      }
+    }
     for (const q of [0.5, 0.7]) log(`  by position, qbCarry ${q}: ${byPosCal(runBacktest({ ...cur, qbCarry: q }).rows)}`);
     log(`  by position, QB not snap-exempt: ${byPosCal(runBacktest({ ...cur, qbSnapExempt: false }).rows)}\n`);
   }
