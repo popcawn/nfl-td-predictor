@@ -32,6 +32,17 @@ See README.md for what the model does and how it was validated.
 - Defense props = **defensive TDs only** (books don't count special teams); kick/punt return TDs are credited to
   returners. Role calibration (rotational ×~0.87, QB ×~0.85) is cross-fitted — don't extend it without re-testing.
 
+## Player props (PROP_MODEL in the build; propMu/propSides in the template)
+- Stats: rec, recyd, ryd, rryd, pyd. Pass TDs (ptd) stay in the backtest but `offered:false` — edge vs a season
+  average was a hair and the top bucket was miscalibrated (87%->76%).
+- Per-stat K (shrink pseudo-games) came from a sweep with the population PINNED (`popK`) — the first sweep let K change
+  who got scored. rec/recyd K=1, rryd 2, ryd 3, pyd 8. recyd's snap factor is borderline (loses H1 by 0.0003).
+- Passing props = the starter only (played >= 50% of snaps), history = his starts only (`qbStartHist`), floor 0.
+- `propPOver()` exists in BOTH files (build + template); keep them identical. Tables are 201-quantile compressed
+  actual/projection ratios in 4 projection-size buckets, fit on the test season — what ships is what was scored.
+- Live inputs per rostered player: `pp = {g, cg, sf, w:{stat: weighted per-game}, avg}`; the app applies snap + context.
+- Prop confidence/tier (`propConfidence`, `propTier`) are reasoned, not fitted — same caveat as legConfidence.
+
 ## The user
 - Bets FanDuel props, pastes boards in FanDuel's stacked format, builds cross-game parlays.
 - Wants a clear answer to "what do I bet": the **Your card** panel (Kelly-ranked, ¼-Kelly, team caps) is the

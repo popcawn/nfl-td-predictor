@@ -3,7 +3,8 @@
 A standalone, single-file web app that predicts **anytime-touchdown scorers** for any NFL matchup.
 Pick a game and it runs a 10,000-game Monte Carlo simulation to produce each player's **anytime-TD %**,
 **1st-TD / Last-TD / 2+-TD** probabilities and **fair American odds**, plus an **EV calculator** with a
-TAKE / PASS verdict, a same-game **parlay picker**, a **cross-game parlay slip** and a **bet log with CLV**.
+TAKE / PASS verdict, a same-game **parlay picker**, a **cross-game parlay slip** and a **bet log with CLV** —
+plus **player props** (receptions, receiving / rushing / rush+rec / passing yards) priced against your book's over/unders.
 
 `nfl-td-predictor.html` is fully self-contained (data + logos embedded as base64) and runs **offline** —
 just double-click it. Live extras (today's line, injuries, forecast) load when online and fall back
@@ -56,6 +57,11 @@ silently to the baked snapshot when not.
 - **Parlays** — the same-game picker ranks combos by a conservative EV (the worse of independent and
   simulated-correlation EV); enter your book's actual SGP price for the real number. The **cross-game slip**
   collects legs across games (independent legs, so books pay full odds and the EV is real) and persists.
+- **Player props** — paste the book's over/unders (FanDuel stacked `Name / O 64.5 / -114 / U 64.5 / -114`,
+  one-line `O 64.5 -114 U 64.5 -114`, or ladder rungs `60+ +120`); headers like "Receiving Yards" route each block to
+  its prop, so a whole props page can go in at once (TD / attempts / longest markets are skipped). Each row shows the
+  **model line** (its 50/50 number), season average, P(over), fair odds, the better side's EV and a confidence score;
+  priced props join **Your card**, the slip and the log. Passing props only list tonight's starting QB.
 - **Bet log & CLV** — log any bet (the sim's TD props or your own props), enter the closing line and result;
   it tracks CLV, ROI and a live calibration check (hits the model expected vs hits you got). Re-running the
   sim with the same inputs gives the same numbers (seeded simulation), so a verdict can't flip on noise.
@@ -134,6 +140,29 @@ because they made predictions worse:** a spread-driven game-script adjustment, a
 and the defense-vs-position matchup nudge (the weak-spot table is still shown as context). An earlier version
 of this backtest also gave every player who touched the ball in *that* game a small bonus — information the
 app never has — which flattered its number; that leak is gone and the honest model still scores better.
+
+### Player props
+Projection = recency-weighted per-game average (this season, last season at 0.3×) shrunk toward a position prior,
+× recent snap share vs his norm (receptions, receiving yds), × tonight's implied team total vs his offense's norm
+(receiving, rush+rec, passing yds). Over/under chances come from the **empirical spread of real outcomes around
+projections of that size** (learned out-of-sample), not an assumed bell curve. Tested on every 2025 game using only
+earlier data (population = players who actually played; passing = the starter), with outcome tables cross-fitted
+between halves:
+
+| Prop | Brier wk 1–9 / 10–18 | Plain season average | Predicted → actual over rate |
+|---|---|---|---|
+| Receptions | 0.158 / 0.156 | 0.170 / 0.164 | 29→29% · 50→50% · 70→71% |
+| Receiving yds | 0.185 / 0.177 | 0.197 / 0.186 | 29→29% · 50→50% · 70→71% |
+| Rushing yds | 0.173 / 0.178 | 0.189 / 0.185 | 29→29% · 49→49% · 70→71% |
+| Rush + rec yds | 0.188 / 0.184 | 0.202 / 0.193 | 30→30% · 50→51% · 69→68% |
+| Passing yds | 0.218 / 0.205 | 0.229 / 0.234 | 13→19% · 50→53% · 70→66% (tails a bit hot) |
+
+Every choice (snap vs plain average, the Vegas context, how hard to shrink) was kept only if it won both halves.
+Passing yards want heavy shrinkage (single-game passing is noisy next to real QB differences) and use only games
+the QB started. **Pass TDs are not offered**: they beat a season average by a hair and their top bucket ran 87%→76%.
+This proves the projections are accurate and calibrated — **not** that they beat the book's line (no historical prop
+prices to test against). Prop books mostly move the line, not the price, so the log estimates CLV for a moved line
+from the model's own distribution (marked ≈).
 
 ### Market-universe check (lines, not prices)
 `node build-market-lines.mjs` scrapes ESPN BET's historical "Anytime Touchdown Scorer" boards (2025, wk 1–13).

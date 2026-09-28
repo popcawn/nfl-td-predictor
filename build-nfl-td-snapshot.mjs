@@ -89,6 +89,26 @@ const MODEL = {
   snap: 'hybrid',     // snap-share role weight: min(1,max(0.2,snap/35%)); no snaps yet = unknown in the
                       //   first 2 weeks, then ~0 (likely scratch). The old 0-at-5% curve hurt accuracy.
 };
+// Player props (over/under on a stat line). Projection = recency-weighted per-game average (this season 1,
+// last season wPrior), shrunk K pseudo-games toward a position prior; 'snap' scales it by recent snap share
+// vs the player's average; ctx multiplies exp(a*(implied pts - team norm) + b*margin) with a/b fit on the
+// train season. Over/under probability = the empirical actual/projection ratio distribution (by projection
+// size), learned out-of-sample. Each method/ctx switch was kept only if it beat the alternative on BOTH halves
+// of the test season. Pass TDs lost to a plain season average in the second half, so they are not offered.
+const PROP_MODEL = {
+  popK: 3, wPrior: 0.3, snapClamp: [0.4, 2.0], buckets: 4, quantiles: 201,
+  stats: {
+    rec:   { K: 1, label: 'Receptions',         method: 'snap',     ctx: false, pos: ['WR', 'TE', 'RB'], floor: 2,   grid: [1.5, 2.5, 3.5, 4.5, 5.5, 6.5] },
+    recyd: { K: 1, label: 'Receiving yds',      method: 'snap',     ctx: true,  pos: ['WR', 'TE', 'RB'], floor: 25,  grid: [19.5, 29.5, 39.5, 49.5, 59.5, 69.5, 79.5] },
+    ryd:   { K: 3, label: 'Rushing yds',        method: 'weighted', ctx: false, pos: ['RB', 'QB'],       floor: 25,  grid: [19.5, 29.5, 39.5, 49.5, 59.5, 69.5, 79.5] },
+    rryd:  { K: 2, label: 'Rush + rec yds',     method: 'weighted', ctx: true,  pos: ['RB', 'WR', 'TE'], floor: 35,  grid: [29.5, 44.5, 59.5, 74.5, 89.5] },
+    pyd:   { K: 8, label: 'Passing yds',        method: 'weighted', ctx: true,  pos: ['QB'],             floor: 0,   grid: [179.5, 199.5, 219.5, 239.5, 259.5, 279.5] },
+    ptd:   { K: 3, label: 'Passing TDs',        method: 'weighted', ctx: false, pos: ['QB'],             floor: 0,   grid: [0.5, 1.5, 2.5], offered: false },
+  },
+  prior: { rec: { WR: 2, TE: 1.5, RB: 1.2 }, recyd: { WR: 22, TE: 15, RB: 9 }, ryd: { RB: 25, QB: 8 }, rryd: { RB: 32, WR: 24, TE: 15 }, pyd: { QB: 200 }, ptd: { QB: 1.2 } },
+  qbStartPct: 0.5,    // passing props: only the QB who played most of the game (the starter)
+  qbStartHist: true,  // ...and his passing averages use only games he started
+};
 // season recency weights for the live blend, derived from the backtested wPrior (current = 1)
 const SEASON_WEIGHT = {};
 for (const yr of SEASONS) SEASON_WEIGHT[yr] = Math.pow(MODEL.wPrior, Math.max(...SEASONS) - yr);
@@ -225,7 +245,9 @@ const league = { gl5carry: 0, gl5td: 0, rzTgt: 0, rzTgtTD: 0, tgt: 0, tgtTD: 0, 
 // kick/punt returns per player per season -> who gets credited when a return goes for a TD
 const returns = new Map();   // gsis -> {season: returns}
 // every REG game's closing line + offensive TDs per side (all seasons) -> empirical kappa
-const gameLines = new Map();   // gid -> {season, total, spread, homeTD, awayTD}
+const gameLines = new Map();   // gid -> {season, week, home, away, total, spread, homeTD, awayTD}
+const propBox = new Map();     // gid|gsis -> {rec, recyd, ryd, pyd, ptd} (REG season, every season) for player props
+function boxRec(gid, pid) { const k = gid + '|' + pid; let b = propBox.get(k); if (!b) { b = { rec: 0, recyd: 0, ryd: 0, pyd: 0, ptd: 0 }; propBox.set(k, b); } return b; }
 
 // load nflverse rosters (newest first) -> espn<->gsis id maps + gsis->position.
 // Positions must be known BEFORE parsing PBP so we can bucket each TD scorer.
@@ -293,6 +315,26 @@ async function loadSnapsWeekly(season) {
     const wk = +f[ix.week]; if (!(wk > 0)) continue;
     let pct = num(f[ix.offense_pct]); if (pct > 1) pct /= 100;
     let m = out.get(gsis); if (!m) { m = new Map(); out.set(gsis, m); } m.set(wk, pct);
+  }
+  return out;
+}
+
+// who actually played (offense snaps > 0) in each REG game of a season — the player-prop population
+// (books post lines on players who play; a scratch voids the bet). [{gid, gsis, team, pos, pct, week}]
+async function loadPlayed(season) {
+  const url = `https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_${season}.csv`;
+  const dest = path.join(CACHE_DIR, `snaps_${season}.csv`);
+  try { if (!fs.existsSync(dest) || fs.statSync(dest).size < 1000) curlToFile(url, dest); } catch { return []; }
+  const out = []; let ix = null;
+  const rl = readline.createInterface({ input: fs.createReadStream(dest), crlfDelay: Infinity });
+  for await (const line of rl) {
+    if (ix === null) { const h = splitCSV(line); ix = {}; h.forEach((c, i) => { ix[c] = i; }); continue; }
+    if (!line) continue;
+    const f = splitCSV(line); if (f[ix.game_type] && f[ix.game_type] !== 'REG') continue;
+    const gsis = pfr2gsis.get(f[ix.pfr_player_id]), pos = posBucket(f[ix.position]);
+    let pct = num(f[ix.offense_pct]); if (pct > 1) pct /= 100;
+    if (!gsis || !pos || !(pct > 0)) continue;
+    out.push({ gid: f[ix.game_id], gsis, team: f[ix.team], pos, pct, week: +f[ix.week] });
   }
   return out;
 }
@@ -376,8 +418,17 @@ async function parseSeason(season) {
     // ---- per-game closing line + offensive TDs (every REG game, every season) ----
     if (stype === 'REG' && gid) {
       let gl = gameLines.get(gid);
-      if (!gl) { gl = { season, total: num(f[idx.total_line]), spread: num(f[idx.spread_line]), homeTD: 0, awayTD: 0 }; gameLines.set(gid, gl); }
+      if (!gl) { gl = { season, week: +f[idx.week], home, away, total: num(f[idx.total_line]), spread: num(f[idx.spread_line]), homeTD: 0, awayTD: 0 }; gameLines.set(gid, gl); }
       if ((rushTD || passTD) && pos) { if (pos === home) gl.homeTD++; else if (pos === away) gl.awayTD++; }
+      // per-player box score for the prop model (official-stat style: no 2-pt tries, no penalty-nullified plays;
+      // passer yards are gross, sacks are not pass attempts)
+      if (!isTrue(f[idx.two_point_attempt]) && playType !== 'no_play') {
+        const dropback = isPass && !isTrue(f[idx.sack]), done = isTrue(f[idx.complete_pass]);
+        const rr = f[idx.rusher_player_id], cc = f[idx.receiver_player_id], qq = f[idx.passer_player_id];
+        if (isRush && rr) { const b = boxRec(gid, rr); b.ryd += num(f[idx.rushing_yards]); }
+        if (dropback && cc && done) { const b = boxRec(gid, cc); b.rec++; b.recyd += num(f[idx.receiving_yards]); }
+        if (dropback && qq) { const b = boxRec(gid, qq); if (done) b.pyd += num(f[idx.passing_yards]); if (passTD) b.ptd++; }
+      }
     }
 
     // ---- drive-level red-zone bookkeeping ----
@@ -948,6 +999,154 @@ async function parseSeason(season) {
   }
 
   // ==========================================================================
+  // PLAYER PROPS — projections + leak-free backtest (config: PROP_MODEL at the top)
+  // ==========================================================================
+  const CUR = Math.max(...gotSeasons), PM = PROP_MODEL, PSTATS = Object.keys(PM.stats);
+  const played = {}; for (const S of gotSeasons) played[S] = await loadPlayed(S);
+  const statOf = (b, s) => !b ? 0 : s === 'rryd' ? b.ryd + b.recyd : b[s];
+  const propHist = new Map();   // gsis -> [{S, week, pct, st}] — only games he actually played
+  for (const S of gotSeasons) for (const r of played[S]) {
+    const b = propBox.get(r.gid + '|' + r.gsis);
+    let h = propHist.get(r.gsis); if (!h) { h = []; propHist.set(r.gsis, h); }
+    h.push({ S, week: r.week, pct: r.pct, st: Object.fromEntries(PSTATS.map(s => [s, statOf(b, s)])) });
+  }
+  // each team's usual implied points, so context = "this game vs what this offense normally gets"
+  const teamImp = new Map();   // team -> [{S, week, imp}]
+  for (const g of gameLines.values()) if (g.total > 20) for (const side of ['home', 'away']) {
+    const t = g[side], imp = g.total / 2 + (side === 'home' ? g.spread : -g.spread) / 2;
+    let a = teamImp.get(t); if (!a) { a = []; teamImp.set(t, a); } a.push({ S: g.season, week: g.week, imp });
+  }
+  const before = (S, week) => h => (h.S === S && h.week < week) || h.S === S - 1;   // this season so far + last season
+  const teamNorm = (team, S, week, wP) => { let wi = 0, si = 0;
+    for (const t of (teamImp.get(team) || []).filter(before(S, week))) { const w = t.S === S ? 1 : wP; wi += w; si += w * t.imp; }
+    return wi ? si / wi : 22.5; };
+  // per-stat weighted games + sums. Passing stats count only games he STARTED (played >= qbStartPct of snaps):
+  // passing props are only offered on starters, and mop-up / kneel-down cameos would drag a starter's average down.
+  let qbStartHist = PM.qbStartHist;   // experiments flip it
+  const propFeatures = (gsis, S, week, wP) => {
+    const H = (propHist.get(gsis) || []).filter(before(S, week));
+    let g = 0, pctSum = 0; const gs = {}, sums = {}, cur = { g: {} }; PSTATS.forEach(s => { gs[s] = 0; sums[s] = 0; cur[s] = 0; cur.g[s] = 0; });
+    for (const h of H) { const w = h.S === S ? 1 : wP; g += w; pctSum += w * h.pct;
+      for (const s of PSTATS) { if (qbStartHist && (s === 'pyd' || s === 'ptd') && h.pct < PM.qbStartPct) continue;
+        gs[s] += w; sums[s] += w * h.st[s]; if (h.S === S) { cur.g[s]++; cur[s] += h.st[s]; } } }
+    const recent = H.filter(h => h.S === S).sort((a, b) => b.week - a.week).slice(0, 3);
+    const pctRecent = recent.length ? recent.reduce((a, h) => a + h.pct, 0) / recent.length : null;
+    const pctAvg = g ? pctSum / g : null;
+    const sf = (pctAvg && pctRecent != null) ? Math.max(PM.snapClamp[0], Math.min(PM.snapClamp[1], pctRecent / pctAvg)) : 1;
+    return { g, gs, sums, cur, sf };
+  };
+  // v: 'naive' (this season's average) | 'weighted' | 'snap'; ctx: {a, b} or null
+  let propK = null;   // experiments override the per-stat shrinkage
+  const kOf = s => propK != null ? propK : PM.stats[s].K;
+  const propProject = (v, s, pos, F, ctx, k = kOf(s)) => {
+    if (v === 'naive') return F.cur.g[s] ? F.cur[s] / F.cur.g[s] : null;
+    let mu = (F.sums[s] + k * ((PM.prior[s] || {})[pos] || 0)) / (F.gs[s] + k);
+    if (v === 'snap') mu *= F.sf;
+    if (ctx) mu *= Math.exp(ctx.a * (F.imp - F.avgImp) + ctx.b * F.margin);
+    return mu;
+  };
+  let teamMiss = 0;
+  const propRows = (S, minWk, wP) => { const out = [];
+    for (const r of played[S] || []) {
+      if (r.week < minWk) continue;
+      const G = gameLines.get(r.gid); if (!G || !(G.total > 20)) continue;
+      if (G.home !== r.team && G.away !== r.team) { teamMiss++; continue; }
+      const F = propFeatures(r.gsis, S, r.week, wP), home = G.home === r.team;
+      F.imp = G.total / 2 + (home ? G.spread : -G.spread) / 2; F.margin = home ? G.spread : -G.spread; F.avgImp = teamNorm(r.team, S, r.week, wP);
+      const b = propBox.get(r.gid + '|' + r.gsis);
+      out.push({ week: r.week, pos: r.pos, pct: r.pct, F, act: Object.fromEntries(PSTATS.map(s => [s, statOf(b, s)])) });
+    }
+    return out; };
+  let propTrain = propRows(TRAIN_SEASON, 4, 0), propTest = propRows(TEST_SEASON, 1, PM.wPrior);
+  const eligible = (r, s) => PM.stats[s].pos.includes(r.pos) && (!(s === 'pyd' || s === 'ptd') || r.pct >= PM.qbStartPct);
+  // books only post lines on real roles: score players whose plain weighted projection clears the stat's floor
+  // (passing props: every starter — that IS the book's population, so their floor is 0).
+  // The population uses a FIXED shrinkage (PM.popK) so changing a stat's K can't change who gets scored.
+  const inPop = (r, s) => eligible(r, s) && (propProject('weighted', s, r.pos, r.F, null, PM.popK) || 0) >= PM.stats[s].floor;
+  const fitCtx = (s, v) => { let best = null;
+    for (const a of [0, 0.01, 0.02, 0.03, 0.04, 0.05]) for (const b of [-0.02, -0.01, -0.005, 0, 0.005, 0.01, 0.02]) { let e = 0, n = 0;
+      for (const r of propTrain) { if (!eligible(r, s)) continue; const mu = propProject(v, s, r.pos, r.F, { a, b }); if (mu == null || mu <= 0) continue; e += (mu - r.act[s]) ** 2; n++; }
+      if (n && (!best || e / n < best.e)) best = { a, b, e: e / n }; }
+    return best ? { a: best.a, b: best.b } : null; };
+  // actual/projection ratio distribution, bucketed by projection size, compressed to quantiles (what ships)
+  const ratioTable = (s, v, ctx, rows) => {
+    const pts = [];
+    for (const r of rows) { const mu = propProject(v, s, r.pos, r.F, ctx); if (mu == null || !(mu > 0.05)) continue; pts.push({ mu, x: r.act[s] / mu }); }
+    pts.sort((a, b) => a.mu - b.mu);
+    const nb = PM.buckets, nq = PM.quantiles, edges = [], q = [];
+    for (let i = 0; i < nb; i++) {
+      const sl = pts.slice(Math.floor(i * pts.length / nb), Math.floor((i + 1) * pts.length / nb)), xs = sl.map(p => p.x).sort((a, b) => a - b);
+      if (i < nb - 1) edges.push(+sl[sl.length - 1].mu.toFixed(3));
+      q.push(Array.from({ length: nq }, (_, j) => +xs[Math.round(j * (xs.length - 1) / (nq - 1))].toFixed(4)));
+    }
+    return { edges, q, n: pts.length };
+  };
+  // P(stat > line) — the template's propPOver() is a copy of this; keep them identical
+  const propPOver = (tab, mu, L) => {
+    if (!(mu > 0)) return 0;
+    let bk = tab.edges.findIndex(e => mu <= e); if (bk < 0) bk = tab.q.length - 1;
+    const q = tab.q[bk], n = q.length, x = L / mu;
+    if (x < q[0]) return 1; if (x >= q[n - 1]) return 0;
+    let lo = 0, hi = n - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (q[m] <= x) lo = m; else hi = m - 1; }
+    return 1 - (lo + (q[lo + 1] > q[lo] ? (x - q[lo]) / (q[lo + 1] - q[lo]) : 0)) / (n - 1);
+  };
+  // score one variant on the test season: tables learned on the OTHER half (cross-fit), Brier over the line grid
+  const scoreProp = (s, v, ctx) => {
+    const pop = propTest.filter(r => inPop(r, s));
+    const tabs = { 1: ratioTable(s, v, ctx, pop.filter(r => r.week >= 10)), 2: ratioTable(s, v, ctx, pop.filter(r => r.week <= 9)) };
+    let n = 0, ae = 0, bias = 0; const half = { 1: { b: 0, n: 0 }, 2: { b: 0, n: 0 } }, cal = Array.from({ length: 5 }, () => ({ n: 0, p: 0, y: 0 }));
+    for (const r of pop) {
+      const mu = propProject(v, s, r.pos, r.F, ctx); if (mu == null || !(mu > 0)) continue;
+      const y = r.act[s], h = r.week <= 9 ? 1 : 2; n++; ae += Math.abs(mu - y); bias += mu - y;
+      for (const L of PM.stats[s].grid) { const p = propPOver(tabs[h], mu, L), o = y > L ? 1 : 0; half[h].b += (p - o) ** 2; half[h].n++;
+        const c = cal[Math.min(4, Math.floor(p * 5))]; c.n++; c.p += p; c.y += o; }
+    }
+    const br = (half[1].b + half[2].b) / (half[1].n + half[2].n);
+    return { n, mae: ae / n, bias: bias / n, brier: br, h1: half[1].b / half[1].n, h2: half[2].b / half[2].n,
+      cal: cal.filter(c => c.n >= 40).map(c => ({ pred: +(c.p / c.n).toFixed(3), actual: +(c.y / c.n).toFixed(3), n: c.n })) };
+  };
+  const propStats = {}, propBT = {}, propTables = {};
+  const f4 = x => +x.toFixed(5);
+  for (const s of PSTATS) {
+    const st = PM.stats[s], ctx = st.ctx ? fitCtx(s, st.method) : null;
+    const m = scoreProp(s, st.method, ctx), nv = scoreProp(s, 'naive', null);
+    const beatsBoth = m.h1 < nv.h1 && m.h2 < nv.h2;
+    propStats[s] = { label: st.label, method: st.method, ctx, pos: st.pos, floor: st.floor, offered: st.offered !== false && beatsBoth };
+    propBT[s] = { n: m.n, brier: f4(m.brier), h1: f4(m.h1), h2: f4(m.h2), mae: +m.mae.toFixed(2), bias: +m.bias.toFixed(2),
+      naive: { brier: f4(nv.brier), h1: f4(nv.h1), h2: f4(nv.h2), mae: +nv.mae.toFixed(2) }, cal: m.cal, beatsNaiveBothHalves: beatsBoth };
+    if (propStats[s].offered) { const t = ratioTable(s, st.method, ctx, propTest.filter(r => inPop(r, s))); propTables[s] = { edges: t.edges, q: t.q }; }
+    log(`  props ${s.padEnd(5)} n=${m.n} Brier ${m.h1.toFixed(4)}/${m.h2.toFixed(4)} vs naive ${nv.h1.toFixed(4)}/${nv.h2.toFixed(4)}  MAE ${m.mae.toFixed(1)} vs ${nv.mae.toFixed(1)}` +
+      `  ${st.method}${ctx ? ` ctx a=${ctx.a} b=${ctx.b}` : ''}  ${propStats[s].offered ? 'OFFERED' : 'not offered'}  cal ` + m.cal.map(c => `${(c.pred * 100).toFixed(0)}->${(c.actual * 100).toFixed(0)}%`).join(' '));
+    if (process.env.BT_EXPERIMENTS && s !== 'ptd') {   // flip each switch: keep a choice only if it wins BOTH halves
+      const alt = st.method === 'snap' ? 'weighted' : 'snap', ctxAlt = st.ctx ? null : fitCtx(s, st.method);
+      const a1 = scoreProp(s, alt, st.ctx ? fitCtx(s, alt) : null), a2 = scoreProp(s, st.method, ctxAlt);
+      const ks = []; for (const k of [0.5, 1, 2, 3, 5, 8, 12, 20]) { propK = k; const cK = st.ctx ? fitCtx(s, st.method) : null, r = scoreProp(s, st.method, cK); ks.push(`K=${k} ${r.h1.toFixed(5)}/${r.h2.toFixed(5)}`); } propK = null;
+      log(`      shrink: ${ks.join('  ')}`);
+      log(`      switch: method ${alt} ${a1.h1.toFixed(5)}/${a1.h2.toFixed(5)}  |  ctx ${st.ctx ? 'off' : `on (a=${ctxAlt && ctxAlt.a} b=${ctxAlt && ctxAlt.b})`} ${a2.h1.toFixed(5)}/${a2.h2.toFixed(5)}  |  shipped ${m.h1.toFixed(5)}/${m.h2.toFixed(5)}`);
+    }
+  }
+  if (process.env.BT_EXPERIMENTS) for (const s of ['pyd', 'ptd']) {
+    const st = PM.stats[s], row = [];
+    for (const on of [true, false]) { qbStartHist = on; propTrain = propRows(TRAIN_SEASON, 4, 0); propTest = propRows(TEST_SEASON, 1, PM.wPrior); const ks = [];
+      for (const k of [1, 3, 8, 20]) { propK = k; const r = scoreProp(s, st.method, st.ctx ? fitCtx(s, st.method) : null); ks.push(`K=${k} ${r.h1.toFixed(5)}/${r.h2.toFixed(5)}`); }
+      propK = null; row.push(`starts-only ${on ? 'ON ' : 'OFF'}: ${ks.join('  ')}`); }
+    qbStartHist = PM.qbStartHist; propTrain = propRows(TRAIN_SEASON, 4, 0); propTest = propRows(TEST_SEASON, 1, PM.wPrior); const nv = scoreProp(s, 'naive', null);
+    log(`  props ${s} history filter  (naive ${nv.h1.toFixed(5)}/${nv.h2.toFixed(5)})`); row.forEach(x => log('      ' + x));
+  }
+  if (teamMiss) log(`  ! props: ${teamMiss} player-games whose snap team isn't in the game (abbr mismatch?)`);
+  // live inputs per player: weighted per-game sums are pre-divided, so the app only applies snap + context
+  const propLive = (gsis, pos) => {
+    const F = propFeatures(gsis, CUR, 99, PM.wPrior), w = {}, avg = {};
+    for (const s of PSTATS) if (propStats[s].offered && PM.stats[s].pos.includes(pos)) {
+      w[s] = +propProject('weighted', s, pos, F, null).toFixed(2);
+      if (F.cur.g[s]) avg[s] = +(F.cur[s] / F.cur.g[s]).toFixed(1);
+    }
+    return Object.keys(w).length ? { g: +F.g.toFixed(1), cg: Math.max(...Object.values(F.cur.g)), sf: +F.sf.toFixed(3), w, avg } : null;
+  };
+  const propModelOut = { wPrior: PM.wPrior, trainSeason: TRAIN_SEASON, testSeason: TEST_SEASON, stats: propStats, tables: propTables, backtest: propBT,
+    teamImp: Object.fromEntries([...teamImp.keys()].map(t => [t, +teamNorm(t, CUR, 99, PM.wPrior).toFixed(2)])) };
+
+  // ==========================================================================
   // ESPN: teams, colors, logos, rosters, injuries
   // ==========================================================================
   // (espn2gsis / name2gsis / gsis2pos already loaded by loadRosters at the top)
@@ -1032,6 +1231,7 @@ async function parseSeason(season) {
           snapLast: snap ? snap.lastPct : null,    // most recent week's offensive snap %
           // kick/punt returns, recency-weighted: the app splits special-teams TDs by each player's share
           ret: +(gsis && returns.get(gsis) ? Object.entries(returns.get(gsis)).reduce((a, [yr, n]) => a + (SEASON_WEIGHT[+yr] || 0) * n, 0) : 0).toFixed(2),
+          pp: gsis ? propLive(gsis, posBucket(pos)) : null,   // player-prop inputs (see PROP_MODEL)
         });
       }
     }
@@ -1084,6 +1284,7 @@ async function parseSeason(season) {
     backtest,
     dstBacktest,
     marketBacktest,
+    propModel: propModelOut,
   };
 
   const jsonPath = path.join(__dirname, 'nfl-td-snapshot.json');
