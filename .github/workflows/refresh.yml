@@ -4,8 +4,10 @@ name: Refresh data
 # without any PC being on. (Lines, injuries and weather also refresh live inside the app.)
 on:
   schedule:
-    - cron: '0 12 * * 2'   # Tuesday 12:00 UTC — after Monday Night Football + nflverse's overnight update
-    - cron: '0 12 * * 5'   # Friday 12:00 UTC — picks up midweek roster moves before Sunday
+    # Daily at 10:37 UTC (~6:37 AM ET). Off the top of the hour on purpose: GitHub delays or drops scheduled
+    # runs at :00 when it's busy (the first Tue 12:00 run never fired). Daily = fresh play-by-play the morning
+    # after every game, plus roster/injury moves. The slate, lines, injuries and weather also refresh live in the app.
+    - cron: '37 10 * * *'
   workflow_dispatch:        # "Run workflow" button on the repo's Actions tab
   push:
     paths: ['.github/workflows/refresh.yml']   # runs once whenever this file changes

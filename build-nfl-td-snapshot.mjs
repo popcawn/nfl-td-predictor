@@ -1158,7 +1158,16 @@ async function parseSeason(season) {
   // the game-day forecast for the right stadium and hour
   let schedule = [];
   try {
-    const sb = curlJson('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard');
+    // ESPN's default scoreboard keeps last week's finished games until midweek; once they're all final the
+    // slate to ship is next week's (after week 18: the playoffs). The app does the same check live.
+    const SB = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
+    const allFinal = j => (j.events || []).length > 0 && j.events.every(e => e.status && e.status.type && e.status.type.completed);
+    let sb = curlJson(SB);
+    if (allFinal(sb) && sb.week && sb.season) {
+      let nx = curlJson(`${SB}?seasontype=${sb.season.type}&week=${sb.week.number + 1}`);
+      if (!(nx.events || []).length && sb.season.type === 2) nx = curlJson(`${SB}?seasontype=3&week=1`);
+      if ((nx.events || []).length) { sb = nx; log(`  (this week's games are all final — shipping next week's slate)`); }
+    }
     schedule = (sb.events || []).map(e => {
       const c = e.competitions[0];
       const h = c.competitors.find(x => x.homeAway === 'home'), a = c.competitors.find(x => x.homeAway === 'away');
@@ -1169,7 +1178,8 @@ async function parseSeason(season) {
       const m = o.details && o.details.match(/([A-Z]{2,3})\s*(-?\d+(?:\.\d)?)/);
       if (m) { fav = nflAbbr(m[1]); spread = Math.abs(+m[2]); }
       if (!fav) { if (o.homeTeamOdds && o.homeTeamOdds.favorite) fav = nflAbbr(h.team.abbreviation); else if (o.awayTeamOdds && o.awayTeamOdds.favorite) fav = nflAbbr(a.team.abbreviation); if (spread == null && o.spread != null) spread = Math.abs(+o.spread); }
-      return { home: nflAbbr(h.team.abbreviation), away: nflAbbr(a.team.abbreviation), kickoff: e.date, indoor: !!(c.venue && c.venue.indoor), venue: (c.venue && c.venue.fullName) || '', total, fav, spread };
+      return { home: nflAbbr(h.team.abbreviation), away: nflAbbr(a.team.abbreviation), kickoff: e.date, indoor: !!(c.venue && c.venue.indoor), venue: (c.venue && c.venue.fullName) || '', total, fav, spread,
+               neutral: !!c.neutralSite, city: (c.venue && c.venue.address && c.venue.address.city) || '' };
     });
     log(`  schedule: ${schedule.length} games this week`);
   } catch { log('  ! schedule fetch failed'); }

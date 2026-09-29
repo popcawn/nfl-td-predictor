@@ -7,9 +7,12 @@ See README.md for what the model does and how it was validated.
 ## Where things happen
 - **Edit** `nfl-td-predictor.template.html` (UI + live model) and `build-nfl-td-snapshot.mjs` (data + backtest).
   Never hand-edit `nfl-td-predictor.html` / `nfl-td-snapshot.json` — the build regenerates both.
-- **Data refresh** runs on GitHub Actions (`.github/workflows/refresh.yml`, Tue + Fri) and commits the rebuilt
+- **Data refresh** runs on GitHub Actions (`.github/workflows/refresh.yml`, daily 10:37 UTC) and commits the rebuilt
   files. So **`git pull` before starting work** on any machine, or pushes will conflict on those two files.
-- Lines, injuries and weather refresh live inside the app from ESPN / Open-Meteo on every visit.
+- The game slate, lines, injuries and weather refresh live inside the app from ESPN / Open-Meteo on every visit.
+  ESPN's default scoreboard keeps LAST week's finished games until midweek — both the build and the app
+  (`fetchActiveWeek`) move to next week once every game on it is final. Neutral-site games (London etc.) geocode
+  ESPN's venue city for weather instead of using the home team's stadium.
 
 ## Build / dev loop
 - Full build: `node build-nfl-td-snapshot.mjs` (Node 18+, `curl`). First run on a machine downloads ~200 MB into
@@ -62,5 +65,8 @@ See README.md for what the model does and how it was validated.
 ## Gotchas
 - In Git Bash, `node -e "..."` containing JS template-literal backticks gets mangled by command substitution —
   use the Edit tool or put the script in a file. `python` may be a Store stub that hangs.
-- Browser storage (bet log, slip, bankroll) is per machine and per address; use Export / Import to move it.
+- Browser storage (bet log, slip, bankroll) is per machine and per address. **☁ Sync** (bet log toolbar) merges it
+  across PCs through a secret gist (`nfl-td-sync.json`) using a gist-scope token the user pastes into each browser.
+  Records carry `mt`; deletions are tombstones (`nfltd_tomb`); `saveBets()/saveSlip()` stamp changes automatically,
+  so any new code that edits bets/slip must go through them. Never put a token in the repo. Export / Import still work.
 - Commits end with the Co-Authored-By line from the session's instructions.

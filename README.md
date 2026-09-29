@@ -12,7 +12,11 @@ silently to the baked snapshot when not.
 
 ## On any PC or phone
 - **Just use it:** open **https://popcawn.github.io/nfl-td-predictor/** — nothing to install. The data is rebuilt on
-  GitHub every Tuesday and Friday (`.github/workflows/refresh.yml`); lines, injuries and weather refresh live.
+  GitHub every morning (`.github/workflows/refresh.yml`); the game slate, lines, injuries and weather refresh live
+  on every visit. A local copy of the file only updates after `git pull`, so use this address on every PC.
+- **Same log on every PC:** hit **☁ Sync** in the bet log and paste a GitHub token with only the *gist* permission
+  (the panel links straight to it). Your log, slip and bankroll then live in a private gist and merge across every
+  PC you connect — edits, settled results and deletions all carry over. Without sync, each browser keeps its own copy.
 - **Your bet log / slip / bankroll** are saved in the browser you use, per machine. Move them with **⬇ Export** /
   **⬆ Import** in the Bet log panel (imports merge — no duplicates; a settled result or closing line wins over a pending
   copy). Tip: always use the Pages link rather than the local file, so each machine has one place to look.

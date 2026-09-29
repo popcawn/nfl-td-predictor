@@ -322,11 +322,27 @@
         <button class="btn" id="betAdd" style="padding:6px 14px;font-size:13px">Log bet</button>
         <span id="betMsg" class="muted" style="font-size:12px"></span>
         <span style="margin-left:auto;display:flex;gap:6px">
+          <button class="statussel" id="syncBtn" style="padding:6px 10px;font-size:12px" title="keep this log, slip and bankroll identical on every PC">☁ Sync: off</button>
           <button class="statussel" id="betExport" style="padding:6px 10px;font-size:12px" title="Save your bet log, cross-game slip and bankroll to a file — import it on another PC or browser">⬇ Export</button>
           <button class="statussel" id="betImport" style="padding:6px 10px;font-size:12px" title="Load an exported file; merges with what's here (no duplicates)">⬆ Import</button>
           <input type="file" id="betImportFile" accept=".json,application/json" style="display:none">
           <button class="statussel" id="betClear" style="padding:6px 10px;font-size:12px">Clear log</button>
         </span>
+      </div>
+      <div id="syncBox" class="note info" style="display:none;margin:2px 0 10px;font-size:13px;line-height:1.55">
+        <b>☁ One bet log on every PC.</b> Each browser keeps its own copy, so two PCs drift apart. Sync keeps your bet log, slip and bankroll in a <b>private gist</b> on your GitHub account, and every PC you connect merges into it. One-time setup on each PC / browser:
+        <ol style="margin:6px 0 6px 20px;padding:0">
+          <li>Make a token that can <b>only</b> touch gists: <a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=NFL%20TD%20sync" target="_blank" rel="noopener" style="color:var(--accent)">GitHub → new token (gist scope pre-ticked)</a> → pick an expiration → <b>Generate token</b> → copy it.</li>
+          <li>Paste it below and hit <b>Connect</b>. On your other PC, do the same (a second token is fine, or reuse this one).</li>
+        </ol>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="syncToken" type="password" placeholder="paste token (ghp_…)" autocomplete="off" spellcheck="false" style="width:270px;padding:6px 9px;font-size:13px">
+          <button class="btn" id="syncConnect" style="padding:6px 14px;font-size:13px">Connect</button>
+          <button class="statussel" id="syncNowBtn" style="padding:6px 10px;font-size:12px">Sync now</button>
+          <button class="statussel" id="syncOff" style="padding:6px 10px;font-size:12px">Disconnect this PC</button>
+          <span id="syncMsg" class="muted" style="font-size:12px"></span>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:6px">The token is saved in this browser only — never in the site's code — and can't do anything but read/write your gists. Syncs a few seconds after every change, whenever you come back to the tab, and every 90 s. Deleting a bet (or Clear log) deletes it on every synced PC.</div>
       </div>
       <details id="closeBox" style="margin:2px 0 10px">
         <summary style="cursor:pointer;font-size:13px;font-weight:700">📋 Paste closing lines <span class="muted" style="font-weight:400">— right before kickoff, copy the board again and paste it here; it fills <b>Close</b> on your bets so CLV works</span></summary>
@@ -471,16 +487,23 @@ function nbCount(mean){ if(mean<=0) return 0; const lam=gamma(NB_SIZE)*(mean/NB_
 // ---------- populate team pickers ----------
 const teamList=S.teamList.slice().sort((a,b)=> S.teams[a].name.localeCompare(S.teams[b].name));
 function opt(sel,arr,val){ sel.innerHTML=arr.map(a=>`<option value="${a}">${S.teams[a].name}</option>`).join(''); if(val) sel.value=val; }
-// this week's games (kickoff order); the app opens on the next game to kick off, not a fixed matchup
-const SCHED=(S.schedule||[]).filter(g=>S.teams[g.home]&&S.teams[g.away]).sort((a,b)=>new Date(a.kickoff)-new Date(b.kickoff));
-const NEXT=SCHED.find(g=>new Date(g.kickoff).getTime()>Date.now()-3.5*3600e3)||SCHED[0];
-opt($('awaySel'),teamList, NEXT?NEXT.away:(teamList.includes('BUF')?'BUF':teamList[0]));
-opt($('homeSel'),teamList, NEXT?NEXT.home:(teamList.includes('KC')?'KC':teamList[1]));
+// this week's games (kickoff order); the app opens on the next game to kick off, not a fixed matchup.
+// The baked slate is replaced live on every visit (refreshSlate), so it never goes stale between builds.
+let SCHED=[], userPicked=false;
+function setSchedule(list){
+  S.schedule=list;
+  SCHED=list.filter(g=>S.teams[g.home]&&S.teams[g.away]).sort((a,b)=>new Date(a.kickoff)-new Date(b.kickoff));
+  $('gameSel').innerHTML=`<option value="">— or pick any two teams below —</option>`+SCHED.map((g,i)=>`<option value="${i}">${gameLabel(g)}</option>`).join('');
+}
+const nextGame=()=>SCHED.find(g=>new Date(g.kickoff).getTime()>Date.now()-3.5*3600e3)||null;
 function gameLabel(g){
   const line = g.total==null ? '' : ` · ${(!g.fav||!g.spread)?'PK':((S.teams[g.fav]||{short:g.fav}).short+' -'+g.spread)} / ${g.total}`;
   return `${fmtKick(g.kickoff)} · ${S.teams[g.away].short} @ ${S.teams[g.home].short}${line}`;
 }
-$('gameSel').innerHTML=`<option value="">— or pick any two teams below —</option>`+SCHED.map((g,i)=>`<option value="${i}">${gameLabel(g)}</option>`).join('');
+setSchedule(S.schedule||[]);
+const NEXT=nextGame()||SCHED[0];
+opt($('awaySel'),teamList, NEXT?NEXT.away:(teamList.includes('BUF')?'BUF':teamList[0]));
+opt($('homeSel'),teamList, NEXT?NEXT.home:(teamList.includes('KC')?'KC':teamList[1]));
 function syncGameSel(){ const a=$('awaySel').value, h=$('homeSel').value; const i=SCHED.findIndex(g=>g.away===a&&g.home===h); $('gameSel').value=i>=0?String(i):''; }
 function refreshFav(){
   const a=$('awaySel').value, h=$('homeSel').value;
@@ -510,10 +533,12 @@ function wxKind(code, pp){
 let wxToken=0;
 async function setWeather(){
   const away=$('awaySel').value, home=$('homeSel').value;
-  const st=(S.stadiums&&S.stadiums[home])||null;
   const game=(S.schedule||[]).find(g=>g.home===home && g.away===away);
+  // neutral-site games (London, Madrid, ...) are NOT at the home team's stadium: use ESPN's venue, geocoded below
+  const neutral=!!(game&&game.neutral);
+  let st=neutral?null:((S.stadiums&&S.stadiums[home])||null);
   // curated roof table wins: ESPN flags some roofed venues (e.g. SoFi's fixed canopy) as outdoor
-  const indoor = !!((st && st.dome) || (game && game.indoor));
+  const indoor = neutral ? !!game.indoor : !!((st && st.dome) || (game && game.indoor));
   const name=(game&&game.venue)||(st&&st.name)||(S.teams[home]?(S.teams[home].short+' stadium'):'stadium');
   const my=++wxToken;   // ignore stale async responses if the matchup changed
   WX={precip:'none', pp:0, temp:null, kind:'', icon:'🏟️'};   // reset until forecast lands
@@ -522,6 +547,10 @@ async function setWeather(){
   $('wind').disabled=false;
   $('wxStatus').innerHTML=`🏟️ ${name} · <b>outdoor</b>${game?` · ${fmtKick(game.kickoff)}`:''} <span class="muted">— checking forecast…</span>`;
   scheduleRun();
+  if(!st && neutral && game.city){ try{
+      const gj=await (await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(game.city)}&count=1`)).json();
+      const r=gj.results&&gj.results[0]; if(r) st={lat:r.latitude, lon:r.longitude};
+    }catch(e){} if(my!==wxToken) return; }
   if(!st){ $('wxStatus').innerHTML=`🏟️ ${name} · <b>outdoor</b> <span class="muted">— enter wind manually</span>`; return; }
   try{
     const url=`https://api.open-meteo.com/v1/forecast?latitude=${st.lat}&longitude=${st.lon}&hourly=temperature_2m,wind_speed_10m,precipitation_probability,weather_code&wind_speed_unit=mph&temperature_unit=fahrenheit&timeformat=unixtime&forecast_days=7`;
@@ -546,12 +575,59 @@ async function setWeather(){
 // abbreviation) and players by athlete id (= our roster id). Silent fallback to baked values
 // when offline. ----
 const espnIdToAbbr=(()=>{ const m={}; for(const a of S.teamList){ const t=S.teams[a]; if(t&&t.id!=null) m[String(t.id)]=a; } return m; })();
+// ESPN's default scoreboard keeps showing last week's FINISHED games until midweek. Once every game on it is
+// final, the active slate is next week's (after week 18: the playoffs). Cached 5 min, shared by slate + lines.
+const SB_URL='https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
+async function fetchActiveWeek(){
+  const get=async q=>(await fetch(SB_URL+q,{cache:'no-store'})).json();
+  const allFinal=j=>(j.events||[]).length>0 && j.events.every(e=>e.status&&e.status.type&&e.status.type.completed);
+  let sb=await get('');
+  if(allFinal(sb) && sb.week && sb.season){
+    let nx=await get(`?seasontype=${sb.season.type}&week=${sb.week.number+1}`);
+    if(!(nx.events||[]).length && sb.season.type===2) nx=await get('?seasontype=3&week=1');
+    if((nx.events||[]).length) sb=nx;
+  }
+  return sb;
+}
+let slateCache=null;
+function activeWeek(){
+  if(!slateCache || Date.now()-slateCache.t>5*60e3) slateCache={t:Date.now(), p:fetchActiveWeek().catch(e=>{ slateCache=null; throw e; })};
+  return slateCache.p;
+}
+// ESPN events -> the same shape the build bakes into S.schedule (teams matched by stable ESPN id)
+function schedFromESPN(sb){
+  const out=[];
+  for(const e of (sb.events||[])){ const c=e.competitions&&e.competitions[0]; if(!c) continue;
+    const side={}; for(const x of (c.competitors||[])){ const ab=espnIdToAbbr[String(x.team&&x.team.id)]; if(ab) side[x.homeAway]={ab, espn:x.team.abbreviation}; }
+    if(!side.home||!side.away) continue;
+    const o=(c.odds||[])[0]||{}, total=(o.overUnder!=null&&+o.overUnder>20)?+o.overUnder:null;
+    let fav=(o.homeTeamOdds&&o.homeTeamOdds.favorite)?side.home.ab:(o.awayTeamOdds&&o.awayTeamOdds.favorite)?side.away.ab:null, spread=null;
+    const m=o.details&&o.details.match(/([A-Z]{2,3})\s*(-?\d+(?:\.\d)?)/);
+    if(m){ spread=Math.abs(+m[2]); if(!fav) fav=m[1]===side.home.espn?side.home.ab:m[1]===side.away.espn?side.away.ab:null; }
+    if(spread==null && o.spread!=null && !isNaN(o.spread)) spread=Math.abs(+o.spread);
+    out.push({home:side.home.ab, away:side.away.ab, kickoff:e.date, indoor:!!(c.venue&&c.venue.indoor), venue:(c.venue&&c.venue.fullName)||'', total, fav, spread,
+      neutral:!!c.neutralSite, city:(c.venue&&c.venue.address&&c.venue.address.city)||''});
+  }
+  return out;
+}
+async function refreshSlate(){
+  try{
+    const list=schedFromESPN(await activeWeek()); if(!list.length) return;
+    const sig=l=>l.map(g=>g.away+'@'+g.home+'@'+g.kickoff).sort().join(',');
+    const newWeek=sig(list)!==sig(S.schedule||[]);
+    setSchedule(list);   // same games too: refreshes the dropdown's lines
+    const nx=nextGame(), cur=$('awaySel').value+'@'+$('homeSel').value;
+    // opened on a stale game and the user hasn't picked one yet -> jump to the real next kickoff
+    if(newWeek && !userPicked && nx && cur!==nx.away+'@'+nx.home){ $('awaySel').value=nx.away; $('homeSel').value=nx.home; onMatchupChange(); }
+    else syncGameSel();
+  }catch(e){ /* offline: keep the baked slate */ }
+}
 let liveToken=0;
 async function refreshLive(){
   const away=$('awaySel').value, home=$('homeSel').value, my=++liveToken;
   try{
     const [sb, inj] = await Promise.all([
-      fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard').then(r=>r.json()),
+      activeWeek(),
       fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries').then(r=>r.json())
     ]);
     if(my!==liveToken) return;   // a newer matchup selection superseded this
@@ -619,9 +695,9 @@ function clearOddsBoard(){
   $('propPaste').value=''; $('propMsg').textContent='';
 }
 function onMatchupChange(){ clearOddsBoard(); refreshFav(); syncGameSel(); setLine(); setWeather(); refreshLive(); }
-$('awaySel').onchange=onMatchupChange;
-$('homeSel').onchange=onMatchupChange;
-$('gameSel').onchange=()=>{ const g=SCHED[+$('gameSel').value]; if(!g||$('gameSel').value==='') return; $('awaySel').value=g.away; $('homeSel').value=g.home; onMatchupChange(); };
+$('awaySel').onchange=()=>{ userPicked=true; onMatchupChange(); };
+$('homeSel').onchange=()=>{ userPicked=true; onMatchupChange(); };
+$('gameSel').onchange=()=>{ const g=SCHED[+$('gameSel').value]; if(!g||$('gameSel').value==='') return; userPicked=true; $('awaySel').value=g.away; $('homeSel').value=g.home; onMatchupChange(); };
 refreshFav(); syncGameSel();
 
 // ---------- the model ----------
@@ -1201,7 +1277,7 @@ function parlayNote(){ return `<div class="muted" style="margin-top:9px;font-siz
 // localStorage so the slip survives reloads. ----
 let slip=[]; let slipLegCache=[];
 function loadSlip(){ try{ const s=localStorage.getItem('nfltd_slip'); if(s) slip=JSON.parse(s)||[]; }catch(e){ slip=[]; } if(!Array.isArray(slip)) slip=[]; }
-function saveSlip(){ try{ localStorage.setItem('nfltd_slip', JSON.stringify(slip)); }catch(e){} }
+function saveSlip(){ stampChanges(slip, slipSnap, legKey, TOMB.slip); slipSnap=snapOf(slip, legKey); saveTomb(); try{ localStorage.setItem('nfltd_slip', JSON.stringify(slip)); }catch(e){} syncSoon(); }
 function curGameId(){ return LAST ? LAST.away+'@'+LAST.home : null; }
 function fmtGame(g){ const [a,h]=String(g).split('@'); const sh=x=>S.teams[x]?(S.teams[x].short||x):x; return sh(a)+' @ '+sh(h); }
 // current game's priced legs for one market, best confidence-adjusted Kelly first (players + defenses)
@@ -1331,7 +1407,93 @@ function renderSlip(){
 // leading indicator of a real edge) + settled ROI. Persists via localStorage. ----
 let bets=[]; let betOptCache=[];
 function loadBets(){ try{ const s=localStorage.getItem('nfltd_bets'); if(s) bets=JSON.parse(s)||[]; }catch(e){ bets=[]; } if(!Array.isArray(bets)) bets=[]; }
-function saveBets(){ try{ localStorage.setItem('nfltd_bets', JSON.stringify(bets)); }catch(e){} }
+function saveBets(){ stampChanges(bets, betSnap, betKey, TOMB.bets); betSnap=snapOf(bets, betKey); saveTomb(); try{ localStorage.setItem('nfltd_bets', JSON.stringify(bets)); }catch(e){} syncSoon(); }
+
+// ---------- cloud sync: one bet log / slip / bankroll across PCs, via a private GitHub gist ----------
+// Browser storage is per machine and per address, so PCs drift apart. With a GitHub token (gist scope only) saved
+// in this browser, every change merges into one secret gist and the other PCs pull it. The merge is per record:
+// each bet / slip leg carries mt (last modified, ms) and a deletion leaves a tombstone, so a bet deleted on one PC
+// is deleted everywhere instead of coming back from the other copy. Newest edit of a record wins.
+const SYNC_FILE='nfl-td-sync.json', GH_API='https://api.github.com';
+const lsGet=(k,d)=>{ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } };
+const lsSet=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
+let SYNC=lsGet('nfltd_sync',{})||{};
+let TOMB=(t=>({bets:(t&&t.bets)||{}, slip:(t&&t.slip)||{}}))(lsGet('nfltd_tomb',null));
+let bankMt=+lsGet('nfltd_bankmt',0)||0;
+const saveTomb=()=>lsSet('nfltd_tomb', TOMB), saveSyncCfg=()=>lsSet('nfltd_sync', SYNC);
+const betKey=b=>b.id, legKey=l=>l.game+'|'+l.key+'|'+l.market;
+const recBody=r=>{ const {mt, ...rest}=r; return JSON.stringify(rest); };
+const snapOf=(list,keyOf)=>new Map(list.map(r=>[keyOf(r), recBody(r)]));
+let betSnap=new Map(), slipSnap=new Map();
+// stamp records that changed since the last save; records that disappeared become tombstones
+function stampChanges(list, snap, keyOf, tomb){
+  const now=Date.now(), seen=new Set();
+  for(const r of list){ const k=keyOf(r); seen.add(k); if(snap.get(k)!==recBody(r)) r.mt=now; delete tomb[k]; }
+  for(const k of snap.keys()) if(!seen.has(k)) tomb[k]=now;
+}
+function mergeRecs(local, remote, keyOf, tomb){
+  const known=x=>(x.result&&x.result!=='pending'?2:0)+(x.closeOdds?1:0);   // tie-break for pre-sync records (no mt)
+  const pick=(a,b)=>{ if(!a) return b; const ma=a.mt||0, mb=b.mt||0; if(ma!==mb) return ma>mb?a:b; return known(b)>known(a)?b:a; };
+  const m=new Map(local.map(r=>[keyOf(r), r]));
+  for(const r of (remote||[])){ if(!r) continue; const k=keyOf(r); m.set(k, pick(m.get(k), r)); }
+  return [...m.values()].filter(r=>!(tomb[keyOf(r)]>=(r.mt||0)));
+}
+const syncCanon=p=>JSON.stringify([p.bets, p.slip, p.bankroll, p.bankMt||0, p.tomb]);
+const syncPayload=()=>({app:'nfl-td-predictor', v:2, at:new Date().toISOString(), bets, slip, bankroll:getBankroll(), bankMt, tomb:TOMB});
+function applyRemote(r){
+  const before=syncCanon(syncPayload());
+  for(const kind of ['bets','slip']) for(const [k,t] of Object.entries((r.tomb&&r.tomb[kind])||{})) if(!(TOMB[kind][k]>=t)) TOMB[kind][k]=t;
+  const old=Date.now()-120*86400e3;   // tombstones only need to outlive the gap between syncs
+  for(const kind of ['bets','slip']) for(const k of Object.keys(TOMB[kind])) if(TOMB[kind][k]<old) delete TOMB[kind][k];
+  bets=mergeRecs(bets, r.bets, betKey, TOMB.bets).sort((x,y)=>String(y.ts).localeCompare(String(x.ts)));
+  slip=mergeRecs(slip, r.slip, legKey, TOMB.slip);
+  if((r.bankMt||0)>bankMt && r.bankroll>0){ bankMt=r.bankMt; $('bankroll').value=r.bankroll; lsSet('nfltd_bankroll', r.bankroll); lsSet('nfltd_bankmt', bankMt); }
+  // a merge isn't a local edit: persist without stamping
+  betSnap=snapOf(bets, betKey); slipSnap=snapOf(slip, legKey); saveTomb();
+  try{ localStorage.setItem('nfltd_bets', JSON.stringify(bets)); localStorage.setItem('nfltd_slip', JSON.stringify(slip)); }catch(e){}
+  if(syncCanon(syncPayload())!==before){ renderBets(); renderSlip(); if(LAST) computeTopPlays(); }
+}
+async function ghApi(path, opt){
+  opt=opt||{};
+  const r=await fetch(GH_API+path, {method:opt.method||'GET', cache:'no-store', body:opt.body,
+    headers:Object.assign({Authorization:'Bearer '+SYNC.token, Accept:'application/vnd.github+json'}, opt.body?{'Content-Type':'application/json'}:{})});
+  if(!r.ok){ const e=new Error('GitHub '+r.status); e.status=r.status; throw e; }
+  return r.json();
+}
+async function readSyncGist(g){
+  const f=g&&g.files&&g.files[SYNC_FILE]; if(!f) return null;
+  let txt=f.content; if(f.truncated && f.raw_url) txt=await (await fetch(f.raw_url,{cache:'no-store'})).text();
+  try{ const d=JSON.parse(txt); return d&&d.app==='nfl-td-predictor'?d:null; }catch(e){ return null; }
+}
+let syncBusy=false, syncAgain=false, syncTimer=null;
+function syncSoon(ms){ if(!SYNC.token) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncNow, ms==null?2500:ms); }
+async function syncNow(){
+  if(!SYNC.token) return; if(syncBusy){ syncAgain=true; return; }
+  syncBusy=true; syncStatus(true);
+  try{
+    let g=null;
+    if(SYNC.gistId){ try{ g=await ghApi('/gists/'+SYNC.gistId); }catch(e){ if(e.status!==404) throw e; SYNC.gistId=null; } }
+    if(!g){   // another PC may already have made the sync gist — find it before creating one
+      for(let page=1; page<=5 && !g; page++){ const list=await ghApi(`/gists?per_page=100&page=${page}`);
+        const hit=list.find(x=>x.files&&x.files[SYNC_FILE]); if(hit) g=await ghApi('/gists/'+hit.id); if(list.length<100) break; }
+      if(g){ SYNC.gistId=g.id; saveSyncCfg(); }
+    }
+    const remote=g?await readSyncGist(g):null;
+    if(remote) applyRemote(remote);
+    const mine=syncPayload(), content=JSON.stringify(mine);
+    if(!g){ const c=await ghApi('/gists',{method:'POST', body:JSON.stringify({description:'NFL TD predictor — bet log sync (private, used by the app)', public:false, files:{[SYNC_FILE]:{content}}})}); SYNC.gistId=c.id; }
+    else if(!remote || syncCanon(mine)!==syncCanon(remote)) await ghApi('/gists/'+SYNC.gistId,{method:'PATCH', body:JSON.stringify({files:{[SYNC_FILE]:{content}}})});
+    SYNC.last=Date.now(); SYNC.err=null;
+  }catch(e){ SYNC.err = (e.status===401) ? 'token rejected — make a new one and reconnect' : (e.status===403||e.status===404) ? 'GitHub refused — does the token have the gist scope?' : 'offline — will retry'; }
+  finally{ saveSyncCfg(); syncBusy=false; syncStatus(); if(syncAgain){ syncAgain=false; syncSoon(400); } }
+}
+function syncStatus(busy){
+  const b=$('syncBtn'), m=$('syncMsg'); if(!b) return;
+  const t=SYNC.last?new Date(SYNC.last).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}):'';
+  b.textContent = !SYNC.token ? '☁ Sync: off' : busy ? '☁ syncing…' : SYNC.err ? '☁ ⚠ sync' : '☁ Synced '+t;
+  b.style.color = SYNC.token&&!SYNC.err ? 'var(--good)' : SYNC.err ? 'var(--warn)' : '';
+  if(m) m.innerHTML = !SYNC.token ? 'not connected on this PC' : SYNC.err ? `<span style="color:var(--warn)">${esc(SYNC.err)}</span>` : busy ? 'syncing…' : `connected ✓ — last synced ${t}`;
+}
 function betFlash(m){ const el=$('betMsg'); if(!el) return; el.textContent=m; el.style.color='var(--warn)'; setTimeout(()=>{ if(el.textContent===m){el.textContent='';el.style.color='';} },2600); }
 function betPlayerOptions(){
   const out=[{key:'custom', name:'— custom / other prop —'}];
@@ -1417,7 +1579,7 @@ function importData(file){
         if(!cur.closeOdds&&b.closeOdds){ cur.closeOdds=b.closeOdds; if(b.closeEst) cur.closeEst=b.closeEst; ch=true; } if(ch) updated++; }
       bets.sort((x,y)=>String(y.ts).localeCompare(String(x.ts)));
       for(const l of (d.slip||[])) if(l&&!slipHas(l.game,l.key,l.market)){ slip.push(l); legs++; }
-      if(d.bankroll>0){ $('bankroll').value=d.bankroll; try{ localStorage.setItem('nfltd_bankroll',d.bankroll); }catch(e){} }
+      if(d.bankroll>0){ $('bankroll').value=d.bankroll; try{ localStorage.setItem('nfltd_bankroll',d.bankroll); }catch(e){} bankMt=Date.now(); lsSet('nfltd_bankmt', bankMt); }
       saveBets(); saveSlip(); renderBets(); renderSlip(); if(LAST) computeTopPlays();
       betFlash(`imported ${added} new bets${updated?`, updated ${updated}`:''}${legs?`, ${legs} slip legs`:''}`);
     }catch(e){ betFlash('that file isn\'t an export from this app'); } };
@@ -1911,7 +2073,7 @@ $('betExport').onclick=exportData;
 $('closeApply').onclick=applyClosingPaste;
 $('betImport').onclick=()=>$('betImportFile').click();
 $('betImportFile').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f) importData(f); e.target.value=''; };
-$('betClear').onclick=()=>{ if(bets.length && confirm('Clear all '+bets.length+' logged bets? This can\'t be undone.')){ bets=[]; saveBets(); renderBets(); } };
+$('betClear').onclick=()=>{ if(bets.length && confirm('Clear all '+bets.length+' logged bets?'+(SYNC.token?' This clears them on every synced PC too.':'')+' This can\'t be undone.')){ bets=[]; saveBets(); renderBets(); } };
 $('betBody').addEventListener('change', e=>{ const id=e.target.dataset.id; if(!id) return; const b=bets.find(x=>x.id===id); if(!b) return;
   if(e.target.classList.contains('betclose')){ b.closeOdds=e.target.value.trim(); delete b.closeEst; }
   else if(e.target.classList.contains('betres')) b.result=e.target.value;
@@ -1934,13 +2096,25 @@ document.querySelectorAll('.mktbtn[data-mkt]').forEach(b=>{
 });
 
 try{ $('bankroll').value=localStorage.getItem('nfltd_bankroll')||100; }catch(e){ $('bankroll').value=100; }
-$('bankroll').addEventListener('input',()=>{ try{ localStorage.setItem('nfltd_bankroll',$('bankroll').value); }catch(e){} if(LAST) computeTopPlays(); renderSlip(); });
+$('bankroll').addEventListener('input',()=>{ try{ localStorage.setItem('nfltd_bankroll',$('bankroll').value); }catch(e){} bankMt=Date.now(); lsSet('nfltd_bankmt', bankMt); syncSoon(); if(LAST) computeTopPlays(); renderSlip(); });
 $('simBtn').onclick=run;
 [['total','change'],['spread','change'],['favSel','change'],['outdoor','change'],['wind','change']].forEach(([id,ev])=> $(id).addEventListener(ev,maybeSim));
 loadSlip(); renderSlip();       // restore the cross-game slip from a previous visit
 loadBets(); renderBets();       // restore the bet log + CLV history
+betSnap=snapOf(bets, betKey); slipSnap=snapOf(slip, legKey); syncStatus();
+// sync wiring: pull on load, when the tab comes back, and every 90 s while visible
+$('syncBtn').onclick=()=>{ const b=$('syncBox'); b.style.display=b.style.display==='none'?'':'none'; syncStatus(); };
+$('syncConnect').onclick=()=>{ const t=$('syncToken').value.trim(); if(!t){ $('syncMsg').textContent='paste the token first'; return; }
+  SYNC={token:t}; saveSyncCfg(); $('syncToken').value=''; syncNow(); };
+$('syncNowBtn').onclick=()=>{ if(SYNC.token) syncNow(); else $('syncMsg').textContent='connect first'; };
+$('syncOff').onclick=()=>{ if(SYNC.token && confirm('Stop syncing on this PC? Your log stays here; the gist and other PCs are untouched.')){ SYNC={}; saveSyncCfg(); syncStatus(); } };
+const syncIfStale=()=>{ if(SYNC.token && document.visibilityState==='visible' && Date.now()-(SYNC.last||0)>20e3) syncNow(); };
+document.addEventListener('visibilitychange', syncIfStale); window.addEventListener('focus', syncIfStale);
+setInterval(()=>{ if(SYNC.token && document.visibilityState==='visible') syncNow(); }, 90e3);
+if(SYNC.token) syncNow();
 setLine(); run(); setWeather(); // auto-fill line, sim, then stadium + live weather
 refreshLive();                  // then overlay today's ESPN line + injury status
+refreshSlate();                 // and swap in the live slate (next week's once this week's games are final)
 })();
 </script>
 </body>
