@@ -59,10 +59,16 @@ See README.md for what the model does and how it was validated.
 - 2+ TD market (checked 2026-09-28 via BT_EXPERIMENTS): calibrated overall, but predictions ~24% landed ~18-19%.
   A top-end correction held in the touched set (x0.83-0.86 both halves) but flipped in the roster set, so the
   PROBABILITY is unchanged; confidence applies x0.8 to 2+ picks >=15% instead. Re-test with more seasons.
-- Only the card is a bet list. Table verdicts: card picks show "★ BET x.xu" (green row); other +EV rows show a neutral
-  "edge" badge whose hover says why (SKIPWHY). The user read every green TAKE as "bet it" and logged 13 bets / 22.6u on
-  one game. The card also counts PENDING bets already logged for the game (last 6 days) against 2 per team, 4% of
-  bankroll per team and one bet per player, so re-pasting or re-logging can't stack a game.
+- Only the card is a bet list. ONE rule, `pickPlays()`, picks a game's bets for BOTH Your card and the bet log's per-game
+  plan: conf-adjusted Kelly order, one per player, ≤ MAX_PER_TEAM per team, ≤ maxPerGame() (select, default 3) per game,
+  ¼ Kelly with a 4% team cap. The card's options = priced takes + PENDING logged bets for the game (a logged bet keeps
+  its rank in `rk`), so "log every edge, then ✂ Trim" and "paste everything, read the card" give the same answer.
+  Card picks show "★ BET x.xu"; other +EV rows a neutral "edge" badge with the reason on hover (SKIPWHY). Background:
+  the user read every green TAKE as "bet it" and logged 13 bets / 22.6u on one game.
+- Layout: one paste box (props detected by Over/Under; headerless prop boards → best-fitting stat, rush+rec must win by
+  1.5×, or the "Prop boards pasted without their header" select), prices kept per game in `nfltd_boards` (5 days),
+  "Every priced bet" table (renderBoard from CANDS), bet log grouped by game (details.gamegrp, open state in LOGOPEN).
+  The user once thought prop categories "reset" — they didn't; only one category was visible at a time.
 - The slip optimizer maximises Kelly log-growth over subsets (one leg per game, ≤6 legs, top 10 legs), never EV%.
   Don't count total/spread/weather in confidence — they already drive the probability.
 

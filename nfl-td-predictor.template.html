@@ -113,6 +113,20 @@
     .vs{display:none}
     .hidecol{display:none}
   }
+  /* sticky jump bar + section anchors */
+  .jump{position:sticky;top:0;z-index:30;display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;align-items:center;padding:8px 10px;margin:16px 0 0;background:rgba(12,16,23,.94);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+  .jump a{color:var(--ink2);text-decoration:none;font-size:13px;font-weight:700;padding:4px 10px;border-radius:8px;border:1px solid var(--line2);white-space:nowrap}
+  .jump a:hover{color:var(--ink);border-color:var(--accent)}
+  .jump::-webkit-scrollbar{display:none}
+  .jump .jgame{font-size:13px;margin-right:6px;white-space:nowrap}
+  h2[id], details[id]{scroll-margin-top:calc(var(--navh,52px) + 12px)}
+  th{top:var(--navh,0px)}
+  .chipx{background:none;border:none;color:var(--ink3);cursor:pointer;font-size:14px;padding:0 0 0 5px;line-height:1}
+  .chipx:hover{color:var(--bad)}
+  details.gamegrp{border:1px solid var(--line2);border-radius:10px;margin:0 0 10px;background:var(--panel2)}
+  details.gamegrp>summary{cursor:pointer;padding:9px 12px;font-size:14px}
+  details.gamegrp[open]>summary{border-bottom:1px solid var(--line2)}
+  .grpbody{padding:6px 10px 10px}
   footer{color:var(--ink3);font-size:12px;margin-top:30px;border-top:1px solid var(--line);padding-top:14px}
 </style>
 </head>
@@ -169,40 +183,89 @@
   </div>
 
   <div id="results" class="hidden">
-    <!-- TALE OF THE TAPE -->
-    <h2>Team scoring profile — tale of the tape</h2>
-    <div class="tott" id="tott"></div>
-    <div class="legend" id="tottNote" style="margin-top:8px"></div>
+    <!-- JUMP BAR: sticks to the top so any section is one click away -->
+    <nav class="jump" id="jumpNav">
+      <b class="jgame" id="jumpGame"></b>
+      <a href="#priceSec">⚡ Price</a>
+      <a href="#cardSec">🎯 Card</a>
+      <a href="#boardSec">📋 All bets</a>
+      <a href="#tdSec">🏈 TD table</a>
+      <a href="#propSec">📈 Props</a>
+      <a href="#dstSec">🛡 Defense</a>
+      <a href="#tottSec">📊 Teams &amp; QBs</a>
+      <a href="#slipSec">🧾 Slip</a>
+      <a href="#logSec">📓 Log</a>
+    </nav>
 
-    <!-- PLAYERS -->
-    <h2>Anytime touchdown scorers</h2>
+    <!-- PRICE THIS GAME: one paste box for every market -->
+    <h2 id="priceSec">Price this game</h2>
     <div class="panel" style="padding:12px;margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <div style="font-weight:700;font-size:13px">⚡ Paste book odds — fills every row at once</div>
+        <div style="font-weight:700;font-size:13px">⚡ Paste any board here — anytime / 1st / last / 2+ TD, receptions, receiving, rushing, rush + rec or passing yards. One market at a time; everything you paste stays, even if you switch games and come back.</div>
         <div style="display:flex;gap:8px">
           <button class="btn" id="applyOdds" style="padding:7px 16px;font-size:13px">Apply</button>
-          <button class="btn sec" id="clearOdds" style="padding:7px 14px;font-size:13px">Clear</button>
+          <button class="btn sec" id="clearOdds" style="padding:7px 14px;font-size:13px">Clear all</button>
         </div>
       </div>
-      <div class="mktrow">Pricing market:
+      <textarea id="oddsPaste" rows="3" spellcheck="false"
+        placeholder="Paste a FanDuel board (Ctrl+Enter applies). TD boards: name, then Anytime / 1st / Last on their own lines (Jahmyr Gibbs / -330 / +360 / +410), or one price per name for the market picked below. Prop boards: name, then O 64.5 / -114 / U 64.5 / -114 — with or without the market header."
+        style="width:100%;margin-top:9px;background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:10px;padding:10px;font-family:var(--mono);font-size:13px;resize:vertical"></textarea>
+      <div class="mktrow">One-price TD boards fill:
         <button class="mktbtn active" data-mkt="anytime">Anytime</button>
         <button class="mktbtn" data-mkt="first">1st TD</button>
         <button class="mktbtn" data-mkt="last">Last TD</button>
         <button class="mktbtn" data-mkt="two">2+ TD</button>
-        <span class="muted">— a stacked Anytime/1st/Last paste fills all three at once; one price per name fills the selected market</span>
+        <span class="muted">— stacked Anytime / 1st / Last blocks fill all three</span>
       </div>
-      <textarea id="oddsPaste" rows="3" spellcheck="false"
-        placeholder="Paste your board (FanDuel stacked blocks work). Name, then Anytime / 1st / Last on their own lines:&#10;Jahmyr Gibbs&#10;-330&#10;+360&#10;+410&#10;→ fills Anytime, 1st TD & Last TD together. One price per name fills the selected market (use that for the 2+ board)."
-        style="width:100%;margin-top:9px;background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:10px;padding:10px;font-family:var(--mono);font-size:13px;resize:vertical"></textarea>
+      <div class="mktrow" style="margin-top:6px">Prop boards pasted without their header (e.g. no "Receiving Yards" line) are:
+        <select id="propDefault" class="statussel" style="font-size:12px"><option value="auto">detected from the lines</option><option value="rec">Receptions</option><option value="recyd">Receiving yds</option><option value="ryd">Rushing yds</option><option value="rryd">Rush + rec yds</option><option value="pyd">Passing yds</option></select>
+        <span class="muted">— Over / Under boards are recognised as props automatically</span>
+      </div>
       <div id="oddsMsg" class="legend" style="margin-top:7px"></div>
+      <div id="pricedChips" class="mktrow"></div>
     </div>
+
+    <!-- YOUR CARD -->
+    <h2 id="cardSec">Your card</h2>
     <div class="note info" id="bestBet" style="margin:0 0 10px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <div style="font-weight:800;font-size:15px"><span class="star">🎯</span> Your card <span class="muted" style="font-weight:400;font-size:13px">— what to bet and how much, from the odds you entered</span></div>
-        <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px">Bankroll <input id="bankroll" type="number" min="1" step="10" style="width:90px;padding:4px 7px"> units</label>
+        <div style="font-weight:800;font-size:15px"><span class="star">🎯</span> The best plays from this game <span class="muted" style="font-weight:400;font-size:13px">— what to bet and how much</span></div>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+          <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px" title="the most bets the card (and the log's plan) will pick from one game">Max per game <select id="maxGame" class="statussel" style="font-size:12px"><option>1</option><option>2</option><option selected>3</option><option>4</option></select></label>
+          <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px">Bankroll <input id="bankroll" type="number" min="1" step="10" style="width:90px;padding:4px 7px"> units</label>
+        </div>
       </div>
       <div id="cardBody" style="margin-top:6px"></div>
     </div>
+
+    <!-- EVERY PRICED BET: TD + props + defenses in one list -->
+    <h2 id="boardSec">Every priced bet — this game</h2>
+    <div class="panel" style="padding:8px 8px 4px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:4px 6px 6px">
+        <span id="boardHead" class="muted" style="font-size:13px"></span>
+        <span style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <label class="muted" style="font-size:12px;display:flex;gap:5px;align-items:center"><input type="checkbox" id="boardPass"> show no-edge prices</label>
+          <button class="statussel" id="boardLogAll" style="padding:4px 10px;font-size:12px" title="log every bet with an edge — the log then marks the best ones (★ BET) and trims the rest in one click">📓 Log every edge</button>
+        </span>
+      </div>
+      <table id="boardTable">
+        <thead><tr>
+          <th class="l" style="cursor:default">Player</th>
+          <th class="l" style="cursor:default">Bet</th>
+          <th style="cursor:default">Odds</th>
+          <th style="cursor:default">Model</th>
+          <th class="hidecol" style="cursor:default">Fair</th>
+          <th style="cursor:default">EV</th>
+          <th style="cursor:default">Confidence</th>
+          <th style="cursor:default">Verdict</th>
+          <th style="cursor:default"></th>
+        </tr></thead>
+        <tbody id="boardBody"></tbody>
+      </table>
+    </div>
+
+    <!-- ALL PLAYERS: TD probabilities, statuses, hand-typed TD odds -->
+    <h2 id="tdSec">Anytime TD — every player</h2>
     <div class="panel" style="padding:8px 8px 4px">
       <table id="playerTable">
         <thead><tr>
@@ -230,38 +293,15 @@
       <span><span class="vbadge vb-flag">⚠ check</span> edge too big to trust — likely a missed injury/role, verify</span>
       <span><span class="vb-pass">pass</span> no value</span></div>
 
-    <!-- DEFENSE / ST -->
-    <h2>Defense TD</h2>
-    <div class="panel" style="padding:8px 8px 4px">
-      <table>
-        <thead><tr><th class="l">Unit</th><th title="expected defensive TDs this game (pick-6 / fumble return)">TD rate/gm</th><th>Anytime</th><th>1st TD</th><th>Last TD</th><th>Fair <span class="muted" id="dstFairMkt">(Anytime)</span></th><th class="l">Book</th><th>EV</th><th>Verdict</th></tr></thead>
-        <tbody id="dstBody"></tbody>
-      </table>
-    </div>
-    <div class="legend" id="dstNote">Pick-6 / fumble-return / kick-return TDs.</div>
-
-    <!-- PLAYER PROPS -->
-    <h2>Player props — receptions &amp; yards</h2>
-    <div class="panel" style="padding:12px;margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <div style="font-weight:700;font-size:13px">📈 Paste the book's over/unders — one market or a whole props page</div>
-        <div style="display:flex;gap:8px">
-          <button class="btn" id="applyProps" style="padding:7px 16px;font-size:13px">Apply</button>
-          <button class="btn sec" id="clearProps" style="padding:7px 14px;font-size:13px">Clear all</button>
-        </div>
-      </div>
-      <div class="mktrow" id="propTabs">Prop:
-        <button class="mktbtn propbtn active" data-stat="rec">Receptions</button>
-        <button class="mktbtn propbtn" data-stat="recyd">Rec yds</button>
-        <button class="mktbtn propbtn" data-stat="ryd">Rush yds</button>
-        <button class="mktbtn propbtn" data-stat="rryd">Rush + Rec</button>
-        <button class="mktbtn propbtn" data-stat="pyd">Pass yds</button>
-        <span class="muted">— headers in the paste ("Receiving Yards") pick the prop; with no header it fills the one selected here</span>
-      </div>
-      <textarea id="propPaste" rows="3" spellcheck="false"
-        placeholder="FanDuel format works. Name, then Over / Under with the line and the price:&#10;Drake London&#10;O 64.5&#10;-114&#10;U 64.5&#10;-114&#10;Ladder rungs (&quot;60+  +120&quot;) count as overs at 59.5."
-        style="width:100%;margin-top:9px;background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:10px;padding:10px;font-family:var(--mono);font-size:13px;resize:vertical"></textarea>
-      <div id="propMsg" class="legend" style="margin-top:7px"></div>
+    <!-- PLAYER PROPS: projections + hand entry -->
+    <h2 id="propSec">Player props — projections</h2>
+    <div class="mktrow" id="propTabs" style="margin:0 0 8px">Prop:
+      <button class="mktbtn propbtn active" data-stat="rec">Receptions</button>
+      <button class="mktbtn propbtn" data-stat="recyd">Rec yds</button>
+      <button class="mktbtn propbtn" data-stat="ryd">Rush yds</button>
+      <button class="mktbtn propbtn" data-stat="rryd">Rush + Rec</button>
+      <button class="mktbtn propbtn" data-stat="pyd">Pass yds</button>
+      <span class="muted">— paste prop boards in the box at the top; you can also type a line and prices here</span>
     </div>
     <div class="panel" style="padding:8px 8px 4px">
       <table id="propTable">
@@ -283,8 +323,25 @@
     </div>
     <div class="legend" id="propNote"></div>
 
+    <!-- DEFENSE -->
+    <h2 id="dstSec">Defense TD</h2>
+    <div class="panel" style="padding:8px 8px 4px">
+      <table>
+        <thead><tr><th class="l">Unit</th><th title="expected defensive TDs this game (pick-6 / fumble return)">TD rate/gm</th><th>Anytime</th><th>1st TD</th><th>Last TD</th><th>Fair <span class="muted" id="dstFairMkt">(Anytime)</span></th><th class="l">Book</th><th>EV</th><th>Verdict</th></tr></thead>
+        <tbody id="dstBody"></tbody>
+      </table>
+    </div>
+    <div class="legend" id="dstNote">Pick-6 / fumble-return / kick-return TDs.</div>
+
+    <!-- TEAMS & STARTING QBs (collapsed: context, not needed every time) -->
+    <details id="tottSec" class="panel" style="margin-top:30px;padding:12px 16px">
+      <summary style="cursor:pointer;font-size:13px;text-transform:uppercase;letter-spacing:.14em;color:var(--ink2);font-weight:800">Team profiles &amp; starting QBs <span id="tottSum" class="muted" style="text-transform:none;letter-spacing:0;font-weight:400;font-size:13px"></span></summary>
+      <div class="tott" id="tott"></div>
+      <div class="legend" id="tottNote" style="margin-top:8px"></div>
+    </details>
+
     <!-- PARLAY PICKER -->
-    <h2>Parlay picker</h2>
+    <h2 id="parlaySec">Parlay picker</h2>
     <div class="panel" id="parlayPanel" style="padding:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
         <div style="font-weight:700;font-size:13px">🎰 Same-game parlay candidates from your priced legs — ranked by conservative EV</div>
@@ -297,7 +354,7 @@
     </div>
 
     <!-- CROSS-GAME SLIP -->
-    <h2>Cross-game parlay slip</h2>
+    <h2 id="slipSec">Cross-game parlay slip</h2>
     <div class="panel" id="slipPanel" style="padding:14px">
       <div style="font-weight:700;font-size:13px;margin-bottom:6px">🧾 Add each game's top picks here (<b>➕ add these to slip</b> on Your card) — the slip keeps the best leg per game, scores each by <b>confidence</b>, and builds the parlay that <b>grows your bankroll fastest</b>. Different games are independent, so books pay full odds and the EV is real. The slip stays put when you switch games.</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
@@ -312,7 +369,7 @@
     </div>
 
     <!-- BET LOG & CLV -->
-    <h2>Bet log &amp; CLV</h2>
+    <h2 id="logSec">Bet log &amp; CLV</h2>
     <div class="panel" id="betPanel" style="padding:14px">
       <div style="font-weight:700;font-size:13px;margin-bottom:6px">📓 Log every bet — the sim's TD props <b>or your own player props</b> (yards, receptions, anything) — and track <b>CLV</b> (did you beat the closing line?) and <b>ROI</b>. This is the only honest read on whether the sim actually makes money — aim for 50–100 bets before trusting it.</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
@@ -687,14 +744,23 @@ function setLine(){
   if(el){ const fs=pk?'':(S.teams[game.fav]?(S.teams[game.fav].short||game.fav):game.fav);
     el.innerHTML=`📉 line: <b>${pk?'pick\'em':fs+' -'+Math.abs(game.spread)}</b> · O/U <b>${game.total}</b> <span class="muted">(auto — edit if it moved)</span>`; }
 }
-// switching teams invalidates any odds pasted for the previous game — wipe the
-// board (bookMap + paste box) so stale prices can't bleed into the new slate's
-// EV / parlays. run() (via setWeather) then rebuilds every input empty.
+// ---------- priced boards are kept PER GAME (and survive a reload for a few days), so switching games and
+// coming back never loses what you pasted ----------
+const BOARD_KEY='nfltd_boards';
+let BOARDS=(()=>{ try{ const b=JSON.parse(localStorage.getItem(BOARD_KEY)||'{}')||{}, old=Date.now()-5*86400e3;
+  for(const k of Object.keys(b)) if(!(b[k]&&b[k].t>old)) delete b[k]; return b; }catch(e){ return {}; } })();
+function saveBoard(){
+  if(!LAST) return; const g=LAST.away+'@'+LAST.home;
+  const has=Object.values(LAST.bookMap).some(v=>v&&String(v).trim()) || Object.values(LAST.propMap||{}).some(pm=>pm&&(pm.over||pm.under||(pm.alts||[]).length));
+  if(has) BOARDS[g]={t:Date.now(), book:LAST.bookMap, prop:LAST.propMap}; else delete BOARDS[g];
+  try{ localStorage.setItem(BOARD_KEY, JSON.stringify(BOARDS)); }catch(e){}
+}
+function boardChanged(){ clearTimeout(boardChanged.t); boardChanged.t=setTimeout(saveBoard, 300); renderPriced(); }
+// switching games: keep this game's prices, bring back the next game's (empty if it was never priced)
 function clearOddsBoard(){
-  if(LAST){ LAST.bookMap={}; LAST.propMap={}; }
+  if(LAST){ saveBoard(); const b=BOARDS[$('awaySel').value+'@'+$('homeSel').value]; LAST.bookMap=b?Object.assign({},b.book):{}; LAST.propMap=b?b.prop:{}; }
   sgpMap={};
   $('oddsPaste').value=''; $('oddsMsg').textContent='';
-  $('propPaste').value=''; $('propMsg').textContent='';
 }
 function onMatchupChange(){ clearOddsBoard(); refreshFav(); syncGameSel(); setLine(); setWeather(); refreshLive(); }
 $('awaySel').onchange=()=>{ userPicked=true; onMatchupChange(); };
@@ -855,8 +921,9 @@ function run(){
   // fresh roster copies; preserve the user's status + book-odds overrides across
   // re-sims via persistent maps keyed by player (survives status toggles etc.)
   const prevStatus = LAST ? LAST.statusMap : {};
-  const prevBook = LAST ? LAST.bookMap : {};
-  const prevProp = LAST ? LAST.propMap : {};   // player-prop lines/prices, keyed stat|player
+  const saved = LAST ? null : (BOARDS[away+'@'+home]||null);   // first sim of the visit: bring back this game's prices
+  const prevBook = LAST ? LAST.bookMap : ((saved&&saved.book)||{});
+  const prevProp = LAST ? LAST.propMap : ((saved&&saved.prop)||{});   // player-prop lines/prices, keyed stat|player
   // matchup multiplier: boost/cut a player's scoring weight by how many TDs the
   // opposing defense allows to that player's position vs league average (dampened).
   function posMF(pos, oppDef){
@@ -896,8 +963,9 @@ function run(){
   awayR.concat(homeR).forEach(p=>{ LAST.statusMap[p._key]=p._status; });
 
   $('impliedNote').textContent = `Implied points — ${S.teams[away].short}: ${imp.away.toFixed(1)}, ${S.teams[home].short}: ${imp.home.toFixed(1)}  ·  exp. off. TDs ${awayExp.expOff.toFixed(2)} / ${homeExp.expOff.toFixed(2)}`;
-  $('results').classList.remove('hidden');
+  $('results').classList.remove('hidden'); setNavH();
   renderTott(); renderProps(); renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder(); refreshBetForm();
+  renderPriced(); gameHeader();
 }
 function maybeSim(){ if(LAST) run(); }
 // several async updates (forecast, live line, injuries) can land together; batch them into one sim
@@ -987,7 +1055,7 @@ function renderPlayers(){
   });
   // wire book odds inputs — persist to bookMap (per market) so odds survive re-sims/switches
   body.querySelectorAll('.bookin').forEach(inp=>{
-    inp.oninput=e=>{ if(LAST) LAST.bookMap[bkey(e.target.dataset.key)]=e.target.value; computeEV(); refreshSlipAdder(); parlaysSoon(); };
+    inp.oninput=e=>{ if(LAST) LAST.bookMap[bkey(e.target.dataset.key)]=e.target.value; computeEV(); refreshSlipAdder(); parlaysSoon(); boardChanged(); };
   });
   // header sort
   document.querySelectorAll('#playerTable th[data-k]').forEach(th=>{
@@ -1055,15 +1123,64 @@ function getBankroll(){ const v=+$('bankroll').value; return v>0?v:100; }
 let CARD=[];   // current picks, for the table stars and the "log this card" button
 let SKIPWHY=new Map();   // key|market -> why a +EV bet isn't on the card (hover text on "edge" badges)
 function evExplainer(){
-  return `<div class="muted" style="margin-top:9px;font-size:12px;border-top:1px solid var(--line);padding-top:8px;line-height:1.5">`+
-    `<b>Only the card is a bet list.</b> Pasting more boards doesn't mean more bets: the card re-picks the strongest ≤${MAX_PER_TEAM} per team across everything you've priced (TD and player props together, one per player) and counts bets already in your log for this game. `+
+  return `<details style="margin-top:9px"><summary class="muted" style="cursor:pointer;font-size:12px">How the card picks ›</summary><div class="muted" style="margin-top:6px;font-size:12px;line-height:1.5">`+
+    `<b>Only the card is a bet list.</b> It picks the best ${maxPerGame()} bets in this game (${MAX_PER_TEAM} per team, one per player) from everything you've priced <i>and</i> everything already in your log for this game — so you can log every edge as you go and let the card, or the log's ✂ Trim, tell you which to keep. `+
     `<b>How the card is built.</b> Ranked by <b>Kelly</b> — the edge relative to the price, edge ÷ (1 − book's implied %) — not by EV%. EV% grows with the payout, so it always pushes the longest shots to the top even when their edge is thin noise. `+
     `Each pick has a <b>confidence</b> score (hover it): how much of the model's edge to believe, from role reliability in the backtest, history, injury status, market type and how far it sits from the book. Stakes are <b>¼ Kelly on the confidence-adjusted edge</b>, with at most <b>${MAX_PER_TEAM} plays per team</b> and <b>${TEAM_CAP*100}%</b> of bankroll per team, since same-team scorers win and lose together. `+
     `Probabilities are <b>role-calibrated</b>: rotational players (35–60% snaps) are scaled ×${ROLE_CAL.rot||1} and QBs ×${ROLE_CAL.qb||1}, because the backtest found the raw sim over-rates them (the fix improved accuracy on held-out games). `+
     `<span class="vbadge vb-dart">🎲 dart</span> = too rare or no history to price; <span class="vbadge vb-flag">⚠ check</span> = edge too big to trust (usually a missed injury or role change). `+
     `<b>Player props</b> you price below join the card with their own confidence (history, role change, status, wind, gap to the market) and count toward the same per-player and per-team limits. `+
-    `<b>Reality check:</b> the model tracks the market about as well as the market prices itself — these are leads, sized small. Log them and let CLV tell you whether it works.</div>`;
+    `<b>Reality check:</b> the model tracks the market about as well as the market prices itself — these are leads, sized small. Log them and let CLV tell you whether it works.</div></details>`;
 }
+// ---------- one rule picks a game's bets — used by Your card AND by the bet log's per-game plan ----------
+// Best first by confidence-adjusted Kelly; one bet per player (anytime / 2+ / his yards all ride on the same game
+// from him); at most MAX_PER_TEAM per team (same-team bets win and lose together) and maxPerGame() per game;
+// stakes 1/4 Kelly with each team's total capped at TEAM_CAP of bankroll.
+function maxPerGame(){ const v=+(($('maxGame')||{}).value); return v>0?v:3; }
+function teamOfKey(k){ k=String(k||''); return k.startsWith('DST|')?k.slice(4):k.split('|')[0]; }
+function pickPlays(cands){
+  const bank=getBankroll(), maxG=maxPerGame(), skipped=[], picks=[], byPlayer=new Map(), perTeam={};
+  for(const c of cands.slice().sort((a,b)=>b.rk-a.rk)){
+    const nm=(S.teams[c.abbr]||{short:c.abbr}).short;
+    if(!(c.rk>0)){ skipped.push({c, why:'no edge at this price any more'}); continue; }
+    if(byPlayer.has(c.key)){ skipped.push({c, why:`his ${mktLabel(byPlayer.get(c.key).market)} is the better bet`}); continue; }
+    if((perTeam[c.abbr]||0)>=MAX_PER_TEAM){ skipped.push({c, why:`3rd+ bet on ${nm} — same-team bets win and lose together`}); continue; }
+    if(picks.length>=maxG){ skipped.push({c, why:`not in this game's best ${maxG}`}); continue; }
+    const stake=KELLY_FRAC*c.rk*bank;
+    if(stake<MIN_STAKE*bank){ skipped.push({c, why:'edge too thin to size'}); continue; }
+    c.stake=stake; c.capped=false; picks.push(c); byPlayer.set(c.key,c); perTeam[c.abbr]=(perTeam[c.abbr]||0)+1;
+  }
+  for(const t of Object.keys(perTeam)){ const L=picks.filter(c=>c.abbr===t), tot=L.reduce((a,c)=>a+c.stake,0), cap=TEAM_CAP*bank;
+    if(tot>cap) L.forEach(c=>{ c.stake*=cap/tot; c.capped=true; }); }
+  picks.forEach(c=>c.stake=Math.round(c.stake*10)/10);
+  picks.sort((a,b)=>b.stake-a.stake);
+  return {picks, skipped};
+}
+// open bets in the log for one game that the model priced (custom props can't be ranked)
+function pendingFor(game){ return bets.filter(b=>b.game===game && b.result==='pending' && b.key && b.market!=='custom' && b.modelProb!=null); }
+// a logged bet's rank was saved when it was logged; older entries fall back to Kelly from the price x 0.7
+function betRank(b){ if(typeof b.rk==='number') return b.rk; const d=oddsDec(b.odds), p=b.modelProb; if(!d||p==null) return 0; return 0.7*Math.max(0,(p*d-1)/(d-1)); }
+function planFor(game){ const L=pendingFor(game); if(!L.length) return null;
+  return pickPlays(L.map(b=>({key:b.key, label:b.player, abbr:teamOfKey(b.key), market:b.market, odds:b.odds, mp:b.modelProb, rk:betRank(b), bet:b}))); }
+function sugStake(c){ return Math.max(0.1, Math.round(KELLY_FRAC*(c.kelly||c.rk||0)*getBankroll()*10)/10); }
+// the one place a priced bet is written into the log (keeps its rank so the log can pick the best later)
+function logBetFrom(c, stake){
+  const game=curGameId();
+  if(bets.some(b=>b.game===game && b.key===c.key && b.market===c.market && b.result==='pending')) return false;
+  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), game, key:c.key, player:c.label, market:c.market, odds:c.odds,
+    modelProb:+(+c.mp).toFixed(4), rk:+(c.kelly!=null?c.kelly:(c.rk||0)).toFixed(5), cf:c.conf?c.conf.score:null, ...(c.prop?{pmu:+c.prop.mu.toFixed(3)}:{}),
+    stake:+(+stake).toFixed(1), closeOdds:'', result:'pending'});
+  return true;
+}
+// drop the bets the plan cut, and set the kept ones to the plan's stakes
+function trimLog(picks, cutBets, label){
+  if(!cutBets.length) return;
+  if(!confirm(`Remove ${cutBets.length} bet${cutBets.length>1?'s':''} from your log for ${label} and keep the best ${picks.length} at the suggested stakes?`)) return;
+  const cut=new Set(cutBets.map(b=>b.id));
+  picks.forEach(c=>{ if(c.bet) c.bet.stake=c.stake; });
+  bets=bets.filter(b=>!cut.has(b.id)); saveBets(); renderBets();
+}
+let CANDS=[], BOARDROWS=[];
 function computeTopPlays(){
   const el=$('cardBody'); if(!LAST||!el) return;
   const bank=getBankroll(), cand=[];
@@ -1077,82 +1194,94 @@ function computeTopPlays(){
     for(const m of ['anytime','first','last']){ const odds=LAST.bookMap[m+'|DST|'+abbr]; if(!odds) continue;
       add({key:'DST|'+abbr, label:S.teams[abbr].short+' Defense', abbr, market:m, odds, mp:d[m], mpRaw:d[m], prior:false, role:'defense (pick-6 / fumble return)', cal:1, ref:{dst:true}}); }
   for(const c of propCandidates()){ const e=propEval(c); if(e) cand.push(e); }   // player props (own confidence + verdict rules)
-  if(!cand.length){ CARD=[]; el.innerHTML=`<div class="muted">Paste a board (or type prices in the table) — TD props or player props below — and this turns it into a short list: which bets, in what order, and how many units each.</div>`+evExplainer(); markCardRows(); if(PM) propCompute(); return; }
+  CANDS=cand;
 
-  const skipped=[];
-  // bets already in your log for THIS game count against the limits, so pasting more boards (or logging the
-  // card twice) can't stack a game past MAX_PER_TEAM bets / TEAM_CAP of bankroll per team
-  const game=curGameId(), recent=Date.now()-6*86400e3;
-  const logged=bets.filter(b=>b.game===game && b.result==='pending' && b.key && new Date(b.ts).getTime()>recent);
-  const loggedKeys=new Set(logged.map(b=>b.key)), have={};
-  for(const b of logged){ const k=String(b.key), t=k.startsWith('DST|')?k.slice(4):k.split('|')[0]; const h=have[t]||(have[t]={n:0,u:0}); h.n++; h.u+=+b.stake||0; }
-  // one bet per player (his best-Kelly one): anytime / 2+ / his yards all ride on the same game from him
-  const best=new Map();
-  for(const c of cand.filter(c=>c.tier==='take').sort((a,b)=>b.kelly-a.kelly)){
-    if(loggedKeys.has(c.key)){ skipped.push({c, why:'you already have a bet on him in your log'}); continue; }
-    if(best.has(c.key)){ skipped.push({c, why:`his ${mktLabel(best.get(c.key).market)} is the better bet`}); continue; }
-    best.set(c.key,c);
+  // this game's options = every price you pasted + whatever is already in your log for it — the same rule
+  // then picks the best, so logging as you go and pasting everything first end in the same answer
+  const game=curGameId(), logged=pendingFor(game), now=new Map(cand.map(c=>[c.key+'|'+c.market,c]));
+  const opts=cand.filter(c=>c.tier==='take').map(c=>Object.assign({}, c, {rk:c.kelly, bet:logged.find(b=>b.key===c.key&&b.market===c.market)||null}));
+  for(const b of logged){
+    if(opts.some(o=>o.key===b.key&&o.market===b.market)) continue;
+    const c=now.get(b.key+'|'+b.market);   // priced now but not a take any more (price moved, or flagged) -> no edge
+    opts.push(Object.assign({}, c||{key:b.key, label:b.player, abbr:teamOfKey(b.key), market:b.market, odds:b.odds, mp:b.modelProb,
+      conf:{score:b.cf||0.7, label:(b.cf||0.7)>=0.7?'High':'Medium', parts:[]}, role:'from your log'}, {rk:c?0:betRank(b), bet:b}));
   }
-  let picks=[...best.values()];
-  picks.forEach(c=>c.stake=KELLY_FRAC*c.kelly*bank);
-  picks=picks.filter(c=>{ if(c.stake<MIN_STAKE*bank){ skipped.push({c, why:'edge too thin to size'}); return false; } return true; });
-  // correlation: best MAX_PER_TEAM plays per team (minus ones already logged), then cap that team's total stake
-  const byTeam={}; picks.sort((a,b)=>b.kelly-a.kelly).forEach(c=>(byTeam[c.abbr]=byTeam[c.abbr]||[]).push(c));
-  picks=[];
-  for(const [t,list] of Object.entries(byTeam)){
-    const h=have[t]||{n:0,u:0}, slots=Math.max(0,MAX_PER_TEAM-h.n), cap=Math.max(0,TEAM_CAP*bank-h.u), nm=S.teams[t].short;
-    list.slice(slots).forEach(c=>skipped.push({c, why: h.n ? `${nm} already has ${h.n} bet${h.n>1?'s':''} in your log (max ${MAX_PER_TEAM} per team)` : `3rd+ play on ${nm} — same-team bets win and lose together`}));
-    const keep=list.slice(0,slots), tot=keep.reduce((a,c)=>a+c.stake,0);
-    if(tot>cap) keep.forEach(c=>{ c.stake*=cap/tot; c.capped=true; });
-    keep.forEach(c=>{ if(c.stake<MIN_STAKE*bank) skipped.push({c, why:`${nm}'s budget (${TEAM_CAP*100}% of bankroll) is used up by bets in your log`}); else picks.push(c); });
-  }
-  picks.forEach(c=>c.stake=Math.round(c.stake*10)/10);
-  picks.sort((a,b)=>b.stake-a.stake);
+  const {picks, skipped}=pickPlays(opts);
   CARD=picks;
-  // worth-explaining non-picks: calibration removed the edge, lottery darts, too-good flags
-  for(const c of cand){ if(picks.includes(c)||skipped.some(s=>s.c===c)) continue;
+  // worth-explaining non-picks (hover text on "edge" badges): too-good flags, lottery darts, calibration
+  for(const c of cand){ if(opts.some(o=>o.key===c.key&&o.market===c.market)) continue;
     if(c.tier==='flag') skipped.push({c, why:'edge too big to trust — check injury/role'});
     else if(c.tier==='dart' && c.ev>0) skipped.push({c, why:'lottery — too rare to price'});
     else if(c.tier==='pass' && c.cal<1){ const rr=evalBet(c.mpRaw,c.odds); if(rr && tierOf(c.mpRaw,rr.edge,rr.ev,c.prior)==='take') skipped.push({c, why:`edge gone after role calibration (${c.role.split(' (')[0]})`}); }
   }
   SKIPWHY=new Map(); for(const x of skipped){ const k=x.c.key+'|'+x.c.market; if(!SKIPWHY.has(k)) SKIPWHY.set(k, x.why); }
+  const cutLogged=skipped.filter(s=>s.c.bet).map(s=>s.c.bet), unlogged=picks.filter(c=>!c.bet);
 
-  const u=v=>(Math.round(v*10)/10).toFixed(1)+'u';
+  const u=v=>(Math.round(v*10)/10).toFixed(1)+'u', maxG=maxPerGame(), nEdge=opts.filter(o=>o.rk>0).length;
   let html='';
-  if(logged.length){
-    const parts=Object.entries(have).map(([t,h])=>`${S.teams[t]?S.teams[t].short:t} ${h.n} · ${u(h.u)}${(h.n>MAX_PER_TEAM||h.u>TEAM_CAP*bank+0.05)?' <b style="color:var(--warn)">over the limit</b>':''}`);
-    html+=`<div style="font-size:13px;margin:2px 0 6px">📓 <b>Already in your log for this game:</b> ${logged.length} bet${logged.length>1?'s':''} — ${parts.join(' · ')}. <span class="muted">They count toward the limits (${MAX_PER_TEAM} bets and ${TEAM_CAP*100}% of bankroll per team, one bet per player), so the card only adds what still fits.</span></div>`;
-  }
-  if(picks.length){
-    html+=`<div style="font-size:13px;margin:2px 0 2px"><b>Bet ${picks.length===1?'this one':'these '+picks.length}</b> <span class="muted">— and only ${picks.length===1?'it':'these'}. Rows marked <span class="vbadge vb-edge">edge</span> beat the fair price but didn't make the card (hover one to see why).</span></div>`;
+  if(!cand.length && !logged.length){
+    html=`<div class="muted">Paste a board above (or type prices in the tables) — TD odds or player props — and this picks the best ${maxG} bets in the game and sizes them.</div>`;
+  } else if(picks.length){
+    html+=`<div style="font-size:13px;margin:0 0 4px"><b>Bet ${picks.length===1?'this one':'these '+picks.length}</b> <span class="muted">— the best ${picks.length===1?'':picks.length+' '}of the ${nEdge} bet${nEdge===1?'':'s'} with an edge in this game (max ${maxG} per game, ${MAX_PER_TEAM} per team, one per player). Everything else with an edge shows <span class="vbadge vb-edge">edge</span> — skip it.</span></div>`;
     html+='<div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">';
-    picks.forEach((c,i)=>{ html+=`<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">`+
+    picks.forEach((c,i)=>{ const bimp=c.bimp!=null?c.bimp:1/(oddsDec(c.odds)||2), edge=c.mp-bimp;
+      const inLog=c.bet?` <span class="muted" style="font-size:12px" title="already in your bet log">✓ in log${Math.abs((+c.bet.stake||0)-c.stake)>0.05?` at ${c.bet.stake}u`:''}</span>`:'';
+      html+=`<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">`+
       `<span class="${i===0?'star':'muted'}" style="min-width:20px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
       `<b style="color:${teamText(c.abbr)};min-width:160px">${esc(c.label)}</b>`+
-      `<span style="min-width:120px">${mktLabel(c.market)} <span class="odds">${c.odds}</span></span>`+
-      `<span class="vbadge vb-take" style="font-size:12px">bet ${u(c.stake)}</span> ${confBadge(c.conf)}`+
-      `<span class="muted" style="font-size:12px">model ${pct(c.mp)} vs book ${pct(c.bimp)} · edge +${(c.edge*100).toFixed(1)} pts · ${c.role}${c.cal<1?` · calibrated ×${c.cal.toFixed(2)}`:''}${c.capped?' · scaled to team cap':''}</span></div>`; });
+      `<span style="min-width:150px">${mktLabel(c.market)} <span class="odds">${esc(c.odds)}</span></span>`+
+      `<span class="vbadge vb-take" style="font-size:12px">bet ${u(c.stake)}</span> ${confBadge(c.conf)}${inLog}`+
+      `<span class="muted" style="font-size:12px">model ${pct(c.mp)} vs book ${pct(bimp)} · edge ${edge>=0?'+':''}${(edge*100).toFixed(1)} pts${c.role?' · '+c.role:''}${c.cal&&c.cal<1?` · calibrated ×${c.cal.toFixed(2)}`:''}${c.capped?' · scaled to team cap':''}</span></div>`; });
     html+='</div>';
-    const teams={}, cnt={}; picks.forEach(c=>{ teams[c.abbr]=(teams[c.abbr]||0)+c.stake; cnt[c.abbr]=(cnt[c.abbr]||0)+1; });
+    const teams={}; picks.forEach(c=>{ teams[c.abbr]=(teams[c.abbr]||0)+c.stake; });
     const tot=picks.reduce((a,c)=>a+c.stake,0);
     html+=`<div class="muted" style="margin-top:8px;font-size:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">`+
-      `<span>Total <b>${u(tot)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll) · ${Object.entries(teams).map(([t,v])=>`${S.teams[t].short} ${u(v)}`).join(' · ')}`+
-      `${Object.values(cnt).some(n=>n>1)?' · same-team plays win and lose together':''}</span>`+
-      `<button class="statussel" id="cardToSlip" style="padding:3px 11px" title="send every pick above to the cross-game slip — do this for each game, then let the slip pick the parlay">➕ add these to slip</button>`+
-      `<button class="statussel" id="logCard" style="padding:3px 11px">📓 log this card</button></div>`;
+      `<span>Total <b>${u(tot)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll) · ${Object.entries(teams).map(([t,v])=>`${S.teams[t].short} ${u(v)}`).join(' · ')}</span>`+
+      (unlogged.length?`<button class="statussel" id="logCard" style="padding:3px 11px">📓 log ${unlogged.length===picks.length?'these':'the '+unlogged.length+' not logged yet'}</button>`:`<span>✓ all in your log</span>`)+
+      `<button class="statussel" id="cardToSlip" style="padding:3px 11px" title="send these picks to the cross-game slip — do this for each game, then let the slip pick the parlay">➕ add to slip</button></div>`;
   } else {
-    html+= logged.length && skipped.length
-      ? `<div style="margin-top:4px"><b>Nothing more to add for this game.</b> The bets already in your log use up its limits — anything else with an edge is marked <span class="vbadge vb-edge">edge</span> (hover for why).</div>`
-      : `<div style="margin-top:4px"><b>No bets on this card.</b> Nothing you've priced clears the bar after calibration and sizing — the normal case, since the market is efficient on most props. (If everything's a pass, sanity-check the total/spread up top.)</div>`;
+    html+=`<div style="margin-top:4px"><b>No bets on this card.</b> Nothing you've priced clears the bar after calibration and sizing — the normal case, since the market is efficient on most props. (If everything's a pass, sanity-check the total/spread up top.)</div>`;
   }
-  if(skipped.length){ const seen=new Set();
-    html+=`<div class="muted" style="margin-top:7px;font-size:12px;line-height:1.55"><b>Skipped:</b> `+
-      skipped.filter(s=>{ const k=s.c.key+'|'+s.c.market; if(seen.has(k)) return false; seen.add(k); return true; }).slice(0,8)
-      .map(s=>`${esc(s.c.label)} ${mktLabel(s.c.market)} <span class="odds">${s.c.odds}</span> — ${s.why}`).join(' · ')+'</div>'; }
+  if(cutLogged.length){
+    html+=`<div style="margin-top:9px;font-size:13px;padding:8px 11px;border:1px dashed var(--warn);border-radius:9px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">`+
+      `<span>✂ <b>${cutLogged.length} bet${cutLogged.length>1?'s':''} in your log didn't make the cut:</b> ${cutLogged.slice(0,6).map(b=>`${esc(b.player)} ${mktLabel(b.market)}`).join(' · ')}${cutLogged.length>6?' …':''}</span>`+
+      `<button class="statussel" id="trimCard" style="padding:4px 11px;font-size:12px">✂ Trim the log to this card</button></div>`;
+  }
+  const other=skipped.filter(s=>!s.c.bet);
+  if(other.length){ const seen=new Set();
+    html+=`<div class="muted" style="margin-top:7px;font-size:12px;line-height:1.55"><b>Left off:</b> `+
+      other.filter(s=>{ const k=s.c.key+'|'+s.c.market; if(seen.has(k)) return false; seen.add(k); return true; }).slice(0,8)
+      .map(s=>`${esc(s.c.label)} ${mktLabel(s.c.market)} <span class="odds">${esc(s.c.odds)}</span> — ${s.why}`).join(' · ')+(other.length>8?' · <a href="#boardSec">see all</a>':'')+'</div>'; }
   el.innerHTML=html+evExplainer();
   const lc=$('logCard'); if(lc) lc.onclick=logCard;
   const cs=$('cardToSlip'); if(cs) cs.onclick=cardToSlip;
-  markCardRows(); if(PM&&$('propBody').children.length) propCompute();   // star card picks in the props table too
+  const tc=$('trimCard'); if(tc) tc.onclick=()=>trimLog(picks, cutLogged, fmtGame(game));
+  markCardRows(); if(PM&&$('propBody').children.length) propCompute();   // same ★ BET / edge marks in the props table
+  renderBoard();
+}
+// every priced bet in this game, TD and props together: the card's picks first, then the other edges
+function renderBoard(){
+  const body=$('boardBody'); if(!body||!LAST) return;
+  const logged=new Set(pendingFor(curGameId()).map(b=>b.key+'|'+b.market));
+  const pickOf=c=>CARD.find(p=>p.key===c.key&&p.market===c.market);
+  const grp=c=>pickOf(c)?0:c.tier==='take'?1:(c.tier==='flag'||c.tier==='dart')?2:3;
+  const all=CANDS.slice().sort((a,b)=>grp(a)-grp(b)||(b.kelly-a.kelly)||(b.ev-a.ev));
+  const showPass=$('boardPass').checked, nPass=all.filter(c=>grp(c)===3).length, nEdge=all.filter(c=>c.tier==='take').length;
+  BOARDROWS=all.filter(c=>showPass||grp(c)<3);
+  $('boardHead').innerHTML=all.length?`<b>${all.length}</b> priced · <b>${nEdge}</b> with an edge · <b>${CARD.length}</b> on your card${!showPass&&nPass?` · ${nPass} with no edge hidden`:''}`:'';
+  if(!BOARDROWS.length){ body.innerHTML=`<tr><td class="l muted" colspan="9">${all.length?'No prices with an edge — tick “show no-edge prices” to see them.':'Nothing priced for this game yet — paste a board above.'}</td></tr>`; return; }
+  body.innerHTML=BOARDROWS.map((c,i)=>{ const pick=pickOf(c), p=c.ref&&!c.ref.dst?c.ref:null, k=c.key+'|'+c.market, isLogged=logged.has(k);
+    const verdict = pick ? betBadge(pick) : ({take:edgeBadge(k), flag:'<span class="vbadge vb-flag">⚠ check</span>', dart:'<span class="vbadge vb-dart">🎲 dart</span>', pass:'<span class="vb-pass">pass</span>'}[c.tier]||'');
+    return `<tr class="${pick?'rowtake oncard':''}">`+
+      `<td class="l"><div class="plname"><span class="accent" style="background:${teamColor(c.abbr)}"></span>${logo(c.abbr)?`<img src="${logo(c.abbr)}">`:''}<span>${esc(c.label)}</span>${p?`<span class="pos">${p.pos}</span>`:''}${p&&p._status&&p._status!=='ACT'?`<span class="pos" style="color:var(--warn)">${p._status}</span>`:''}</div></td>`+
+      `<td class="l">${mktLabel(c.market)}</td>`+
+      `<td class="odds">${esc(c.odds)}</td>`+
+      `<td>${pct(c.mp)}</td>`+
+      `<td class="odds hidecol">${probToAmerican(c.mp)}</td>`+
+      `<td class="${c.ev>0&&c.tier==='take'?'ev-pos':c.ev>0?'ev-dart':'ev-neg'}">${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}%</td>`+
+      `<td>${confBadge(c.conf)}</td>`+
+      `<td class="verdict">${verdict}${isLogged?' <span class="muted" style="font-size:11px" title="already in your bet log">✓ logged</span>':''}</td>`+
+      `<td style="white-space:nowrap"><button class="statussel" data-act="log" data-i="${i}" title="log this bet" style="padding:1px 7px" ${isLogged?'disabled':''}>📓</button> <button class="statussel" data-act="slip" data-i="${i}" title="add to the cross-game slip" style="padding:1px 7px">➕</button></td></tr>`; }).join('');
 }
 // star the card's picks in the table so both views agree
 const betBadge=c=>`<span class="vbadge vb-take" title="${esc('On Your card: bet '+mktLabel(c.market)+' '+c.odds+' for '+c.stake.toFixed(1)+'u')}">★ BET ${c.stake.toFixed(1)}u</span>`;
@@ -1174,12 +1303,10 @@ function cardToSlip(){
     if(addLeg({key:c.key, name:c.label, abbr:c.abbr, mp:c.mp, odds:c.odds, ref, conf:c.conf}, c.market)) n++; }
   const b=$('cardToSlip'); if(b) b.textContent=n?`✓ added ${n} to slip`:'already in slip';
 }
-// one click: every card pick goes into the bet log with its stake (skips ones already logged)
+// one click: the card's picks that aren't in the log yet go in at the card's stakes
 function logCard(){
-  if(!CARD.length) return; const game=curGameId(); let n=0;
-  for(const c of CARD){ if(bets.some(b=>b.game===game&&b.key===c.key&&b.market===c.market&&b.odds===c.odds&&b.result==='pending')) continue;
-    bets.unshift({id:Date.now()+'_'+n+'_'+Math.round(Math.random()*99999), ts:new Date().toISOString(), game, key:c.key, player:c.label, market:c.market, odds:c.odds, modelProb:+c.mp.toFixed(4), ...(c.prop?{pmu:+c.prop.mu.toFixed(3)}:{}), stake:c.stake, closeOdds:'', result:'pending'}); n++; }
-  saveBets(); renderBets(); const b=$('logCard'); if(b) b.textContent=n?`✓ logged ${n}`:'already logged';
+  let n=0; for(const c of CARD) if(!c.bet && logBetFrom(c, c.stake)) n++;
+  if(n){ saveBets(); renderBets(); }
 }
 
 // ---------- parlay picker: rank multi-leg parlays by EV using the sim's TRUE
@@ -1314,15 +1441,16 @@ function fmtGame(g){ const [a,h]=String(g).split('@'); const sh=x=>S.teams[x]?(S
 function priceableLegs(market){
   if(!LAST) return [];
   if(market==='props') return propCandidates().map(propEval).filter(Boolean)
-    .map(e=>({key:e.key, name:e.label, abbr:e.abbr, mp:e.mp, odds:e.odds, ev:e.ev, ref:e.ref, conf:e.conf, market:e.market, rank:e.edge>0?e.kelly:e.ev-1})).sort((a,b)=>b.rank-a.rank);
+    .map(e=>({key:e.key, name:e.label, abbr:e.abbr, mp:e.mp, odds:e.odds, ev:e.ev, ref:e.ref, conf:e.conf, market:e.market, take:e.tier==='take', rank:e.edge>0?e.kelly:e.ev-1})).sort((a,b)=>(b.take-a.take)||(b.rank-a.rank));
   const out=[]; const add=(bookKey,key,name,abbr,mp,ref)=>{ if(mp==null) return; const o=LAST.bookMap[bookKey]; if(!o) return; const r=evalBet(mp,o); if(!r) return;
-    const conf=confFor(ref,market,r); out.push({key,name,abbr,mp,odds:o,ev:r.ev,ref,conf,rank:r.edge>0?conf.score*r.edge/(1-r.bimp):r.ev-1}); };
+    const conf=confFor(ref,market,r), take=tierOf(mp,r.edge,r.ev,!!(ref&&!ref.dst&&!ref.matched))==='take';
+    out.push({key,name,abbr,mp,odds:o,ev:r.ev,ref,conf,take,rank:r.edge>0?conf.score*r.edge/(1-r.bimp):r.ev-1}); };
   LAST.awayR.concat(LAST.homeR).forEach(p=>{ if(p._status==='OUT') return; add(market+'|'+p._key, p._key, p.name, p._abbr, p[market], p); });
   if(market!=='two'){ // defenses have no 2+ market
     add(market+'|DST|'+LAST.away, 'DST|'+LAST.away, S.teams[LAST.away].short+' Defense', LAST.away, LAST.dst.dstAway[market], {dst:true});
     add(market+'|DST|'+LAST.home, 'DST|'+LAST.home, S.teams[LAST.home].short+' Defense', LAST.home, LAST.dst.dstHome[market], {dst:true});
   }
-  return out.sort((a,b)=>b.rank-a.rank);
+  return out.sort((a,b)=>(b.take-a.take)||(b.rank-a.rank));   // real edges first: a ⚠ / 🎲 price never leads "Best pick"
 }
 function slipHas(game,key,market){ return slip.some(l=>l.game===game&&l.key===key&&l.market===market); }
 // the game context a leg was priced in (shown on the slip — it already shaped the probability)
@@ -1436,6 +1564,8 @@ function renderSlip(){
 // player props), enter the closing line later, and it tracks CLV (did you beat the close — the
 // leading indicator of a real edge) + settled ROI. Persists via localStorage. ----
 let bets=[]; let betOptCache=[];
+let PLANS=new Map();          // game -> {picks, skipped}: the log's ★ BET / cut plan per open game
+const LOGOPEN=new Map();      // which game sections you opened/closed (kept across re-renders)
 function loadBets(){ try{ const s=localStorage.getItem('nfltd_bets'); if(s) bets=JSON.parse(s)||[]; }catch(e){ bets=[]; } if(!Array.isArray(bets)) bets=[]; }
 function saveBets(){ stampChanges(bets, betSnap, betKey, TOMB.bets); betSnap=snapOf(bets, betKey); saveTomb(); try{ localStorage.setItem('nfltd_bets', JSON.stringify(bets)); }catch(e){} syncSoon(); if(LAST) computeTopPlays(); }
 
@@ -1547,7 +1677,9 @@ function addBet(){
   // a custom prop can be from any game — don't stamp it with whichever matchup happens to be open
   if(custom){ const c=$('betCustom').value.trim(); if(!c){ betFlash('describe the prop first'); return; } player=c; market='custom'; game=''; }
   else { player=o.name; key=o.key; market=mkt; mp = o.p ? o.p[mkt] : (o.dst ? o.dst[mkt] : null); }
-  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*9999), ts:new Date().toISOString(), game, key, player, market, odds, modelProb:(mp!=null?+mp.toFixed(4):null), stake, closeOdds:'', result:'pending'});
+  let rk=null, cf=null;   // rank for the log's plan (confidence-adjusted Kelly), like bets logged from the card
+  if(mp!=null){ const r=evalBet(mp, odds); if(r){ const cn=confFor(o.p||{dst:true}, market, r); cf=cn.score; rk=r.edge>0?+(cn.score*r.edge/(1-r.bimp)).toFixed(5):0; } }
+  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*9999), ts:new Date().toISOString(), game, key, player, market, odds, modelProb:(mp!=null?+mp.toFixed(4):null), rk, cf, stake, closeOdds:'', result:'pending'});
   saveBets(); $('betOdds').value=''; $('betCustom').value=''; renderBets(); betFlash('logged ✓');
 }
 // Fill Close from a pasted board: matches your OPEN bets (pending, or logged in the last 2 days without a
@@ -1650,22 +1782,41 @@ function renderBets(){
       `<b>Scoreboard</b> <span class="muted">(${cal.length} settled bets the sim priced)</span> — your prices needed <b>${be.toFixed(1)}</b> hits to break even · the model expected <b>${calExp.toFixed(1)}</b> · you got <b>${calHit}</b>, ${verdict} (${lo}–${hi}).`+
       (need?` <span class="muted">At this edge it takes about <b>${need}</b> settled bets before results alone can tell skill from luck (${Math.min(100,Math.round(cal.length/need*100))}% of the way) — ${clvN?'CLV below gets there much sooner.':'fill the <b>Close</b> column (paste the closing board above) — CLV tells you far sooner.'}</span>`:' <span class="muted">The model isn\'t claiming an edge on these prices.</span>')+`</div>`;
   }
-  html+='<div style="overflow-x:auto"><table style="margin-top:0"><thead><tr>'+
-    ['Bet','Odds','Model','Close','CLV','Stake','Result','P/L',''].map((h,i)=>`<th class="${i===0?'l':''}" style="cursor:default;position:static">${h}</th>`).join('')+'</tr></thead><tbody>';
-  drows.forEach(({b,dec,clv,pl})=>{
-    const gm = b.game?`<span class="muted" style="font-size:11px">${fmtGame(b.game)}</span> `:'';
-    html+=`<tr><td class="l">${gm}<b>${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)}</span></td>`+
-      `<td class="odds">${b.odds}</td>`+
-      `<td>${b.modelProb!=null?pct(b.modelProb):'—'}</td>`+
-      `<td style="white-space:nowrap"><input class="bookin betclose" data-id="${b.id}" value="${(b.closeOdds||'').replace(/"/g,'&quot;')}" placeholder="close" style="width:70px">${b.closeEst?`<span class="muted" title="the line moved — closed ${esc(b.closeEst)}; this is the equivalent price at your line (model-based estimate)"> ≈</span>`:''}</td>`+
-      `<td class="${clv!=null?g(clv):''}">${clv==null?'—':sgn((clv*100).toFixed(1))+'%'}</td>`+
-      `<td>${b.stake}u</td>`+
-      `<td><select class="statussel betres" data-id="${b.id}">${['pending','win','loss','push'].map(s=>`<option ${s===b.result?'selected':''}>${s}</option>`).join('')}</select></td>`+
-      `<td class="${pl!=null?g(pl):''}">${pl==null?'—':sgn(pl.toFixed(2))}</td>`+
-      `<td><button class="statussel betdel" data-id="${b.id}" style="padding:0 7px;color:var(--warn)">✕</button></td></tr>`;
-  });
-  html+='</tbody></table></div>'+
-    `<div class="muted" style="margin-top:8px;font-size:12px;line-height:1.5"><b>CLV</b> = how much better your price was than the closing line (dec you / dec close − 1). It's the leading indicator: beat the close consistently and profit follows; it shows up long before ROI does through the variance. <b>Model</b> is the sim's probability at log time (blank for props the sim doesn't cover). Fill <b>Close</b> after the line settles. A <b>≈</b> close means a prop's line moved before kickoff — it's the equivalent price at your line, estimated from the model's own distribution.</div>`;
+  // one section per game: games with open bets first (soonest kickoff), then settled ones (newest first).
+  // Open games get a plan from the same rule as Your card — ★ BET the best ones, cut the rest (one click trims).
+  const groups=new Map(); drows.forEach(d=>{ const k=d.b.game||''; if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(d); });
+  const kick=gm=>{ const s=(S.schedule||[]).find(x=>x.away+'@'+x.home===gm); return s?new Date(s.kickoff).getTime():null; };
+  const G=[...groups.entries()].map(([gm,rows])=>({gm, rows, pend:rows.filter(r=>r.b.result==='pending').length, last:Math.max(...rows.map(r=>Date.parse(r.b.ts)||0))}))
+    .sort((x,y)=>((y.pend>0)-(x.pend>0)) || (x.pend&&y.pend ? ((kick(x.gm)||x.last)-(kick(y.gm)||y.last)) : (y.last-x.last)));
+  const head=['Bet','Plan','Odds','Model','Close','CLV','Stake','Result','P/L',''].map((h,i)=>`<th class="${i<2?'l':''}" style="cursor:default;position:static">${h}</th>`).join('');
+  PLANS=new Map();
+  for(const grp of G){
+    const plan=grp.gm?planFor(grp.gm):null, planOf=new Map();
+    if(plan){ plan.picks.forEach(c=>planOf.set(c.bet.id,{keep:true, stake:c.stake})); plan.skipped.forEach(s=>planOf.set(s.c.bet.id,{keep:false, why:s.why})); PLANS.set(grp.gm, plan); }
+    const gw=grp.rows.filter(r=>r.b.result==='win').length, gl=grp.rows.filter(r=>r.b.result==='loss').length, gnet=grp.rows.reduce((a,r)=>a+(r.pl||0),0), cuts=plan?plan.skipped.length:0;
+    const open=LOGOPEN.has(grp.gm)?LOGOPEN.get(grp.gm):grp.pend>0;
+    html+=`<details class="gamegrp" data-g="${esc(grp.gm)}"${open?' open':''}><summary><b>${grp.gm?fmtGame(grp.gm):'Other / custom props'}</b> <span class="muted">· ${grp.rows.length} bet${grp.rows.length>1?'s':''}${grp.pend?` · ${grp.pend} open`:''}${gw+gl?` · ${gw}-${gl}`:''}</span>`+
+      `${gw+gl?` <b class="${g(gnet)}">${sgn(gnet.toFixed(2))}u</b>`:''}${plan?` · <b class="ev-pos">bet ${plan.picks.length}</b>${cuts?` · <span style="color:var(--warn);font-weight:700">cut ${cuts}</span>`:''}`:''}</summary><div class="grpbody">`;
+    if(cuts) html+=`<div style="font-size:13px;margin:2px 0 8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>Bet the <b>${plan.picks.length}</b> marked <span class="vbadge vb-take">★ BET</span> — the best in this game (max ${maxPerGame()} per game, ${MAX_PER_TEAM} per team, one per player) — and drop the other ${cuts}.</span>`+
+      `<button class="statussel trimbtn" data-g="${esc(grp.gm)}" style="padding:4px 11px;font-size:12px">✂ Trim to the best ${plan.picks.length}</button></div>`;
+    html+=`<div style="overflow-x:auto"><table style="margin-top:0"><thead><tr>${head}</tr></thead><tbody>`;
+    grp.rows.forEach(({b,dec,clv,pl})=>{ const P=planOf.get(b.id);
+      const planCell = b.result!=='pending' ? '' : !P ? '<span class="muted" title="no model price, so it isn\'t part of the plan">—</span>'
+        : P.keep ? `<span class="vbadge vb-take" title="bet this${Math.abs((+b.stake||0)-P.stake)>0.05?' — suggested stake '+P.stake.toFixed(1)+'u':''}">★ BET ${P.stake.toFixed(1)}u</span>`
+        : `<span class="vbadge vb-edge" title="${esc(P.why)}">cut</span>`;
+      html+=`<tr${P&&P.keep?' class="rowtake"':''}><td class="l"><b>${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)}</span></td><td class="l">${planCell}</td>`+
+        `<td class="odds">${esc(b.odds)}</td>`+
+        `<td>${b.modelProb!=null?pct(b.modelProb):'—'}</td>`+
+        `<td style="white-space:nowrap"><input class="bookin betclose" data-id="${b.id}" value="${(b.closeOdds||'').replace(/"/g,'&quot;')}" placeholder="close" style="width:70px">${b.closeEst?`<span class="muted" title="the line moved — closed ${esc(b.closeEst)}; this is the equivalent price at your line (model-based estimate)"> ≈</span>`:''}</td>`+
+        `<td class="${clv!=null?g(clv):''}">${clv==null?'—':sgn((clv*100).toFixed(1))+'%'}</td>`+
+        `<td>${b.stake}u</td>`+
+        `<td><select class="statussel betres" data-id="${b.id}">${['pending','win','loss','push'].map(s=>`<option ${s===b.result?'selected':''}>${s}</option>`).join('')}</select></td>`+
+        `<td class="${pl!=null?g(pl):''}">${pl==null?'—':sgn(pl.toFixed(2))}</td>`+
+        `<td><button class="statussel betdel" data-id="${b.id}" style="padding:0 7px;color:var(--warn)">✕</button></td></tr>`;
+    });
+    html+='</tbody></table></div></div></details>';
+  }
+  html+=`<div class="muted" style="margin-top:8px;font-size:12px;line-height:1.5"><b>Plan</b>: for games with open bets, the same rule as Your card marks the best ones <b>★ BET</b> (with the suggested stake) and the rest <b>cut</b> — so you can log every edge as you go, then hit <b>✂ Trim</b>. <b>CLV</b> = how much better your price was than the closing line (dec you / dec close − 1). It's the leading indicator: beat the close consistently and profit follows; it shows up long before ROI does through the variance. <b>Model</b> is the sim's probability at log time (blank for props the sim doesn't cover). Fill <b>Close</b> after the line settles. A <b>≈</b> close means a prop's line moved before kickoff — it's the equivalent price at your line, estimated from the model's own distribution.</div>`;
   body.innerHTML=html;
 }
 
@@ -1796,22 +1947,26 @@ function parsePropBoard(text, defStat){
 }
 // a paste with no header uses the selected prop — unless the line is implausible for it (a yards board
 // pasted on the Receptions tab), in which case the stat whose model line fits best is used
-function propStatFor(e, p){
-  if(e.hdr||!p) return e.stat;
-  const fit=s=>{ const mu=propMu(p,s); if(mu==null) return Infinity; return Math.abs(Math.log(e.line/Math.max(0.5,propMedian(mu,s)))); };
-  if(fit(e.stat)<=Math.log(3)) return e.stat;
-  const best=PSTAT.map(s=>[s,fit(s)]).sort((a,b)=>a[1]-b[1])[0];
-  return best&&best[1]<=Math.log(3) ? best[0] : e.stat;
+// a headerless prop board is ONE market: pick the stat whose model lines fit all of its lines best
+function detectPropStat(entries, idx){
+  const rows=entries.map(e=>({e, p:matchPlayer(e.name, idx)})).filter(x=>x.p);
+  if(!rows.length) return null;
+  const order=[PROP_STAT,'rec','recyd','ryd','pyd','rryd'].filter((s,i,a)=>PSTAT.includes(s)&&a.indexOf(s)===i);
+  let best=null;
+  for(const s of order){ let tot=0;
+    for(const {e,p} of rows){ const mu=propMu(p,s); tot+= mu==null ? Math.log(10) : Math.min(Math.log(10), Math.abs(Math.log(e.line/Math.max(0.5,propMedian(mu,s))))); }
+    const sc=tot/rows.length+(s==='rryd'?Math.log(1.5):0); if(!best||sc<best.sc-1e-9) best={s, sc}; }
+  return best&&best.sc<=Math.log(2.5)?best.s:null;
 }
-function applyPastedProps(){
-  if(!LAST||!PM) return;
-  const E=parsePropBoard($('propPaste').value, PROP_STAT);
-  if(!E.length){ $('propMsg').innerHTML='<span style="color:var(--warn)">Nothing to read — paste a player name, then Over / Under lines with prices.</span>'; return; }
-  const idx=buildPlayerIndex(), fmt=v=>(v>0?'+':'')+v, unmatched=new Set(), touched=new Set(), auto=new Set(); let filled=0, unsupported=0;
+// fill LAST.propMap from parsed prop entries (from the one paste box); returns how many prices were read
+function applyPropEntries(E){
+  const idx=buildPlayerIndex(), fmt=v=>(v>0?'+':'')+v, unmatched=new Set(), touched=new Set(); let filled=0, unsupported=0, unknown=0;
+  const forced=($('propDefault')||{}).value, blind=E.filter(e=>e.stat==='*');
+  const detected=!blind.length?null:(forced&&forced!=='auto')?forced:detectPropStat(blind, idx);
   for(const e of E){
-    if(!e.stat){ unsupported++; continue; }
+    const s=e.stat==='*'?detected:e.stat;
+    if(!s){ if(e.stat==='*') unknown++; else unsupported++; continue; }
     const p=matchPlayer(e.name, idx); if(!p){ unmatched.add(e.name); continue; }
-    const s=propStatFor(e,p); if(s!==e.stat) auto.add(PROP_SHORT[s]);
     const k=s+'|'+p._key, cur=LAST.propMap[k]||(LAST.propMap[k]={line:null, over:'', under:'', alts:[]});
     if(e.alt){ cur.alts=cur.alts.filter(a=>a.line!==e.line); cur.alts.push({line:e.line, odds:fmt(e.odds)}); cur.alts.sort((a,b)=>a.line-b.line); }
     else { if(cur.line!==e.line){ cur.line=e.line; cur.over=''; cur.under=''; } cur[e.side==='O'?'over':'under']=fmt(e.odds); }
@@ -1819,10 +1974,12 @@ function applyPastedProps(){
   }
   if(touched.size && !touched.has(PROP_STAT)) setPropStat([...touched][0]);
   renderProps(); computeTopPlays(); refreshSlipAdder();
-  $('propMsg').innerHTML=`Read <b>${filled}</b> price${filled===1?'':'s'}${touched.size?` for <b>${[...touched].map(s=>PROP_SHORT[s]).join(', ')}</b>`:''}.`+
-    (auto.size?` <span style="color:var(--warn)">No header, and the lines didn't fit the selected prop — read as ${[...auto].join(', ')}.</span>`:'')+
-    (unsupported?` <span class="muted">${unsupported} price${unsupported===1?'':'s'} skipped from markets the model doesn't price (TDs, attempts, longest…).</span>`:'')+
+  $('oddsMsg').innerHTML=(filled?`Read <b>${filled}</b> prop price${filled===1?'':'s'} for <b>${[...touched].map(s=>PROP_SHORT[s]).join(', ')}</b>.`:'<span style="color:var(--warn)">No prop prices read.</span>')+
+    (detected&&blind.length&&filled&&!(forced&&forced!=='auto')?` <span class="muted">No market header in the paste, so it was read as <b>${PROP_SHORT[detected]}</b> (the lines fit that best). Wrong? × its chip, pick the market in "Prop boards pasted without their header", and paste again.</span>`:'')+
+    (unknown?` <span style="color:var(--warn)">Couldn't tell which prop ${unknown} price${unknown===1?' was':'s were'} for — paste with the market header (e.g. "Rushing Yards").</span>`:'')+
+    (unsupported?` <span class="muted">${unsupported} price${unsupported===1?'':'s'} skipped from markets the model doesn't price (pass TDs, attempts, longest…).</span>`:'')+
     (unmatched.size?` <span style="color:var(--warn)">Couldn't match:</span> ${[...unmatched].slice(0,10).map(u=>`<code>${esc(u)}</code>`).join(' · ')}`:filled?' ✓':'');
+  return filled;
 }
 function setPropStat(s){ PROP_STAT=s; document.querySelectorAll('.propbtn').forEach(b=>b.classList.toggle('active', b.dataset.stat===s)); }
 function renderProps(){
@@ -1854,7 +2011,7 @@ function renderProps(){
   body.querySelectorAll('.propin').forEach(inp=>{ inp.oninput=e=>{ const t=e.target, k=s+'|'+t.dataset.key;
     const cur=LAST.propMap[k]||(LAST.propMap[k]={line:null, over:'', under:'', alts:[]});
     if(t.dataset.f==='line'){ const n=parseFloat(t.value); cur.line=isFinite(n)&&n>=0?n:null; } else cur[t.dataset.f]=t.value.trim();
-    propCompute(); computeTopPlays(); refreshSlipAdder(); }; });
+    propCompute(); computeTopPlays(); refreshSlipAdder(); boardChanged(); }; });
   propCompute(); propNote();
 }
 // fill the computed cells (keeps the inputs, so typing never loses focus)
@@ -1875,13 +2032,11 @@ function propCompute(){
     C('.pbest').innerHTML=`${b.prop.side==='O'?'Over':'Under'}${b.prop.alt||b.prop.line!==L?` ${b.prop.line} <span class="muted" style="font-size:11px">(${pct(b.mp)})</span>`:''} <b class="${b.ev>0&&b.tier==='take'?'ev-pos':'ev-neg'}">${b.ev>=0?'+':''}${(b.ev*100).toFixed(1)}%</b>`;
     const onCard=CARD.find(c=>c.key===p._key && isPropMkt(c.market) && c.market.split('|')[1]===s);
     C('.pverdict').innerHTML=(onCard?betBadge(onCard):({pass:'<span class="vb-pass">pass</span>', flag:'<span class="vbadge vb-flag">⚠ check</span>', take:edgeBadge(p._key+'|'+b.market)}[b.tier]))+' '+confBadge(b.conf)+
-      ` <button class="statussel propslip" style="padding:0 6px;font-size:11px" title="add ${esc(mktLabel(b.market))} to the cross-game slip">➕</button><button class="statussel proplog" style="padding:0 6px;font-size:11px" title="log ${esc(mktLabel(b.market))} ${esc(b.odds)} in the bet log (stake from the log's stake box, else 1u)">📓</button>`;
+      ` <button class="statussel propslip" style="padding:0 6px;font-size:11px" title="add ${esc(mktLabel(b.market))} to the cross-game slip">➕</button><button class="statussel proplog" style="padding:0 6px;font-size:11px" title="log ${esc(mktLabel(b.market))} ${esc(b.odds)} in the bet log">📓</button>`;
     tr.classList.toggle('rowtake', !!onCard); tr.classList.toggle('oncard', !!onCard);
     C('.propslip').onclick=()=>{ const ok=addLeg({key:b.key, name:b.label, abbr:b.abbr, mp:b.mp, odds:b.odds, ref:p, conf:b.conf}, b.market); C('.propslip').textContent=ok?'✓':'in slip'; };
-    C('.proplog').onclick=()=>{ const game=curGameId(), stake=Math.abs(parseFloat($('betStake').value))||1;
-      if(bets.some(x=>x.game===game&&x.key===b.key&&x.market===b.market&&x.odds===b.odds&&x.result==='pending')){ C('.proplog').textContent='logged'; return; }
-      bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*99999), ts:new Date().toISOString(), game, key:b.key, player:b.label, market:b.market, odds:b.odds, modelProb:+b.mp.toFixed(4), pmu:+b.prop.mu.toFixed(3), stake, closeOdds:'', result:'pending'});
-      saveBets(); renderBets(); C('.proplog').textContent='✓'; };
+    C('.proplog').onclick=()=>{ const pick=CARD.find(c=>c.key===b.key&&c.market===b.market);
+      if(logBetFrom(b, pick?pick.stake:sugStake(b))){ saveBets(); renderBets(); } else C('.proplog').textContent='logged'; };
   });
 }
 function propNote(){
@@ -1894,9 +2049,6 @@ function propNote(){
     `Passing TDs aren't offered: they didn't beat a plain season average clearly on both halves. `+
     `<b>Honest limit:</b> this proves the projection is accurate and calibrated, not that it beats the book's line — props are among the sharper markets. Log what you bet; CLV will say.`;
 }
-$('applyProps').onclick=applyPastedProps;
-$('clearProps').onclick=()=>{ if(LAST) LAST.propMap={}; $('propPaste').value=''; $('propMsg').textContent=''; if(LAST){ renderProps(); computeTopPlays(); refreshSlipAdder(); } };
-$('propPaste').addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); applyPastedProps(); }});
 document.querySelectorAll('.propbtn').forEach(b=>{ b.onclick=()=>{ setPropStat(b.dataset.stat); if(LAST) renderProps(); }; });
 
 const dstKey=(abbr)=>MARKET+'|DST|'+abbr;   // D/ST book odds, per market
@@ -1924,7 +2076,7 @@ function renderDST(){
     body.appendChild(tr);
   });
   body.querySelectorAll('.bookin.dst').forEach(inp=>{
-    inp.oninput=e=>{ if(LAST) LAST.bookMap[dstKey(e.target.dataset.abbr)]=e.target.value; computeDstEV(); refreshSlipAdder(); parlaysSoon(); };
+    inp.oninput=e=>{ if(LAST) LAST.bookMap[dstKey(e.target.dataset.abbr)]=e.target.value; computeDstEV(); refreshSlipAdder(); parlaysSoon(); boardChanged(); };
   });
   computeDstEV();
 }
@@ -2052,7 +2204,11 @@ function matchPlayer(raw,idx){
 function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function applyPastedOdds(){
   if(!LAST){ return; }
-  const parsed=parseOddsBlock($('oddsPaste').value||'');
+  const txt=$('oddsPaste').value||'';
+  // Over / Under boards (and ladder rungs) are player props; anything else is a TD board
+  const E=PM?parsePropBoard(txt,'*'):[];
+  if(E.length){ if(applyPropEntries(E)>0){ $('oddsPaste').value=''; boardChanged(); } return; }
+  const parsed=parseOddsBlock(txt);
   if(!parsed.length){ $('oddsMsg').innerHTML='<span style="color:var(--warn)">Nothing to read — paste a player name then a price on each line.</span>'; return; }
   const idx=buildPlayerIndex();
   const used=new Set(); let filled=0; const unmatched=[]; const touched=new Set();
@@ -2075,17 +2231,50 @@ function applyPastedOdds(){
     unmatched.push(raw||name);
   }
   renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder();   // rebuild inputs from bookMap + recompute EV + parlays + slip adder
+  if(filled){ $('oddsPaste').value=''; boardChanged(); }
   const lbl=['anytime','first','last','two'].filter(m=>touched.has(m)).map(m=>MKT[m].label).join(', ');
   $('oddsMsg').innerHTML=`Filled <b>${filled}</b> ${filled===1?'player':'players'}${lbl?` across <b>${lbl}</b>`:''}.`+
     (unmatched.length?` <span style="color:var(--warn)">Couldn't match:</span> ${unmatched.slice(0,12).map(u=>`<code>${esc(u)}</code>`).join(' · ')}${unmatched.length>12?' …':''}`:' ✓');
 }
 function clearAllOdds(){
-  // clear odds for the market currently being priced (players + D/ST), keep other markets
-  if(LAST){ Object.keys(LAST.bookMap).forEach(k=>{ if(k.startsWith(MARKET+'|')) delete LAST.bookMap[k]; }); renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder(); }
+  const has=LAST && (Object.values(LAST.bookMap).some(v=>v&&String(v).trim()) || Object.keys(LAST.propMap||{}).length);
+  if(has && !confirm('Clear every price you pasted for this game (TD odds and props)?')) return;
+  if(LAST){ LAST.bookMap={}; LAST.propMap={}; renderPlayers(); renderDST(); renderProps(); computeParlays(); refreshSlipAdder(); boardChanged(); }
   $('oddsPaste').value=''; $('oddsMsg').textContent='';
+}
+// what's priced for this game, per market — the × on a chip clears that market
+function renderPriced(){
+  const el=$('pricedChips'); if(!el||!LAST) return;
+  const n={}; for(const [k,v] of Object.entries(LAST.bookMap)) if(v&&String(v).trim()){ const m=k.split('|')[0]; n[m]=(n[m]||0)+1; }
+  const pn={}; for(const [k,pm] of Object.entries(LAST.propMap||{})) if(pm&&(pm.over||pm.under||(pm.alts||[]).length)){ const s=k.split('|')[0]; pn[s]=(pn[s]||0)+1; }
+  const chip=(id,label,c)=>`<span class="pill">${label} <b>${c}</b><button class="chipx" data-c="${id}" title="clear the ${label} prices for this game">×</button></span>`;
+  const chips=[...['anytime','first','last','two'].filter(m=>n[m]).map(m=>chip('td:'+m, MKT[m].label, n[m])), ...PSTAT.filter(s=>pn[s]).map(s=>chip('p:'+s, PROP_SHORT[s], pn[s]))];
+  el.innerHTML = chips.length ? '<span>Priced for this game:</span> '+chips.join(' ') : '<span class="muted">Nothing priced for this game yet.</span>';
+}
+// game label in the jump bar + starting QBs in the collapsed team-profile header
+function gameHeader(){
+  if(!LAST) return; const {away,home,imp}=LAST, g=(S.schedule||[]).find(x=>x.away===away&&x.home===home);
+  $('jumpGame').textContent=`${S.teams[away].short} @ ${S.teams[home].short}${g?' · '+fmtKick(g.kickoff):''}`;
+  const qb=a=>{ const id=String(starterQBId(a, q=>LAST.statusMap[a+'|'+q.id]||q.status||'ACT')); const q=(S.rosters[a]||[]).find(x=>String(x.id)===id); return q?q.name:'—'; };
+  $('tottSum').textContent=`— starting ${qb(away)} vs ${qb(home)} · implied ${imp.away.toFixed(1)} – ${imp.home.toFixed(1)}`;
 }
 $('applyOdds').onclick=applyPastedOdds;
 $('clearOdds').onclick=clearAllOdds;
+$('pricedChips').addEventListener('click', e=>{ const b=e.target.closest('.chipx'); if(!b||!LAST) return; const [kind,m]=b.dataset.c.split(':');
+  if(kind==='td') Object.keys(LAST.bookMap).forEach(k=>{ if(k.startsWith(m+'|')) delete LAST.bookMap[k]; });
+  else Object.keys(LAST.propMap).forEach(k=>{ if(k.startsWith(m+'|')) delete LAST.propMap[k]; });
+  renderPlayers(); renderDST(); renderProps(); computeParlays(); refreshSlipAdder(); boardChanged(); });
+$('boardPass').onchange=renderBoard;
+$('boardBody').addEventListener('click', e=>{ const b=e.target.closest('button[data-act]'); if(!b) return; const c=BOARDROWS[+b.dataset.i]; if(!c) return;
+  if(b.dataset.act==='log'){ const pick=CARD.find(p=>p.key===c.key&&p.market===c.market); if(logBetFrom(c, pick?pick.stake:sugStake(c))){ saveBets(); renderBets(); } }
+  else { const ok=addLeg({key:c.key, name:c.label, abbr:c.abbr, mp:c.mp, odds:c.odds, ref:c.ref||{dst:true}, conf:c.conf}, c.market); b.textContent=ok?'✓':'in slip'; } });
+$('boardLogAll').onclick=()=>{ if(!LAST) return; let n=0;
+  for(const c of CANDS) if(c.tier==='take'){ const pick=CARD.find(p=>p.key===c.key&&p.market===c.market); if(logBetFrom(c, pick?pick.stake:sugStake(c))) n++; }
+  if(n){ saveBets(); renderBets(); }
+  const btn=$('boardLogAll'); btn.textContent=n?`✓ logged ${n} — see the plan in the log`:'nothing new to log'; setTimeout(()=>{ btn.textContent='📓 Log every edge'; },3000); };
+// sticky jump bar: keep table headers and anchors clear of it
+function setNavH(){ const n=$('jumpNav'); if(n) document.documentElement.style.setProperty('--navh', n.offsetHeight+'px'); }
+window.addEventListener('resize', setNavH);
 $('findParlays').onclick=computeParlays;
 $('parlayLegs').onchange=computeParlays;
 // cross-game slip wiring
@@ -2107,6 +2296,8 @@ $('betBody').addEventListener('change', e=>{ const id=e.target.dataset.id; if(!i
   if(e.target.classList.contains('betclose')){ b.closeOdds=e.target.value.trim(); delete b.closeEst; }
   else if(e.target.classList.contains('betres')) b.result=e.target.value;
   saveBets(); renderBets(); });
+$('betBody').addEventListener('click', e=>{ const t=e.target.closest('.trimbtn'); if(!t) return; const gm=t.dataset.g, plan=PLANS.get(gm); if(plan) trimLog(plan.picks, plan.skipped.map(x=>x.c.bet), fmtGame(gm)); });
+$('betBody').addEventListener('toggle', e=>{ const d=e.target; if(d&&d.classList&&d.classList.contains('gamegrp')) LOGOPEN.set(d.dataset.g, d.open); }, true);
 $('betBody').addEventListener('click', e=>{ const d=e.target.closest('.betdel'); if(!d) return; bets=bets.filter(x=>x.id!==d.dataset.id); saveBets(); renderBets(); });
 $('oddsPaste').addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); applyPastedOdds(); }});
 // pricing-market switch: re-point Fair/Book/EV/Verdict + sort at the chosen market
@@ -2125,7 +2316,9 @@ document.querySelectorAll('.mktbtn[data-mkt]').forEach(b=>{
 });
 
 try{ $('bankroll').value=localStorage.getItem('nfltd_bankroll')||100; }catch(e){ $('bankroll').value=100; }
-$('bankroll').addEventListener('input',()=>{ try{ localStorage.setItem('nfltd_bankroll',$('bankroll').value); }catch(e){} bankMt=Date.now(); lsSet('nfltd_bankmt', bankMt); syncSoon(); if(LAST) computeTopPlays(); renderSlip(); });
+$('bankroll').addEventListener('input',()=>{ try{ localStorage.setItem('nfltd_bankroll',$('bankroll').value); }catch(e){} bankMt=Date.now(); lsSet('nfltd_bankmt', bankMt); syncSoon(); if(LAST) computeTopPlays(); renderSlip(); renderBets(); });
+try{ const v=localStorage.getItem('nfltd_maxgame'); if(v) $('maxGame').value=v; }catch(e){}
+$('maxGame').onchange=()=>{ try{ localStorage.setItem('nfltd_maxgame',$('maxGame').value); }catch(e){} if(LAST) computeTopPlays(); renderBets(); };
 $('simBtn').onclick=run;
 [['total','change'],['spread','change'],['favSel','change'],['outdoor','change'],['wind','change']].forEach(([id,ev])=> $(id).addEventListener(ev,maybeSim));
 loadSlip(); renderSlip();       // restore the cross-game slip from a previous visit

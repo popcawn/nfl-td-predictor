@@ -35,10 +35,19 @@ silently to the baked snapshot when not.
 - **Weather** — domes and roofed stadiums are indoor (a curated roof table wins over ESPN's venue flag); outdoor
   games pull the [Open-Meteo](https://open-meteo.com) forecast at kickoff: condition (clear / cloudy / rain /
   snow / storm), temperature and wind.
-- **Your card** — the answer to "what do I bet?". Right under the paste box: a short list of bets in order, each with a
-  stake in units of your bankroll, plus why everything else was skipped. Ranked by **Kelly** (edge relative to the price),
-  not EV% — EV% always floats the longest shots to the top. ¼-Kelly stakes, at most 2 plays and 4% of bankroll per team
-  (same-team scorers win and lose together). One click logs the whole card to the bet log. Card picks get a ★ in the table.
+- **Layout** — a sticky jump bar (Price · Card · All bets · TD table · Props · Defense · Teams & QBs · Slip · Log) keeps
+  every section one click away. Top to bottom: price the game → Your card → every priced bet → the full tables.
+- **Price this game** — ONE paste box for every market: TD boards (stacked Anytime / 1st / Last, or one price per name
+  for the market picked under the box) and player-prop boards (Over / Under lines, detected automatically). Paste one
+  market at a time; chips show what's priced (× clears one market). Prices are kept **per game** — switch games and
+  come back, or reload, and they're still there (for a few days).
+- **Your card** — the answer to "what do I bet?": the best plays in the game (**Max per game**, default 3; at most 2 per
+  team and one per player), ranked by confidence-adjusted **Kelly** (edge relative to the price, not EV%), ¼-Kelly
+  stakes with 4% of bankroll per team. It looks at everything you've priced **and** everything already in your log for
+  the game, so you can log every edge as you go and it (or the log) tells you which to keep. Only card picks read
+  **★ BET** in the tables; other +EV rows read **edge** (hover for why they didn't make it).
+- **Every priced bet** — TD and prop prices together in one list: card picks first, then the other edges (no-edge
+  prices hidden unless you tick the box), each with 📓 log / ➕ slip buttons and a "📓 Log every edge" button.
 - **Four priceable markets** — the Anytime / 1st TD / Last TD / 2+ TD toggle re-points Fair / Book / Edge /
   EV / Verdict; each market remembers its own odds.
 - **Paste the board** into the ⚡ box (Ctrl/Cmd+Enter). FanDuel-style stacked blocks fill three markets at once:
@@ -50,7 +59,7 @@ silently to the baked snapshot when not.
   ```
   One price per name (`Josh Allen +150`) fills the selected market — use that for the separate 2+ TD board.
   Names are fuzzy-matched (abbreviations, suffixes, `Bills D/ST`); unicode minus, fractional, decimal and
-  `EVEN` prices are understood; anything unmatched is listed back. Switching games clears the board.
+  `EVEN` prices are understood; anything unmatched is listed back.
 - **Confidence + slip optimizer** — every pick gets a **confidence score** (how much of the model's edge to believe: role
   reliability from the backtest, history, injury status, market type, distance from the book; total/spread/weather already
   shape the probability so they aren't counted twice). The edge is scaled by it (adjusted EV = confidence × EV). Hit
@@ -61,11 +70,15 @@ silently to the baked snapshot when not.
 - **Parlays** — the same-game picker ranks combos by a conservative EV (the worse of independent and
   simulated-correlation EV); enter your book's actual SGP price for the real number. The **cross-game slip**
   collects legs across games (independent legs, so books pay full odds and the EV is real) and persists.
-- **Player props** — paste the book's over/unders (FanDuel stacked `Name / O 64.5 / -114 / U 64.5 / -114`,
+- **Player props** — paste the book's over/unders into the same box (FanDuel stacked `Name / O 64.5 / -114 / U 64.5 / -114`,
   one-line `O 64.5 -114 U 64.5 -114`, or ladder rungs `60+ +120`); headers like "Receiving Yards" route each block to
-  its prop, so a whole props page can go in at once (TD / attempts / longest markets are skipped). Each row shows the
+  its prop, so a whole props page can go in at once (TD / attempts / longest markets are skipped). Without a header the
+  lines decide the market (or pick it under the paste box). Each row shows the
   **model line** (its 50/50 number), season average, P(over), fair odds, the better side's EV and a confidence score;
   priced props join **Your card**, the slip and the log. Passing props only list tonight's starting QB.
+- **Bet log by game** — each game has its own section (open games first). For open games the log applies the
+  same rule as the card: the best bets read **★ BET** with a suggested stake, the rest **cut**, and **✂ Trim** removes
+  the cuts and sets the stakes in one click.
 - **Bet log & CLV** — log any bet (the sim's TD props or your own props), enter the closing line and result;
   it tracks CLV, ROI and a live calibration check (hits the model expected vs hits you got). Re-running the
   sim with the same inputs gives the same numbers (seeded simulation), so a verdict can't flip on noise.
