@@ -82,6 +82,7 @@
   .v-flag{color:var(--warn)}
   .vbadge{display:inline-block;padding:2px 9px;border-radius:6px;font-size:11px;font-weight:800;letter-spacing:.02em;white-space:nowrap}
   .vb-take{background:var(--good);color:#04121f}
+  .vb-edge{background:transparent;color:var(--ink2);border:1px solid var(--line2);cursor:help}
   .vb-dart{background:rgba(255,207,77,.14);color:var(--warn);border:1px solid var(--warn)}
   .vb-flag{background:rgba(255,207,77,.08);color:var(--warn);border:1px dashed var(--warn)}
   .vb-pass{color:var(--ink3);font-size:11px}
@@ -221,9 +222,10 @@
         <tbody id="playerBody"></tbody>
       </table>
     </div>
-    <div class="legend">Status: <b>ACT</b> active · <b>Q</b> questionable (×0.85) · <b>DBT</b> doubtful (×0.35) · <b>OUT</b> zeroed. The <span class="snaptag">72%</span> tag is this season's <b>offensive snap share</b> — a smaller role is scaled down (never below 20% weight), and <span class="snaptag low">🪑 —</span> = no snaps two-plus weeks in (a scratch / no role, nearly zeroed and never a parlay leg). Rotational players (35–60% snaps) and QBs are shown <b>role-calibrated</b> — the backtest found the raw sim over-rates them. A <span class="star">★</span> in the verdict column = on your card. Change a status to instantly re-simulate; if a starting QB is OUT, the next QB is promoted automatically. Pick a <b>pricing market</b> (Anytime / 1st TD / Last TD / 2+ TD) above, then enter a book's American odds (e.g. <span class="odds">+150</span>) — Fair, Edge, EV and the verdict follow that market, and each market remembers its own odds.</div>
+    <div class="legend">Status: <b>ACT</b> active · <b>Q</b> questionable (×0.85) · <b>DBT</b> doubtful (×0.35) · <b>OUT</b> zeroed. The <span class="snaptag">72%</span> tag is this season's <b>offensive snap share</b> — a smaller role is scaled down (never below 20% weight), and <span class="snaptag low">🪑 —</span> = no snaps two-plus weeks in (a scratch / no role, nearly zeroed and never a parlay leg). Rotational players (35–60% snaps) and QBs are shown <b>role-calibrated</b> — the backtest found the raw sim over-rates them. Only <b>★ BET</b> rows are bets — they're Your card. Change a status to instantly re-simulate; if a starting QB is OUT, the next QB is promoted automatically. Pick a <b>pricing market</b> (Anytime / 1st TD / Last TD / 2+ TD) above, then enter a book's American odds (e.g. <span class="odds">+150</span>) — Fair, Edge, EV and the verdict follow that market, and each market remembers its own odds.</div>
     <div class="legend" style="margin-top:6px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">Verdict key:
-      <span><span class="vbadge vb-take">TAKE</span> real edge worth a look (green row)</span>
+      <span><span class="vbadge vb-take">★ BET 1.6u</span> on Your card — bet this, at this stake (green row)</span>
+      <span><span class="vbadge vb-edge">edge</span> beats the fair price but didn't make the card — skip it (hover for why)</span>
       <span><span class="vbadge vb-dart">🎲 dart</span> longshot / no-history guess — the EV is just the big payout, a lottery ticket</span>
       <span><span class="vbadge vb-flag">⚠ check</span> edge too big to trust — likely a missed injury/role, verify</span>
       <span><span class="vb-pass">pass</span> no value</span></div>
@@ -1012,9 +1014,9 @@ function computeEV(){
     edC.className='edge '+(edge>0 && tier==='take'?'ev-pos':'ev-neg');
     evC.textContent=(ev>=0?'+':'')+(ev*100).toFixed(1)+'%';
     evC.className='ev '+(ev>0 ? (tier==='take'?'ev-pos':'ev-dart') : 'ev-neg');
-    vC.innerHTML={pass:'<span class="vb-pass">pass</span>', flag:'<span class="vbadge vb-flag">⚠ check</span>', dart:'<span class="vbadge vb-dart">🎲 dart</span>', take:'<span class="vbadge vb-take">TAKE</span>'}[tier];
+    vC.innerHTML={pass:'<span class="vb-pass">pass</span>', flag:'<span class="vbadge vb-flag">⚠ check</span>', dart:'<span class="vbadge vb-dart">🎲 dart</span>', take:'<span class="vbadge vb-edge">edge</span>'}[tier];
     vC.className='verdict';
-    tr.classList.toggle('rowtake', tier==='take');
+    tr.classList.remove('rowtake');   // green = on Your card (markCardRows), not merely +EV
   });
   computeTopPlays();
 }
@@ -1051,8 +1053,10 @@ function evalBet(mp, oddsStr){
 const KELLY_FRAC=0.25, TEAM_CAP=0.04, MIN_STAKE=0.005, MAX_PER_TEAM=2;
 function getBankroll(){ const v=+$('bankroll').value; return v>0?v:100; }
 let CARD=[];   // current picks, for the table stars and the "log this card" button
+let SKIPWHY=new Map();   // key|market -> why a +EV bet isn't on the card (hover text on "edge" badges)
 function evExplainer(){
   return `<div class="muted" style="margin-top:9px;font-size:12px;border-top:1px solid var(--line);padding-top:8px;line-height:1.5">`+
+    `<b>Only the card is a bet list.</b> Pasting more boards doesn't mean more bets: the card re-picks the strongest ≤${MAX_PER_TEAM} per team across everything you've priced (TD and player props together, one per player) and counts bets already in your log for this game. `+
     `<b>How the card is built.</b> Ranked by <b>Kelly</b> — the edge relative to the price, edge ÷ (1 − book's implied %) — not by EV%. EV% grows with the payout, so it always pushes the longest shots to the top even when their edge is thin noise. `+
     `Each pick has a <b>confidence</b> score (hover it): how much of the model's edge to believe, from role reliability in the backtest, history, injury status, market type and how far it sits from the book. Stakes are <b>¼ Kelly on the confidence-adjusted edge</b>, with at most <b>${MAX_PER_TEAM} plays per team</b> and <b>${TEAM_CAP*100}%</b> of bankroll per team, since same-team scorers win and lose together. `+
     `Probabilities are <b>role-calibrated</b>: rotational players (35–60% snaps) are scaled ×${ROLE_CAL.rot||1} and QBs ×${ROLE_CAL.qb||1}, because the backtest found the raw sim over-rates them (the fix improved accuracy on held-out games). `+
@@ -1076,20 +1080,31 @@ function computeTopPlays(){
   if(!cand.length){ CARD=[]; el.innerHTML=`<div class="muted">Paste a board (or type prices in the table) — TD props or player props below — and this turns it into a short list: which bets, in what order, and how many units each.</div>`+evExplainer(); markCardRows(); if(PM) propCompute(); return; }
 
   const skipped=[];
-  // one market per player (his best-Kelly one): anytime / 1st / last on the same guy all need him to score
+  // bets already in your log for THIS game count against the limits, so pasting more boards (or logging the
+  // card twice) can't stack a game past MAX_PER_TEAM bets / TEAM_CAP of bankroll per team
+  const game=curGameId(), recent=Date.now()-6*86400e3;
+  const logged=bets.filter(b=>b.game===game && b.result==='pending' && b.key && new Date(b.ts).getTime()>recent);
+  const loggedKeys=new Set(logged.map(b=>b.key)), have={};
+  for(const b of logged){ const k=String(b.key), t=k.startsWith('DST|')?k.slice(4):k.split('|')[0]; const h=have[t]||(have[t]={n:0,u:0}); h.n++; h.u+=+b.stake||0; }
+  // one bet per player (his best-Kelly one): anytime / 2+ / his yards all ride on the same game from him
   const best=new Map();
-  for(const c of cand.filter(c=>c.tier==='take').sort((a,b)=>b.kelly-a.kelly)) if(!best.has(c.key)) best.set(c.key,c);
+  for(const c of cand.filter(c=>c.tier==='take').sort((a,b)=>b.kelly-a.kelly)){
+    if(loggedKeys.has(c.key)){ skipped.push({c, why:'you already have a bet on him in your log'}); continue; }
+    if(best.has(c.key)){ skipped.push({c, why:`his ${mktLabel(best.get(c.key).market)} is the better bet`}); continue; }
+    best.set(c.key,c);
+  }
   let picks=[...best.values()];
   picks.forEach(c=>c.stake=KELLY_FRAC*c.kelly*bank);
   picks=picks.filter(c=>{ if(c.stake<MIN_STAKE*bank){ skipped.push({c, why:'edge too thin to size'}); return false; } return true; });
-  // correlation: best MAX_PER_TEAM plays per team, then cap that team's total stake
+  // correlation: best MAX_PER_TEAM plays per team (minus ones already logged), then cap that team's total stake
   const byTeam={}; picks.sort((a,b)=>b.kelly-a.kelly).forEach(c=>(byTeam[c.abbr]=byTeam[c.abbr]||[]).push(c));
   picks=[];
   for(const [t,list] of Object.entries(byTeam)){
-    list.slice(MAX_PER_TEAM).forEach(c=>skipped.push({c, why:`3rd+ play on ${S.teams[t].short} — same-team scorers move together`}));
-    const keep=list.slice(0,MAX_PER_TEAM), tot=keep.reduce((a,c)=>a+c.stake,0), cap=TEAM_CAP*bank;
+    const h=have[t]||{n:0,u:0}, slots=Math.max(0,MAX_PER_TEAM-h.n), cap=Math.max(0,TEAM_CAP*bank-h.u), nm=S.teams[t].short;
+    list.slice(slots).forEach(c=>skipped.push({c, why: h.n ? `${nm} already has ${h.n} bet${h.n>1?'s':''} in your log (max ${MAX_PER_TEAM} per team)` : `3rd+ play on ${nm} — same-team bets win and lose together`}));
+    const keep=list.slice(0,slots), tot=keep.reduce((a,c)=>a+c.stake,0);
     if(tot>cap) keep.forEach(c=>{ c.stake*=cap/tot; c.capped=true; });
-    picks.push(...keep);
+    keep.forEach(c=>{ if(c.stake<MIN_STAKE*bank) skipped.push({c, why:`${nm}'s budget (${TEAM_CAP*100}% of bankroll) is used up by bets in your log`}); else picks.push(c); });
   }
   picks.forEach(c=>c.stake=Math.round(c.stake*10)/10);
   picks.sort((a,b)=>b.stake-a.stake);
@@ -1100,10 +1115,16 @@ function computeTopPlays(){
     else if(c.tier==='dart' && c.ev>0) skipped.push({c, why:'lottery — too rare to price'});
     else if(c.tier==='pass' && c.cal<1){ const rr=evalBet(c.mpRaw,c.odds); if(rr && tierOf(c.mpRaw,rr.edge,rr.ev,c.prior)==='take') skipped.push({c, why:`edge gone after role calibration (${c.role.split(' (')[0]})`}); }
   }
+  SKIPWHY=new Map(); for(const x of skipped){ const k=x.c.key+'|'+x.c.market; if(!SKIPWHY.has(k)) SKIPWHY.set(k, x.why); }
 
   const u=v=>(Math.round(v*10)/10).toFixed(1)+'u';
   let html='';
+  if(logged.length){
+    const parts=Object.entries(have).map(([t,h])=>`${S.teams[t]?S.teams[t].short:t} ${h.n} · ${u(h.u)}${(h.n>MAX_PER_TEAM||h.u>TEAM_CAP*bank+0.05)?' <b style="color:var(--warn)">over the limit</b>':''}`);
+    html+=`<div style="font-size:13px;margin:2px 0 6px">📓 <b>Already in your log for this game:</b> ${logged.length} bet${logged.length>1?'s':''} — ${parts.join(' · ')}. <span class="muted">They count toward the limits (${MAX_PER_TEAM} bets and ${TEAM_CAP*100}% of bankroll per team, one bet per player), so the card only adds what still fits.</span></div>`;
+  }
   if(picks.length){
+    html+=`<div style="font-size:13px;margin:2px 0 2px"><b>Bet ${picks.length===1?'this one':'these '+picks.length}</b> <span class="muted">— and only ${picks.length===1?'it':'these'}. Rows marked <span class="vbadge vb-edge">edge</span> beat the fair price but didn't make the card (hover one to see why).</span></div>`;
     html+='<div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">';
     picks.forEach((c,i)=>{ html+=`<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">`+
       `<span class="${i===0?'star':'muted'}" style="min-width:20px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
@@ -1120,7 +1141,9 @@ function computeTopPlays(){
       `<button class="statussel" id="cardToSlip" style="padding:3px 11px" title="send every pick above to the cross-game slip — do this for each game, then let the slip pick the parlay">➕ add these to slip</button>`+
       `<button class="statussel" id="logCard" style="padding:3px 11px">📓 log this card</button></div>`;
   } else {
-    html+=`<div style="margin-top:4px"><b>No bets on this card.</b> Nothing you've priced clears the bar after calibration and sizing — the normal case, since the market is efficient on most props. (If everything's a pass, sanity-check the total/spread up top.)</div>`;
+    html+= logged.length && skipped.length
+      ? `<div style="margin-top:4px"><b>Nothing more to add for this game.</b> The bets already in your log use up its limits — anything else with an edge is marked <span class="vbadge vb-edge">edge</span> (hover for why).</div>`
+      : `<div style="margin-top:4px"><b>No bets on this card.</b> Nothing you've priced clears the bar after calibration and sizing — the normal case, since the market is efficient on most props. (If everything's a pass, sanity-check the total/spread up top.)</div>`;
   }
   if(skipped.length){ const seen=new Set();
     html+=`<div class="muted" style="margin-top:7px;font-size:12px;line-height:1.55"><b>Skipped:</b> `+
@@ -1132,11 +1155,18 @@ function computeTopPlays(){
   markCardRows(); if(PM&&$('propBody').children.length) propCompute();   // star card picks in the props table too
 }
 // star the card's picks in the table so both views agree
+const betBadge=c=>`<span class="vbadge vb-take" title="${esc('On Your card: bet '+mktLabel(c.market)+' '+c.odds+' for '+c.stake.toFixed(1)+'u')}">★ BET ${c.stake.toFixed(1)}u</span>`;
+const edgeWhy=k=>'Beats the fair price, but not on Your card — '+(SKIPWHY.get(k)||'the card keeps only the strongest bets per team')+'. Skip it.';
+const edgeBadge=k=>`<span class="vbadge vb-edge" title="${esc(edgeWhy(k))}">edge</span>`;
 function markCardRows(){
-  document.querySelectorAll('#playerBody tr').forEach(tr=>{ const inp=tr.querySelector('.bookin'), v=tr.querySelector('.verdict'); if(!inp||!v) return;
-    const on=CARD.some(c=>c.key===inp.dataset.key && c.market===MARKET), st=v.querySelector('.cardstar');
-    tr.classList.toggle('oncard', on);
-    if(on&&!st) v.insertAdjacentHTML('afterbegin','<span class="cardstar star" title="on your card">★ </span>'); else if(!on&&st) st.remove(); });
+  const upd=(tr,key)=>{ const v=tr.querySelector('.verdict'); if(!v) return;
+    const pick=CARD.find(c=>c.key===key && c.market===MARKET), k=key+'|'+MARKET;
+    tr.classList.toggle('oncard', !!pick); tr.classList.toggle('rowtake', !!pick);
+    if(pick) v.innerHTML=betBadge(pick);
+    else if(v.querySelector('.vb-take')) v.innerHTML=edgeBadge(k);          // dropped off the card since last time
+    else { const e=v.querySelector('.vb-edge'); if(e) e.title=edgeWhy(k); } };
+  document.querySelectorAll('#playerBody tr').forEach(tr=>{ const inp=tr.querySelector('.bookin'); if(inp) upd(tr, inp.dataset.key); });
+  document.querySelectorAll('#dstBody tr').forEach(tr=>{ const inp=tr.querySelector('.bookin.dst'); if(inp) upd(tr, 'DST|'+inp.dataset.abbr); });
 }
 // one click: every card pick goes to the cross-game slip (with its confidence + game context)
 function cardToSlip(){
@@ -1407,7 +1437,7 @@ function renderSlip(){
 // leading indicator of a real edge) + settled ROI. Persists via localStorage. ----
 let bets=[]; let betOptCache=[];
 function loadBets(){ try{ const s=localStorage.getItem('nfltd_bets'); if(s) bets=JSON.parse(s)||[]; }catch(e){ bets=[]; } if(!Array.isArray(bets)) bets=[]; }
-function saveBets(){ stampChanges(bets, betSnap, betKey, TOMB.bets); betSnap=snapOf(bets, betKey); saveTomb(); try{ localStorage.setItem('nfltd_bets', JSON.stringify(bets)); }catch(e){} syncSoon(); }
+function saveBets(){ stampChanges(bets, betSnap, betKey, TOMB.bets); betSnap=snapOf(bets, betKey); saveTomb(); try{ localStorage.setItem('nfltd_bets', JSON.stringify(bets)); }catch(e){} syncSoon(); if(LAST) computeTopPlays(); }
 
 // ---------- cloud sync: one bet log / slip / bankroll across PCs, via a private GitHub gist ----------
 // Browser storage is per machine and per address, so PCs drift apart. With a GitHub token (gist scope only) saved
@@ -1843,11 +1873,10 @@ function propCompute(){
     const b=ev.sort((x,y)=>y.ev-x.ev)[0];
     if(!b){ C('.pbest').textContent='—'; C('.pverdict').innerHTML='—'; return; }
     C('.pbest').innerHTML=`${b.prop.side==='O'?'Over':'Under'}${b.prop.alt||b.prop.line!==L?` ${b.prop.line} <span class="muted" style="font-size:11px">(${pct(b.mp)})</span>`:''} <b class="${b.ev>0&&b.tier==='take'?'ev-pos':'ev-neg'}">${b.ev>=0?'+':''}${(b.ev*100).toFixed(1)}%</b>`;
-    const onCard=CARD.some(c=>c.key===p._key&&c.market===b.market);
-    C('.pverdict').innerHTML=(onCard?'<span class="cardstar star" title="on your card">★ </span>':'')+
-      ({pass:'<span class="vb-pass">pass</span>', flag:'<span class="vbadge vb-flag">⚠ check</span>', take:'<span class="vbadge vb-take">TAKE</span>'}[b.tier])+' '+confBadge(b.conf)+
+    const onCard=CARD.find(c=>c.key===p._key && isPropMkt(c.market) && c.market.split('|')[1]===s);
+    C('.pverdict').innerHTML=(onCard?betBadge(onCard):({pass:'<span class="vb-pass">pass</span>', flag:'<span class="vbadge vb-flag">⚠ check</span>', take:edgeBadge(p._key+'|'+b.market)}[b.tier]))+' '+confBadge(b.conf)+
       ` <button class="statussel propslip" style="padding:0 6px;font-size:11px" title="add ${esc(mktLabel(b.market))} to the cross-game slip">➕</button><button class="statussel proplog" style="padding:0 6px;font-size:11px" title="log ${esc(mktLabel(b.market))} ${esc(b.odds)} in the bet log (stake from the log's stake box, else 1u)">📓</button>`;
-    tr.classList.toggle('rowtake', b.tier==='take'); tr.classList.toggle('oncard', onCard);
+    tr.classList.toggle('rowtake', !!onCard); tr.classList.toggle('oncard', !!onCard);
     C('.propslip').onclick=()=>{ const ok=addLeg({key:b.key, name:b.label, abbr:b.abbr, mp:b.mp, odds:b.odds, ref:p, conf:b.conf}, b.market); C('.propslip').textContent=ok?'✓':'in slip'; };
     C('.proplog').onclick=()=>{ const game=curGameId(), stake=Math.abs(parseFloat($('betStake').value))||1;
       if(bets.some(x=>x.game===game&&x.key===b.key&&x.market===b.market&&x.odds===b.odds&&x.result==='pending')){ C('.proplog').textContent='logged'; return; }
@@ -1910,8 +1939,8 @@ function computeDstEV(){
     if(!r){ evC.textContent='—'; vC.textContent='—'; vC.className='verdict'; tr.classList.remove('rowtake'); return; }
     const {ev}=r, tier=tierOf(mp, r.edge, ev, false);
     evC.textContent=(ev>=0?'+':'')+(ev*100).toFixed(1)+'%'; evC.className='ev '+(ev>0 ? (tier==='take'?'ev-pos':'ev-dart') : 'ev-neg');
-    vC.innerHTML={pass:'<span class="vb-pass">pass</span>', dart:'<span class="vbadge vb-dart">🎲 dart</span>', flag:'<span class="vbadge vb-flag">⚠ check</span>', take:'<span class="vbadge vb-take">TAKE</span>'}[tier]; vC.className='verdict';
-    tr.classList.toggle('rowtake', tier==='take');
+    vC.innerHTML={pass:'<span class="vb-pass">pass</span>', dart:'<span class="vbadge vb-dart">🎲 dart</span>', flag:'<span class="vbadge vb-flag">⚠ check</span>', take:'<span class="vbadge vb-edge">edge</span>'}[tier]; vC.className='verdict';
+    tr.classList.remove('rowtake');
   });
   computeTopPlays();
 }

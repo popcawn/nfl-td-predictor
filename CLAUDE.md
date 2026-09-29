@@ -59,6 +59,10 @@ See README.md for what the model does and how it was validated.
 - 2+ TD market (checked 2026-09-28 via BT_EXPERIMENTS): calibrated overall, but predictions ~24% landed ~18-19%.
   A top-end correction held in the touched set (x0.83-0.86 both halves) but flipped in the roster set, so the
   PROBABILITY is unchanged; confidence applies x0.8 to 2+ picks >=15% instead. Re-test with more seasons.
+- Only the card is a bet list. Table verdicts: card picks show "★ BET x.xu" (green row); other +EV rows show a neutral
+  "edge" badge whose hover says why (SKIPWHY). The user read every green TAKE as "bet it" and logged 13 bets / 22.6u on
+  one game. The card also counts PENDING bets already logged for the game (last 6 days) against 2 per team, 4% of
+  bankroll per team and one bet per player, so re-pasting or re-logging can't stack a game.
 - The slip optimizer maximises Kelly log-growth over subsets (one leg per game, ≤6 legs, top 10 legs), never EV%.
   Don't count total/spread/weather in confidence — they already drive the probability.
 
