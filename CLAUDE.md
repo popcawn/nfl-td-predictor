@@ -65,9 +65,13 @@ See README.md for what the model does and how it was validated.
   its rank in `rk`), so "log every edge, then ✂ Trim" and "paste everything, read the card" give the same answer.
   Card picks show "★ BET x.xu"; other +EV rows a neutral "edge" badge with the reason on hover (SKIPWHY). Background:
   the user read every green TAKE as "bet it" and logged 13 bets / 22.6u on one game.
-- Layout: one paste box (props detected by Over/Under; headerless prop boards → best-fitting stat, rush+rec must win by
-  1.5×, or the "Prop boards pasted without their header" select), prices kept per game in `nfltd_boards` (5 days),
-  "Every priced bet" table (renderBoard from CANDS), bet log grouped by game (details.gamegrp, open state in LOGOPEN).
+- Layout (sportsbook): `.book` grid = `.bmain` (Markets panel, teams, parlays, slip, log) + `.bslip` sticky sidebar
+  (paste box + Your card) at ≥1200px. Markets = renderMarkets(): tabs MTAB ('all' = ★ Priced board, 'td', or a prop stat),
+  two team columns (container query on .bmain), price boxes .mcell; decorateMarkets() recolours boxes from CANDS/CARD
+  without re-rendering (typing keeps focus). The old TD / props / defense tables are gone; renderPlayers() = render +
+  computeTopPlays(), renderDST/renderProps are no-ops. One paste box (props detected by Over/Under; headerless prop
+  boards → best-fitting stat, rush+rec must win by 1.5×, or the #propDefault select); prices kept per game in
+  `nfltd_boards` (5 days); bet log grouped by game (details.gamegrp, open state in LOGOPEN).
   The user once thought prop categories "reset" — they didn't; only one category was visible at a time.
 - The slip optimizer maximises Kelly log-growth over subsets (one leg per game, ≤6 legs, top 10 legs), never EV%.
   Don't count total/spread/weather in confidence — they already drive the probability.

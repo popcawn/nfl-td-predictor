@@ -127,6 +127,57 @@
   details.gamegrp>summary{cursor:pointer;padding:9px 12px;font-size:14px}
   details.gamegrp[open]>summary{border-bottom:1px solid var(--line2)}
   .grpbody{padding:6px 10px 10px}
+  /* sportsbook-style markets panel */
+  .mtabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:9px;border-bottom:1px solid var(--line2);margin-bottom:10px}
+  .mtabs::-webkit-scrollbar{display:none}
+  .mtab{background:var(--panel2);border:1px solid var(--line2);color:var(--ink2);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap}
+  .mtab:hover{border-color:var(--accent)}
+  .mtab.active{background:var(--accent);color:#04121f;border-color:var(--accent)}
+  .mtabc{display:inline-block;min-width:18px;padding:0 6px;margin-left:3px;border-radius:999px;background:rgba(77,163,255,.22);font-size:11px;text-align:center}
+  .mtab.active .mtabc{background:rgba(4,18,31,.22)}
+  .mgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @container (max-width:760px){ .mgrid{grid-template-columns:1fr} }
+  @container (max-width:460px){ .mrow .mname .nm{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.15;font-size:13px} }
+  .mteam{min-width:0}
+  .mthead{display:flex;align-items:center;gap:9px;padding:6px 9px;border-radius:10px;background:var(--panel2);border-top:3px solid var(--tc,#888);margin-bottom:2px}
+  .mthead img{width:26px;height:26px;object-fit:contain}
+  .mrow{display:grid;grid-template-columns:minmax(0,2.3fr) repeat(4,minmax(50px,1fr));gap:5px;align-items:center;padding:2px 2px;line-height:1.2;border-bottom:1px solid var(--line)}
+  .mrow.hdr{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink3);border-bottom:none;padding:5px 2px 0}
+  .mrow.hdr>div{text-align:center} .mrow.hdr>div:first-child{text-align:left}
+  .mrow.out{opacity:.4} .mrow.lowsnap{opacity:.55}
+  .mname{display:flex;flex-direction:column;align-items:stretch;gap:2px;min-width:0}
+  .mname .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;font-size:13.5px;min-width:0}
+  .mtags{display:flex;gap:4px;align-items:center;min-width:0;overflow:hidden;white-space:nowrap}
+  .mtags .pos{font-size:10px;padding:0 4px;min-width:0;margin-left:0}
+  .mtags .snaptag{font-size:10px}
+  .mtags .statussel{font-size:10px;padding:0 2px;margin-left:auto;flex:0 0 auto}
+  .mcell{border:1px solid var(--line2);border-radius:8px;background:var(--panel2);text-align:center;padding:1px 3px 2px;transition:border-color .1s,background .1s;min-width:0}
+  .mcell:focus-within{border-color:var(--accent)}
+  .mcell input{width:100%;border:none;background:transparent;color:var(--ink);text-align:center;font-family:var(--mono);font-size:13px;font-weight:700;padding:1px 0;line-height:1.2;outline:none}
+  .mcell input::placeholder{color:var(--ink3);font-weight:400}
+  .mcell .msub{display:block;font-size:10.5px;color:var(--ink3);line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mcell.bet{border-color:var(--good);background:rgba(51,217,134,.14)} .mcell.bet .msub{color:var(--good);font-weight:800}
+  .mcell.edge{border-color:rgba(166,183,202,.8)}
+  .mcell.flag{border:1px dashed var(--warn)} .mcell.dart{border-color:rgba(255,207,77,.55)}
+  .mcell.off{opacity:.3}
+  .mproj{text-align:center;font-weight:800;font-size:14px;font-variant-numeric:tabular-nums}
+  .mproj .msub{display:block;font-size:10.5px;color:var(--ink3);font-weight:400}
+  .mmore{background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;font-weight:700;padding:6px 2px}
+  /* compact game controls: teams + line on one row */
+  .ctlrow{display:grid;grid-template-columns:1.3fr 1.3fr .75fr 1fr .75fr auto;gap:12px;align-items:end;margin-top:12px}
+  @media(max-width:1000px){ .ctlrow{grid-template-columns:1fr 1fr} .ctlrow .btn{grid-column:1/-1} }
+  /* sportsbook page: markets in the main column; paste box + Your card form a bet slip that stays in view */
+  .book{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start}
+  .bmain{min-width:0;container-type:inline-size}
+  @media(min-width:1200px){
+    .book{grid-template-columns:minmax(0,1fr) 360px}
+    .bslip{grid-column:2;grid-row:1;position:sticky;top:calc(var(--navh,52px) + 6px);max-height:calc(100vh - var(--navh,52px) - 12px);overflow-y:auto;scrollbar-width:thin;padding:0 2px 8px 0}
+    .bmain{grid-column:1;grid-row:1}
+  }
+  .mktbtn.sm{padding:2px 9px;font-size:12px;border-radius:7px}
+  .cpick{padding:6px 0;border-bottom:1px solid var(--line)} .cpick:last-child{border-bottom:none}
+  .cp1{display:flex;gap:8px;align-items:center}
+  .cp2{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px;margin:2px 0 0 26px}
   footer{color:var(--ink3);font-size:12px;margin-top:30px;border-top:1px solid var(--line);padding-top:14px}
 </style>
 </head>
@@ -137,9 +188,10 @@
       <h1>🏈 NFL Anytime-TD Simulator</h1>
       <div class="sub">Monte Carlo player-prop model · Vegas-anchored two-stage scoring · fair odds &amp; EV</div>
     </div>
-    <div class="panel" style="padding:10px 14px">
-      <div class="cal" id="calBadge"></div>
-    </div>
+    <details class="panel" id="calBox" style="padding:8px 14px">
+      <summary id="calSum" style="cursor:pointer;font-size:13px;color:var(--ink2)">📊 Model accuracy</summary>
+      <div class="cal" id="calBadge" style="margin-top:8px"></div>
+    </details>
   </div>
 
   <!-- CONTROLS -->
@@ -148,29 +200,12 @@
       <label>This week's games <span class="muted" style="text-transform:none;letter-spacing:0">— one click sets both teams, the line and the stadium</span></label>
       <select id="gameSel"></select>
     </div>
-    <div class="controls">
-      <div class="ctl">
-        <label>Away team</label>
-        <div class="teampick"><img id="awayLogo" alt=""><select id="awaySel"></select></div>
-      </div>
-      <div class="ctl">
-        <label>Home team</label>
-        <div class="teampick"><img id="homeLogo" alt=""><select id="homeSel"></select></div>
-      </div>
-    </div>
-    <div class="row3">
-      <div class="ctl">
-        <label>Game total (O/U)</label>
-        <input type="number" id="total" step="0.5" value="44.5">
-      </div>
-      <div class="ctl">
-        <label>Favorite</label>
-        <select id="favSel"></select>
-      </div>
-      <div class="ctl">
-        <label>Spread (points)</label>
-        <input type="number" id="spread" step="0.5" value="2.5">
-      </div>
+    <div class="ctlrow">
+      <div class="ctl"><label>Away team</label><div class="teampick"><img id="awayLogo" alt=""><select id="awaySel"></select></div></div>
+      <div class="ctl"><label>Home team</label><div class="teampick"><img id="homeLogo" alt=""><select id="homeSel"></select></div></div>
+      <div class="ctl"><label>Total (O/U)</label><input type="number" id="total" step="0.5" value="44.5"></div>
+      <div class="ctl"><label>Favorite</label><select id="favSel"></select></div>
+      <div class="ctl"><label>Spread</label><input type="number" id="spread" step="0.5" value="2.5"></div>
       <button class="btn" id="simBtn">Simulate ▶</button>
     </div>
     <div class="weather">
@@ -188,41 +223,32 @@
       <b class="jgame" id="jumpGame"></b>
       <a href="#priceSec">⚡ Price</a>
       <a href="#cardSec">🎯 Card</a>
-      <a href="#boardSec">📋 All bets</a>
-      <a href="#tdSec">🏈 TD table</a>
-      <a href="#propSec">📈 Props</a>
-      <a href="#dstSec">🛡 Defense</a>
+      <a href="#mktSec">📈 Markets</a>
       <a href="#tottSec">📊 Teams &amp; QBs</a>
+      <a href="#parlaySec">🎰 Parlays</a>
       <a href="#slipSec">🧾 Slip</a>
       <a href="#logSec">📓 Log</a>
     </nav>
 
+    <div class="book">
+    <aside class="bslip" id="bslip">
     <!-- PRICE THIS GAME: one paste box for every market -->
     <h2 id="priceSec">Price this game</h2>
-    <div class="panel" style="padding:12px;margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <div style="font-weight:700;font-size:13px">⚡ Paste any board here — anytime / 1st / last / 2+ TD, receptions, receiving, rushing, rush + rec or passing yards. One market at a time; everything you paste stays, even if you switch games and come back.</div>
-        <div style="display:flex;gap:8px">
-          <button class="btn" id="applyOdds" style="padding:7px 16px;font-size:13px">Apply</button>
-          <button class="btn sec" id="clearOdds" style="padding:7px 14px;font-size:13px">Clear all</button>
-        </div>
-      </div>
+    <div class="panel" style="padding:10px 12px">
       <textarea id="oddsPaste" rows="3" spellcheck="false"
-        placeholder="Paste a FanDuel board (Ctrl+Enter applies). TD boards: name, then Anytime / 1st / Last on their own lines (Jahmyr Gibbs / -330 / +360 / +410), or one price per name for the market picked below. Prop boards: name, then O 64.5 / -114 / U 64.5 / -114 — with or without the market header."
-        style="width:100%;margin-top:9px;background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:10px;padding:10px;font-family:var(--mono);font-size:13px;resize:vertical"></textarea>
-      <div class="mktrow">One-price TD boards fill:
-        <button class="mktbtn active" data-mkt="anytime">Anytime</button>
-        <button class="mktbtn" data-mkt="first">1st TD</button>
-        <button class="mktbtn" data-mkt="last">Last TD</button>
-        <button class="mktbtn" data-mkt="two">2+ TD</button>
-        <span class="muted">— stacked Anytime / 1st / Last blocks fill all three</span>
+        placeholder="Paste any FanDuel board — TD scorers or player props — then Apply (Ctrl+Enter). One market at a time; the prices stay with this game."
+        style="width:100%;background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:10px;padding:9px;font-family:var(--mono);font-size:13px;resize:vertical"></textarea>
+      <div class="mktrow" style="margin-top:7px;gap:5px">
+        <button class="btn" id="applyOdds" style="padding:6px 16px;font-size:13px">Apply</button>
+        <button class="btn sec" id="clearOdds" style="padding:6px 12px;font-size:13px">Clear all</button>
+        <span style="margin-left:auto;font-size:12px" title="a TD board with ONE price per name fills this market (stacked Anytime / 1st / Last blocks fill all three)">1 price/name →</span>
+        <button class="mktbtn sm active" data-mkt="anytime">Any</button><button class="mktbtn sm" data-mkt="first">1st</button><button class="mktbtn sm" data-mkt="last">Last</button><button class="mktbtn sm" data-mkt="two">2+</button>
       </div>
-      <div class="mktrow" style="margin-top:6px">Prop boards pasted without their header (e.g. no "Receiving Yards" line) are:
-        <select id="propDefault" class="statussel" style="font-size:12px"><option value="auto">detected from the lines</option><option value="rec">Receptions</option><option value="recyd">Receiving yds</option><option value="ryd">Rushing yds</option><option value="rryd">Rush + rec yds</option><option value="pyd">Passing yds</option></select>
-        <span class="muted">— Over / Under boards are recognised as props automatically</span>
+      <div class="mktrow" style="margin-top:6px;font-size:12px">Props pasted without their header are
+        <select id="propDefault" class="statussel" style="font-size:12px" title="a prop board with no market line (e.g. no 'Receiving Yards') is read as this market"><option value="auto">detected from the lines</option><option value="rec">Receptions</option><option value="recyd">Receiving yds</option><option value="ryd">Rushing yds</option><option value="rryd">Rush + rec yds</option><option value="pyd">Passing yds</option></select>
       </div>
-      <div id="oddsMsg" class="legend" style="margin-top:7px"></div>
-      <div id="pricedChips" class="mktrow"></div>
+      <div id="oddsMsg" class="legend" style="margin-top:6px"></div>
+      <div id="pricedChips" class="mktrow" style="margin-top:6px"></div>
     </div>
 
     <!-- YOUR CARD -->
@@ -238,100 +264,52 @@
       <div id="cardBody" style="margin-top:6px"></div>
     </div>
 
-    <!-- EVERY PRICED BET: TD + props + defenses in one list -->
-    <h2 id="boardSec">Every priced bet — this game</h2>
-    <div class="panel" style="padding:8px 8px 4px">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:4px 6px 6px">
-        <span id="boardHead" class="muted" style="font-size:13px"></span>
-        <span style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-          <label class="muted" style="font-size:12px;display:flex;gap:5px;align-items:center"><input type="checkbox" id="boardPass"> show no-edge prices</label>
-          <button class="statussel" id="boardLogAll" style="padding:4px 10px;font-size:12px" title="log every bet with an edge — the log then marks the best ones (★ BET) and trims the rest in one click">📓 Log every edge</button>
-        </span>
+    </aside>
+    <div class="bmain">
+    <!-- MARKETS: sportsbook-style — every market for this game in one panel -->
+    <h2 id="mktSec">Markets</h2>
+    <div class="panel" style="padding:10px 12px 8px">
+      <div class="mtabs" id="mtabs">
+        <button class="mtab" data-t="all" data-l="★ Priced">★ Priced</button>
+        <button class="mtab active" data-t="td" data-l="TD scorer">TD scorer</button>
+        <button class="mtab" data-t="rec" data-l="Receptions">Receptions</button>
+        <button class="mtab" data-t="recyd" data-l="Rec yds">Rec yds</button>
+        <button class="mtab" data-t="ryd" data-l="Rush yds">Rush yds</button>
+        <button class="mtab" data-t="rryd" data-l="Rush + Rec">Rush + Rec</button>
+        <button class="mtab" data-t="pyd" data-l="Pass yds">Pass yds</button>
       </div>
-      <table id="boardTable">
-        <thead><tr>
-          <th class="l" style="cursor:default">Player</th>
-          <th class="l" style="cursor:default">Bet</th>
-          <th style="cursor:default">Odds</th>
-          <th style="cursor:default">Model</th>
-          <th class="hidecol" style="cursor:default">Fair</th>
-          <th style="cursor:default">EV</th>
-          <th style="cursor:default">Confidence</th>
-          <th style="cursor:default">Verdict</th>
-          <th style="cursor:default"></th>
-        </tr></thead>
-        <tbody id="boardBody"></tbody>
-      </table>
+      <div id="boardWrap" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:0 4px 6px">
+          <span id="boardHead" class="muted" style="font-size:13px"></span>
+          <span style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <label class="muted" style="font-size:12px;display:flex;gap:5px;align-items:center"><input type="checkbox" id="boardPass"> show no-edge prices</label>
+            <button class="statussel" id="boardLogAll" style="padding:4px 10px;font-size:12px" title="log every bet with an edge — the log then marks the best ones (★ BET) and trims the rest in one click">📓 Log every edge</button>
+          </span>
+        </div>
+        <table id="boardTable">
+          <thead><tr>
+            <th class="l" style="cursor:default">Player</th>
+            <th class="l" style="cursor:default">Bet</th>
+            <th style="cursor:default">Odds</th>
+            <th style="cursor:default">Model</th>
+            <th class="hidecol" style="cursor:default">Fair</th>
+            <th style="cursor:default">EV</th>
+            <th style="cursor:default">Confidence</th>
+            <th style="cursor:default">Verdict</th>
+            <th style="cursor:default"></th>
+          </tr></thead>
+          <tbody id="boardBody"></tbody>
+        </table>
+      </div>
+      <div id="mktGrid"></div>
+      <details class="legend" style="margin-top:8px">
+        <summary style="cursor:pointer">ⓘ How to read this</summary>
+        <div style="margin-top:6px;line-height:1.55">Each box is a bet. Before you enter the book's price it shows the model's <b>fair odds</b> (grey) and chance; type or paste the book's price and it shows the model's chance and <b>EV</b>. <span class="mcell bet" style="display:inline-block;padding:0 7px">green ★ BET</span> = on Your card, bet this at this stake · <span class="mcell edge" style="display:inline-block;padding:0 7px">outlined</span> = beats the price but didn't make the card (hover for why) · <span class="mcell flag" style="display:inline-block;padding:0 7px">dashed</span> = edge too big to trust, likely injury/role news · no outline = no edge. Hover any box for the details.
+          Status: <b>ACT</b> · <b>Q</b> questionable (×0.85) · <b>DBT</b> doubtful (×0.35) · <b>OUT</b> — change it and the game re-simulates; a starting QB ruled OUT promotes the next QB. The <span class="snaptag">72%</span> tag is this season's offensive snap share (<span class="snaptag low">🪑 —</span> = no snaps two-plus weeks in); rotational players and QBs are role-calibrated. <span class="pos">↩</span> = kick/punt returner (a return TD pays his prop); <span class="pos" style="color:var(--warn)">◦</span> = no history, priced from a position prior. Props: <b>Model</b> is the model's 50/50 line, with his season average underneath.</div>
+        <div id="propNote" style="margin-top:6px"></div>
+        <div id="dstNote" style="margin-top:6px"></div>
+      </details>
     </div>
-
-    <!-- ALL PLAYERS: TD probabilities, statuses, hand-typed TD odds -->
-    <h2 id="tdSec">Anytime TD — every player</h2>
-    <div class="panel" style="padding:8px 8px 4px">
-      <table id="playerTable">
-        <thead><tr>
-          <th class="l" data-k="name">Player</th>
-          <th class="l hidecol" data-k="team">Tm</th>
-          <th data-k="status">Status</th>
-          <th data-k="anytime" class="sorted">Anytime</th>
-          <th data-k="first">1st TD</th>
-          <th data-k="last">Last TD</th>
-          <th data-k="two">2+ TD</th>
-          <th>Fair <span class="muted" id="fairMkt">(Anytime)</span></th>
-          <th class="l">Book <span class="muted" id="bookMkt">(Anytime)</span></th>
-          <th>Edge</th>
-          <th>EV</th>
-          <th>Verdict</th>
-        </tr></thead>
-        <tbody id="playerBody"></tbody>
-      </table>
-    </div>
-    <div class="legend">Status: <b>ACT</b> active · <b>Q</b> questionable (×0.85) · <b>DBT</b> doubtful (×0.35) · <b>OUT</b> zeroed. The <span class="snaptag">72%</span> tag is this season's <b>offensive snap share</b> — a smaller role is scaled down (never below 20% weight), and <span class="snaptag low">🪑 —</span> = no snaps two-plus weeks in (a scratch / no role, nearly zeroed and never a parlay leg). Rotational players (35–60% snaps) and QBs are shown <b>role-calibrated</b> — the backtest found the raw sim over-rates them. Only <b>★ BET</b> rows are bets — they're Your card. Change a status to instantly re-simulate; if a starting QB is OUT, the next QB is promoted automatically. Pick a <b>pricing market</b> (Anytime / 1st TD / Last TD / 2+ TD) above, then enter a book's American odds (e.g. <span class="odds">+150</span>) — Fair, Edge, EV and the verdict follow that market, and each market remembers its own odds.</div>
-    <div class="legend" style="margin-top:6px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">Verdict key:
-      <span><span class="vbadge vb-take">★ BET 1.6u</span> on Your card — bet this, at this stake (green row)</span>
-      <span><span class="vbadge vb-edge">edge</span> beats the fair price but didn't make the card — skip it (hover for why)</span>
-      <span><span class="vbadge vb-dart">🎲 dart</span> longshot / no-history guess — the EV is just the big payout, a lottery ticket</span>
-      <span><span class="vbadge vb-flag">⚠ check</span> edge too big to trust — likely a missed injury/role, verify</span>
-      <span><span class="vb-pass">pass</span> no value</span></div>
-
-    <!-- PLAYER PROPS: projections + hand entry -->
-    <h2 id="propSec">Player props — projections</h2>
-    <div class="mktrow" id="propTabs" style="margin:0 0 8px">Prop:
-      <button class="mktbtn propbtn active" data-stat="rec">Receptions</button>
-      <button class="mktbtn propbtn" data-stat="recyd">Rec yds</button>
-      <button class="mktbtn propbtn" data-stat="ryd">Rush yds</button>
-      <button class="mktbtn propbtn" data-stat="rryd">Rush + Rec</button>
-      <button class="mktbtn propbtn" data-stat="pyd">Pass yds</button>
-      <span class="muted">— paste prop boards in the box at the top; you can also type a line and prices here</span>
-    </div>
-    <div class="panel" style="padding:8px 8px 4px">
-      <table id="propTable">
-        <thead><tr>
-          <th class="l" style="cursor:default">Player</th>
-          <th class="l hidecol" style="cursor:default">Tm</th>
-          <th style="cursor:default" title="the model's median: the line where it sees over and under as 50/50">Model line</th>
-          <th class="hidecol" style="cursor:default" title="this season's per-game average (games played)">Season avg</th>
-          <th class="l" style="cursor:default">Line</th>
-          <th class="l" style="cursor:default">Over</th>
-          <th class="l" style="cursor:default">Under</th>
-          <th style="cursor:default">P(over)</th>
-          <th class="hidecol" style="cursor:default">Fair O / U</th>
-          <th style="cursor:default">Best side</th>
-          <th style="cursor:default">Verdict</th>
-        </tr></thead>
-        <tbody id="propBody"></tbody>
-      </table>
-    </div>
-    <div class="legend" id="propNote"></div>
-
-    <!-- DEFENSE -->
-    <h2 id="dstSec">Defense TD</h2>
-    <div class="panel" style="padding:8px 8px 4px">
-      <table>
-        <thead><tr><th class="l">Unit</th><th title="expected defensive TDs this game (pick-6 / fumble return)">TD rate/gm</th><th>Anytime</th><th>1st TD</th><th>Last TD</th><th>Fair <span class="muted" id="dstFairMkt">(Anytime)</span></th><th class="l">Book</th><th>EV</th><th>Verdict</th></tr></thead>
-        <tbody id="dstBody"></tbody>
-      </table>
-    </div>
-    <div class="legend" id="dstNote">Pick-6 / fumble-return / kick-return TDs.</div>
 
     <!-- TEAMS & STARTING QBs (collapsed: context, not needed every time) -->
     <details id="tottSec" class="panel" style="margin-top:30px;padding:12px 16px">
@@ -418,6 +396,8 @@
 
     <div class="note" id="corrNote"><b>Same-game correlation:</b> two scorers on the same team are <b>positively correlated</b> (when an offense scores a lot, several of its players cash together). Treat multiple "TAKE"s on one team as a same-game parlay leg set, not as independent edges. A model edge much larger than the market's usually means a missed inactive or role change — verify before betting.</div>
     <div class="note"><b>Estimate-grade until inactives lock.</b> Props involving Q/DBT players are estimates until game-day actives are confirmed (~90 min before kickoff). Update each player's status above when the inactive list drops.</div>
+    </div>
+    </div>
   </div>
 
   <footer id="footer"></footer>
@@ -1009,85 +989,110 @@ function renderTott(){
 // pricing market state — Fair / Book / Edge / EV / Verdict all follow this
 const MKT={anytime:{label:'Anytime',eg:'+150'}, first:{label:'1st TD',eg:'+650'}, last:{label:'Last TD',eg:'+650'}, two:{label:'2+ TD',eg:'+450'}};
 let MARKET='anytime';
-let sortK='anytime', sortDir=-1;
-const bkey=key=>MARKET+'|'+key;   // book-odds map is keyed per market
-function renderPlayers(){
-  // show real contributors; keep notable injured players visible (greyed) so a
-  // missing star is obvious, but hide zero-usage deep bench to reduce noise
-  const rows=LAST.awayR.concat(LAST.homeR).filter(p=>{
-    if(p._status==='OUT') return p._base>0.10;
-    if(p.anytime>=0.012) return true;
-    return p._base>0.20 && snapLow(p);   // keep notable role-loss guys visible (greyed) so they're not silently dropped
-  });
-  const pc=k=>(a,b)=>a[k]-b[k];
-  const cmp={
-    name:(a,b)=>a.name.localeCompare(b.name),
-    team:(a,b)=>a._abbr.localeCompare(b._abbr),
-    status:(a,b)=>(a._status).localeCompare(b._status),
-    anytime:pc('anytime'), first:pc('first'), last:pc('last'), two:pc('two'),
-  }[sortK]||pc(MARKET);
-  rows.sort((a,b)=> sortDir*cmp(a,b));
-  const body=$('playerBody'); body.innerHTML='';
-  const statuses=['ACT','Q','DBT','OUT'];
-  const act=m=>MARKET===m?' active':'';
-  for(const p of rows){
-    const tr=document.createElement('tr');
-    const out=p._status==='OUT';
-    const lowsnap = !out && snapLow(p) && p.anytime<0.03;
-    tr.className = out?'out':(lowsnap?'lowsnap':'');
-    const bookVal=(LAST.bookMap[bkey(p._key)]||'').replace(/"/g,'&quot;');
-    tr.innerHTML=`
-      <td class="l"><div class="plname"><span class="accent" style="background:${teamColor(p._abbr)}"></span>${logo(p._abbr)?`<img src="${logo(p._abbr)}">`:''}<span>${p.name}</span><span class="pos">${p.pos}</span>${p.matched?'':'<span class="pos" title="no PBP history — prior-based" style="color:var(--warn)">◦</span>'}${snapTag(p)}${(p.ret||0)>=3?'<span class="pos" title="kick/punt returner — a return TD pays his player prop, so it\x27s included in his odds">↩</span>':''}</div></td>
-      <td class="l hidecol" style="color:${teamText(p._abbr)};font-weight:700">${p._abbr}</td>
-      <td><select class="statussel" data-key="${p._key}">${statuses.map(s=>`<option ${s===p._status?'selected':''}>${s}</option>`).join('')}</select></td>
-      <td class="probcell${act('anytime')}">${out?'—':pct(p.anytime)}</td>
-      <td class="probcell${act('first')}">${out?'—':pct(p.first)}</td>
-      <td class="probcell${act('last')}">${out?'—':pct(p.last)}</td>
-      <td class="probcell${act('two')}">${out?'—':pct(p.two)}</td>
-      <td class="odds big">${out?'—':probToAmerican(p[MARKET])}</td>
-      <td class="l"><input class="bookin" data-key="${p._key}" placeholder="${MKT[MARKET].eg}" value="${bookVal}"></td>
-      <td class="edge">—</td><td class="ev">—</td><td class="verdict">—</td>`;
-    body.appendChild(tr);
-  }
-  // wire status selects — persist to statusMap so the re-sim actually sees it
-  body.querySelectorAll('.statussel').forEach(sel=>{
-    sel.onchange=e=>{ if(LAST) LAST.statusMap[e.target.dataset.key]=e.target.value; run(); };
-  });
-  // wire book odds inputs — persist to bookMap (per market) so odds survive re-sims/switches
-  body.querySelectorAll('.bookin').forEach(inp=>{
-    inp.oninput=e=>{ if(LAST) LAST.bookMap[bkey(e.target.dataset.key)]=e.target.value; computeEV(); refreshSlipAdder(); parlaysSoon(); boardChanged(); };
-  });
-  // header sort
-  document.querySelectorAll('#playerTable th[data-k]').forEach(th=>{
-    th.onclick=()=>{ const k=th.dataset.k; if(k==='status')return; if(sortK===k)sortDir*=-1; else{sortK=k;sortDir=-1;} document.querySelectorAll('#playerTable th').forEach(x=>x.classList.remove('sorted')); th.classList.add('sorted'); renderPlayers(); };
-  });
-  computeEV();
+// ---------- MARKETS: one sportsbook-style panel for TD scorers (incl. defenses) and every player prop ----------
+// Tabs per market, both teams side by side, one price box per bet. A box shows the model's fair price until you
+// type / paste the book's; then it shows the model's chance and EV and lights up: green = ★ on Your card,
+// outline = edge that didn't make the card, dashed = ⚠ too good to trust. Deep bench sits behind "+N more".
+let MTAB='td'; const MMORE=new Set();
+function setMTab(t){ MTAB=t; if(PSTAT.includes(t)) PROP_STAT=t; document.querySelectorAll('.mtab').forEach(b=>b.classList.toggle('active', b.dataset.t===t)); renderMarkets(); }
+function renderPlayers(){ renderMarkets(); computeTopPlays(); }   // old entry points: everything now lives in the Markets panel
+function renderDST(){}
+function renderProps(){}
+function computeEV(){ computeTopPlays(); }
+function computeDstEV(){ computeTopPlays(); }
+function renderMarkets(){
+  if(!LAST) return;
+  const grid=$('mktGrid'), all=MTAB==='all';
+  $('boardWrap').style.display=all?'':'none'; grid.style.display=all?'none':'';
+  if(all){ renderBoard(); return; }
+  const {away,home,imp}=LAST, isTD=MTAB==='td';
+  const col=(abbr, roster, exp, impPts)=>`<div class="mteam" style="--tc:${teamColor(abbr)}"><div class="mthead">${logo(abbr)?`<img src="${logo(abbr)}">`:''}<b style="color:${teamText(abbr)}">${S.teams[abbr].name}</b><span class="muted" style="font-size:12px;margin-left:auto">implied ${impPts.toFixed(1)} · ${exp.expOff.toFixed(2)} exp TD</span></div>`+
+    (isTD?tdRows(abbr, roster):propRows(abbr, roster, MTAB))+`</div>`;
+  grid.innerHTML=`<div class="mgrid">${col(away, LAST.awayR, LAST.awayExp, imp.away)}${col(home, LAST.homeR, LAST.homeExp, imp.home)}</div>`;
+  $('propNote').style.display=isTD?'none':''; if(!isTD) propNote();
+  decorateMarkets();
 }
-
-function computeEV(){
-  const rows=[...$('playerBody').querySelectorAll('tr')];
-  const all=LAST.awayR.concat(LAST.homeR);
-  rows.forEach(tr=>{
-    const inp=tr.querySelector('.bookin'); if(!inp) return;
-    const p=all.find(x=>x._key===inp.dataset.key);
-    const edC=tr.querySelector('.edge'), evC=tr.querySelector('.ev'), vC=tr.querySelector('.verdict');
-    if(!p||p._status==='OUT'||!inp.value.trim()){ edC.textContent='—'; evC.textContent='—'; vC.textContent='—'; vC.className='verdict'; tr.classList.remove('rowtake'); return; }
-    const mp=p[MARKET];   // model prob for the selected market
-    const r=evalBet(mp, inp.value);
-    if(!r){ edC.textContent='—'; evC.textContent='—'; vC.textContent='—'; vC.className='verdict'; tr.classList.remove('rowtake'); return; }
-    const {ev, edge}=r;
-    // tier the verdict so a mirage never shows as a plain green TAKE
-    const tier=tierOf(mp, edge, ev, !p.matched);
-    edC.textContent=(edge>=0?'+':'')+(edge*100).toFixed(1)+'%';
-    edC.className='edge '+(edge>0 && tier==='take'?'ev-pos':'ev-neg');
-    evC.textContent=(ev>=0?'+':'')+(ev*100).toFixed(1)+'%';
-    evC.className='ev '+(ev>0 ? (tier==='take'?'ev-pos':'ev-dart') : 'ev-neg');
-    vC.innerHTML={pass:'<span class="vb-pass">pass</span>', flag:'<span class="vbadge vb-flag">⚠ check</span>', dart:'<span class="vbadge vb-dart">🎲 dart</span>', take:'<span class="vbadge vb-edge">edge</span>'}[tier];
-    vC.className='verdict';
-    tr.classList.remove('rowtake');   // green = on Your card (markCardRows), not merely +EV
-  });
-  computeTopPlays();
+const moreBtn=(k, n, open)=>n?`<button class="mmore" data-m="${k}">${open?'− show fewer':`+ ${n} more player${n>1?'s':''}`}</button>`:'';
+function tdRows(abbr, roster){
+  const priced=p=>['anytime','first','last','two'].some(m=>String(LAST.bookMap[m+'|'+p._key]||'').trim());
+  const vis=roster.filter(p=> p._status==='OUT' ? (p._base>0.10||priced(p)) : (p.anytime>=0.012 || (p._base>0.20&&snapLow(p)) || priced(p)));
+  const main=vis.filter(p=>p._status!=='OUT' && (p.anytime>=0.04 || priced(p))).sort((a,b)=>b.anytime-a.anytime);
+  const extra=vis.filter(p=>!main.includes(p)).sort((a,b)=>((a._status==='OUT')-(b._status==='OUT'))||(b.anytime-a.anytime));
+  const open=MMORE.has('td|'+abbr);
+  const cell=(bk,key,m,p)=>`<div class="mcell" data-key="${key}" data-mkt="${m}" data-base="${pct(p)}" data-tip="model ${pct(p)} · fair ${probToAmerican(p)}"><input class="mprice" data-bk="${bk}" value="${esc(LAST.bookMap[bk]||'')}" placeholder="${probToAmerican(p)}" autocomplete="off" spellcheck="false"><span class="msub">${pct(p)}</span></div>`;
+  const row=p=>{ const out=p._status==='OUT', low=!out&&snapLow(p)&&p.anytime<0.03;
+    return `<div class="mrow${out?' out':low?' lowsnap':''}"><div class="mname"><span class="nm" title="${esc(p.name+' — '+roleLabel(p))}">${esc(p.name)}</span><span class="mtags"><span class="pos">${p.pos}</span>${p.matched?'':'<span class="pos" title="no play-by-play history — priced from a position prior" style="color:var(--warn)">◦</span>'}${snapTag(p)}${(p.ret||0)>=3?'<span class="pos" title="kick/punt returner — a return TD pays his player prop">↩</span>':''}`+
+      `<select class="statussel mstat" data-key="${p._key}" title="status — change it and the game re-simulates">${['ACT','Q','DBT','OUT'].map(s=>`<option ${s===p._status?'selected':''}>${s}</option>`).join('')}</select></span></div>`+
+      (out?'<div class="mcell off"><span class="msub">out</span></div>'.repeat(4):['anytime','first','last','two'].map(m=>cell(m+'|'+p._key, p._key, m, p[m])).join(''))+'</div>'; };
+  const d=abbr===LAST.away?LAST.dst.dstAway:LAST.dst.dstHome, dk='DST|'+abbr;
+  const dstRow=`<div class="mrow"><div class="mname"><span class="nm" title="defensive TDs only (pick-6 / fumble return) — kick/punt return TDs pay the returner">🛡 Defense</span><span class="mtags"><span class="pos">DEF</span><span class="muted" style="font-size:10px">pick-6 / fumble return</span></span></div>`+
+    ['anytime','first','last'].map(m=>cell(m+'|'+dk, dk, m, d[m])).join('')+`<div class="mcell off"><span class="msub">—</span></div></div>`;
+  return `<div class="mrow hdr"><div>Player</div><div>Anytime</div><div>1st TD</div><div>Last TD</div><div>2+ TD</div></div>`+
+    main.map(row).join('')+dstRow+(open?extra.map(row).join(''):'')+moreBtn('td|'+abbr, extra.length, open);
 }
+function propRows(abbr, roster, s){
+  if(!PM||!PM.stats[s]) return '<div class="muted" style="padding:8px">This snapshot has no prop model — rebuild it.</div>';
+  const st=PM.stats[s], rows=[];
+  for(const p of roster){ if(p._status==='OUT') continue; const mu=propMu(p,s); if(mu==null) continue;
+    const pm=LAST.propMap[s+'|'+p._key], priced=!!(pm&&(pm.over||pm.under||(pm.alts||[]).length||pm.line!=null));
+    if(!priced && mu<0.4*(st.floor||0)) continue;
+    rows.push({p, mu, med:propMedian(mu,s), priced}); }
+  rows.sort((a,b)=>(b.priced-a.priced)||(b.med-a.med));
+  const main=rows.filter(r=>r.priced || r.mu>=(st.floor||0)), extra=rows.filter(r=>!main.includes(r)), open=MMORE.has(s+'|'+abbr);
+  const row=({p,mu,med})=>{ const pm=LAST.propMap[s+'|'+p._key]||{}, pp=p.pp||{}, avg=pp.avg&&pp.avg[s];
+    const tip=`mean ${mu.toFixed(1)} · weighted avg ${pp.w[s]}${st.method==='snap'&&pp.sf&&pp.sf!==1?` · snaps ×${pp.sf}`:''}${st.ctx?' · game context applied':''}`;
+    const inp=(f,ph)=>`<input class="pin" data-f="${f}" data-key="${p._key}" data-s="${s}" value="${esc(pm[f]==null?'':pm[f])}" placeholder="${ph}" autocomplete="off" spellcheck="false">`;
+    return `<div class="mrow"><div class="mname"><span class="nm" title="${esc(p.name)}">${esc(p.name)}</span><span class="mtags"><span class="pos">${p.pos}</span>${p._status!=='ACT'?`<span class="pos" style="color:var(--warn)">${p._status}</span>`:''}</span></div>`+
+      `<div class="mproj" title="${esc(tip)}">${fmtStat(med)}<span class="msub">${avg!=null?`avg ${fmtStat(avg)} (${pp.cg})`:'no games yet'}</span></div>`+
+      `<div class="mcell" data-lk="${p._key}" data-s="${s}">${inp('line', fmtStat(Math.round(med)+0.5))}<span class="msub">line</span></div>`+
+      `<div class="mcell" data-key="${p._key}" data-s="${s}" data-side="O" data-mu="${mu}">${inp('over','over')}<span class="msub">over</span></div>`+
+      `<div class="mcell" data-key="${p._key}" data-s="${s}" data-side="U" data-mu="${mu}">${inp('under','under')}<span class="msub">under</span></div></div>`; };
+  return `<div class="mrow hdr"><div>Player</div><div>Model</div><div>Line</div><div>Over</div><div>Under</div></div>`+
+    (main.length?main.map(row).join(''):'<div class="muted" style="padding:6px 2px;font-size:13px">No regular in this market.</div>')+(open?extra.map(row).join(''):'')+moreBtn(s+'|'+abbr, extra.length, open);
+}
+// colour + label every box from the latest CANDS / CARD — never re-renders, so typing keeps focus
+function decorateMarkets(){
+  const grid=$('mktGrid'); if(!grid||!LAST||MTAB==='all') return;
+  const byK=new Map(CANDS.map(c=>[c.key+'|'+c.market,c])), cardK=new Map(CARD.map(c=>[c.key+'|'+c.market,c]));
+  const paint=(cell,c,base,tip)=>{ cell.classList.remove('bet','edge','flag','dart'); const sub=cell.querySelector('.msub'); if(!sub) return;
+    if(!c){ sub.innerHTML=base; cell.title=tip||''; return; }
+    const pick=cardK.get(c.key+'|'+c.market), cls=pick?'bet':c.tier==='take'?'edge':(c.tier==='flag'||c.tier==='dart')?c.tier:'';
+    if(cls) cell.classList.add(cls);
+    sub.innerHTML = pick ? `★ BET ${pick.stake.toFixed(1)}u` : `${pct(c.mp)} · <span class="${c.ev>0&&c.tier==='take'?'ev-pos':c.ev>0?'ev-dart':''}">EV ${c.ev>=0?'+':''}${(c.ev*100).toFixed(0)}%</span>`;
+    cell.title=`${c.label} — ${mktLabel(c.market)} ${c.odds}\nmodel ${pct(c.mp)} (fair ${probToAmerican(c.mp)}) vs book ${pct(c.bimp)} · EV ${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}% · confidence ${Math.round(c.conf.score*100)}\n`+
+      (pick?'★ On Your card — bet this.':c.tier==='take'?'Edge, but not on the card: '+(SKIPWHY.get(c.key+'|'+c.market)||'the card keeps only the best bets per game')+'.':c.tier==='flag'?'⚠ Edge too big to trust — likely injury/role news; verify first.':c.tier==='dart'?'🎲 Lottery price — too rare or uncertain to price.':'No edge at this price.'); };
+  grid.querySelectorAll('.mcell[data-mkt]').forEach(cell=>paint(cell, byK.get(cell.dataset.key+'|'+cell.dataset.mkt), cell.dataset.base, cell.dataset.tip));
+  grid.querySelectorAll('.mcell[data-side]').forEach(cell=>{ const s=cell.dataset.s, key=cell.dataset.key, side=cell.dataset.side, mu=+cell.dataset.mu, nm=side==='O'?'over':'under';
+    const pm=LAST.propMap[s+'|'+key], L=pm&&pm.line!=null?pm.line:null, q=L!=null?propSides(mu,s,L):null, pr=q?(side==='O'?q.over:q.under):null;
+    const inp=cell.querySelector('input'); if(inp) inp.placeholder = pr!=null?probToAmerican(pr):nm;
+    paint(cell, L!=null?byK.get(key+'|'+propMktKey(s,side,L)):null, pr!=null?`${nm} ${pct(pr)}`:nm, pr!=null?`model ${pct(pr)} · fair ${probToAmerican(pr)}`:'type the line first'); });
+  grid.querySelectorAll('.mcell[data-lk]').forEach(cell=>{ const s=cell.dataset.s, key=cell.dataset.lk, pm=LAST.propMap[s+'|'+key]||{}, n=(pm.alts||[]).length, sub=cell.querySelector('.msub');
+    const rungs=CANDS.filter(c=>c.key===key&&c.prop&&c.prop.alt&&c.prop.s===s), pick=rungs.map(c=>cardK.get(c.key+'|'+c.market)).find(Boolean), best=rungs.filter(c=>c.tier==='take').sort((a,b)=>b.kelly-a.kelly)[0];
+    cell.classList.remove('bet','edge');
+    if(pick){ cell.classList.add('bet'); sub.textContent=`★ ${pick.prop.line+0.5}+ ${pick.stake.toFixed(1)}u`; }
+    else if(best){ cell.classList.add('edge'); sub.textContent=`ladder ${best.prop.line+0.5}+ edge`; }
+    else sub.textContent=n?`line · +${n} ladder`:'line';
+    cell.title=n?'ladder rungs: '+pm.alts.map(a=>(a.line+0.5)+'+ '+a.odds).join('   '):''; });
+}
+// tab labels carry how many prices you've entered in each market
+function tabCounts(){
+  if(!LAST) return;
+  const td=new Set(), pn={};
+  for(const [k,v] of Object.entries(LAST.bookMap)) if(v&&String(v).trim()) td.add(k.slice(k.indexOf('|')+1));
+  for(const [k,pm] of Object.entries(LAST.propMap||{})) if(pm&&(pm.over||pm.under||(pm.alts||[]).length)){ const s=k.split('|')[0]; pn[s]=(pn[s]||0)+1; }
+  const nEdge=CANDS.filter(c=>c.tier==='take').length;
+  document.querySelectorAll('.mtab').forEach(b=>{ const t=b.dataset.t, n=t==='all'?CANDS.length:t==='td'?td.size:(pn[t]||0);
+    b.innerHTML=esc(b.dataset.l)+(n?` <span class="mtabc">${t==='all'&&nEdge?`${nEdge}/${n}`:n}</span>`:''); });
+}
+$('mktGrid').addEventListener('input', e=>{ const t=e.target; if(!LAST) return;
+  if(t.classList.contains('mprice')) LAST.bookMap[t.dataset.bk]=t.value;
+  else if(t.classList.contains('pin')){ const k=t.dataset.s+'|'+t.dataset.key, cur=LAST.propMap[k]||(LAST.propMap[k]={line:null, over:'', under:'', alts:[]});
+    if(t.dataset.f==='line'){ const n=parseFloat(t.value); cur.line=isFinite(n)&&n>=0?n:null; } else cur[t.dataset.f]=t.value.trim(); }
+  else return;
+  computeTopPlays(); refreshSlipAdder(); parlaysSoon(); boardChanged(); });
+$('mktGrid').addEventListener('change', e=>{ const t=e.target; if(t.classList.contains('mstat')&&LAST){ LAST.statusMap[t.dataset.key]=t.value; run(); } });
+$('mktGrid').addEventListener('click', e=>{ const b=e.target.closest('.mmore'); if(!b) return; const k=b.dataset.m; if(MMORE.has(k)) MMORE.delete(k); else MMORE.add(k); renderMarkets(); });
+document.querySelectorAll('.mtab').forEach(b=>{ b.onclick=()=>setMTab(b.dataset.t); });
 
 // ---- "what should I bet" summary: scans EVERY market you've priced (players +
 // D/ST) and ranks the positive-EV plays, so you don't have to read the columns ----
@@ -1222,16 +1227,14 @@ function computeTopPlays(){
   if(!cand.length && !logged.length){
     html=`<div class="muted">Paste a board above (or type prices in the tables) — TD odds or player props — and this picks the best ${maxG} bets in the game and sizes them.</div>`;
   } else if(picks.length){
-    html+=`<div style="font-size:13px;margin:0 0 4px"><b>Bet ${picks.length===1?'this one':'these '+picks.length}</b> <span class="muted">— the best ${picks.length===1?'':picks.length+' '}of the ${nEdge} bet${nEdge===1?'':'s'} with an edge in this game (max ${maxG} per game, ${MAX_PER_TEAM} per team, one per player). Everything else with an edge shows <span class="vbadge vb-edge">edge</span> — skip it.</span></div>`;
-    html+='<div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">';
+    html+=`<div style="font-size:13px;margin:0 0 2px"><b>Bet ${picks.length===1?'this one':'these '+picks.length}</b> <span class="muted">— best ${picks.length} of ${nEdge} edge${nEdge===1?'':'s'} (max ${maxG}/game, ${MAX_PER_TEAM}/team, 1/player). Outlined boxes = skip.</span></div>`;
+    html+='<div>';
     picks.forEach((c,i)=>{ const bimp=c.bimp!=null?c.bimp:1/(oddsDec(c.odds)||2), edge=c.mp-bimp;
       const inLog=c.bet?` <span class="muted" style="font-size:12px" title="already in your bet log">✓ in log${Math.abs((+c.bet.stake||0)-c.stake)>0.05?` at ${c.bet.stake}u`:''}</span>`:'';
-      html+=`<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">`+
-      `<span class="${i===0?'star':'muted'}" style="min-width:20px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
-      `<b style="color:${teamText(c.abbr)};min-width:160px">${esc(c.label)}</b>`+
-      `<span style="min-width:150px">${mktLabel(c.market)} <span class="odds">${esc(c.odds)}</span></span>`+
-      `<span class="vbadge vb-take" style="font-size:12px">bet ${u(c.stake)}</span> ${confBadge(c.conf)}${inLog}`+
-      `<span class="muted" style="font-size:12px">model ${pct(c.mp)} vs book ${pct(bimp)} · edge ${edge>=0?'+':''}${(edge*100).toFixed(1)} pts${c.role?' · '+c.role:''}${c.cal&&c.cal<1?` · calibrated ×${c.cal.toFixed(2)}`:''}${c.capped?' · scaled to team cap':''}</span></div>`; });
+      const why=`model ${pct(c.mp)} vs book ${pct(bimp)} · edge ${edge>=0?'+':''}${(edge*100).toFixed(1)} pts${c.role?' · '+c.role:''}${c.cal&&c.cal<1?' · calibrated ×'+c.cal.toFixed(2):''}${c.capped?' · scaled to the team cap':''}`;
+      html+=`<div class="cpick" title="${esc(why)}"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
+      `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="vbadge vb-take" style="font-size:12px;margin-left:auto">bet ${u(c.stake)}</span></div>`+
+      `<div class="cp2">${mktLabel(c.market)} <span class="odds">${esc(c.odds)}</span> ${confBadge(c.conf)}${inLog} <span class="muted" style="font-size:12px">${pct(c.mp)} vs ${pct(bimp)} (${edge>=0?'+':''}${(edge*100).toFixed(1)})</span></div></div>`; });
     html+='</div>';
     const teams={}; picks.forEach(c=>{ teams[c.abbr]=(teams[c.abbr]||0)+c.stake; });
     const tot=picks.reduce((a,c)=>a+c.stake,0);
@@ -1249,15 +1252,14 @@ function computeTopPlays(){
   }
   const other=skipped.filter(s=>!s.c.bet);
   if(other.length){ const seen=new Set();
-    html+=`<div class="muted" style="margin-top:7px;font-size:12px;line-height:1.55"><b>Left off:</b> `+
-      other.filter(s=>{ const k=s.c.key+'|'+s.c.market; if(seen.has(k)) return false; seen.add(k); return true; }).slice(0,8)
-      .map(s=>`${esc(s.c.label)} ${mktLabel(s.c.market)} <span class="odds">${esc(s.c.odds)}</span> — ${s.why}`).join(' · ')+(other.length>8?' · <a href="#boardSec">see all</a>':'')+'</div>'; }
+    const uniq=other.filter(s=>{ const k=s.c.key+'|'+s.c.market; if(seen.has(k)) return false; seen.add(k); return true; });
+    html+=`<details class="muted" style="margin-top:7px;font-size:12px;line-height:1.55"><summary style="cursor:pointer"><b>Left off (${uniq.length})</b> — why the other edges aren't on the card</summary>`+
+      uniq.slice(0,10).map(s=>`${esc(s.c.label)} ${mktLabel(s.c.market)} <span class="odds">${esc(s.c.odds)}</span> — ${s.why}`).join(' · ')+(uniq.length>10?' · <a href="#mktSec" class="seeall">see all</a>':'')+'</details>'; }
   el.innerHTML=html+evExplainer();
   const lc=$('logCard'); if(lc) lc.onclick=logCard;
   const cs=$('cardToSlip'); if(cs) cs.onclick=cardToSlip;
   const tc=$('trimCard'); if(tc) tc.onclick=()=>trimLog(picks, cutLogged, fmtGame(game));
-  markCardRows(); if(PM&&$('propBody').children.length) propCompute();   // same ★ BET / edge marks in the props table
-  renderBoard();
+  decorateMarkets(); renderBoard(); tabCounts();   // same ★ BET / edge marks on every price box
 }
 // every priced bet in this game, TD and props together: the card's picks first, then the other edges
 function renderBoard(){
@@ -1287,16 +1289,6 @@ function renderBoard(){
 const betBadge=c=>`<span class="vbadge vb-take" title="${esc('On Your card: bet '+mktLabel(c.market)+' '+c.odds+' for '+c.stake.toFixed(1)+'u')}">★ BET ${c.stake.toFixed(1)}u</span>`;
 const edgeWhy=k=>'Beats the fair price, but not on Your card — '+(SKIPWHY.get(k)||'the card keeps only the strongest bets per team')+'. Skip it.';
 const edgeBadge=k=>`<span class="vbadge vb-edge" title="${esc(edgeWhy(k))}">edge</span>`;
-function markCardRows(){
-  const upd=(tr,key)=>{ const v=tr.querySelector('.verdict'); if(!v) return;
-    const pick=CARD.find(c=>c.key===key && c.market===MARKET), k=key+'|'+MARKET;
-    tr.classList.toggle('oncard', !!pick); tr.classList.toggle('rowtake', !!pick);
-    if(pick) v.innerHTML=betBadge(pick);
-    else if(v.querySelector('.vb-take')) v.innerHTML=edgeBadge(k);          // dropped off the card since last time
-    else { const e=v.querySelector('.vb-edge'); if(e) e.title=edgeWhy(k); } };
-  document.querySelectorAll('#playerBody tr').forEach(tr=>{ const inp=tr.querySelector('.bookin'); if(inp) upd(tr, inp.dataset.key); });
-  document.querySelectorAll('#dstBody tr').forEach(tr=>{ const inp=tr.querySelector('.bookin.dst'); if(inp) upd(tr, 'DST|'+inp.dataset.abbr); });
-}
 // one click: every card pick goes to the cross-game slip (with its confidence + game context)
 function cardToSlip(){
   let n=0; for(const c of CARD){ const ref=c.ref||{dst:true};
@@ -1972,72 +1964,14 @@ function applyPropEntries(E){
     else { if(cur.line!==e.line){ cur.line=e.line; cur.over=''; cur.under=''; } cur[e.side==='O'?'over':'under']=fmt(e.odds); }
     filled++; touched.add(s);
   }
-  if(touched.size && !touched.has(PROP_STAT)) setPropStat([...touched][0]);
-  renderProps(); computeTopPlays(); refreshSlipAdder();
+  if(touched.size) setMTab(touched.has(MTAB)?MTAB:[...touched][0]);   // show the market you just pasted
+  computeTopPlays(); refreshSlipAdder();
   $('oddsMsg').innerHTML=(filled?`Read <b>${filled}</b> prop price${filled===1?'':'s'} for <b>${[...touched].map(s=>PROP_SHORT[s]).join(', ')}</b>.`:'<span style="color:var(--warn)">No prop prices read.</span>')+
     (detected&&blind.length&&filled&&!(forced&&forced!=='auto')?` <span class="muted">No market header in the paste, so it was read as <b>${PROP_SHORT[detected]}</b> (the lines fit that best). Wrong? × its chip, pick the market in "Prop boards pasted without their header", and paste again.</span>`:'')+
     (unknown?` <span style="color:var(--warn)">Couldn't tell which prop ${unknown} price${unknown===1?' was':'s were'} for — paste with the market header (e.g. "Rushing Yards").</span>`:'')+
     (unsupported?` <span class="muted">${unsupported} price${unsupported===1?'':'s'} skipped from markets the model doesn't price (pass TDs, attempts, longest…).</span>`:'')+
     (unmatched.size?` <span style="color:var(--warn)">Couldn't match:</span> ${[...unmatched].slice(0,10).map(u=>`<code>${esc(u)}</code>`).join(' · ')}`:filled?' ✓':'');
   return filled;
-}
-function setPropStat(s){ PROP_STAT=s; document.querySelectorAll('.propbtn').forEach(b=>b.classList.toggle('active', b.dataset.stat===s)); }
-function renderProps(){
-  const body=$('propBody'); if(!body||!LAST) return;
-  if(!PM){ body.innerHTML='<tr><td class="l muted" colspan="11">This snapshot has no prop model — rebuild it.</td></tr>'; return; }
-  const s=PROP_STAT, st=PM.stats[s], rows=[];
-  for(const p of LAST.awayR.concat(LAST.homeR)){
-    if(p._status==='OUT') continue;
-    const mu=propMu(p,s), pm=LAST.propMap[s+'|'+p._key], priced=!!(pm&&(pm.over||pm.under||(pm.alts||[]).length));
-    if(mu==null) continue;
-    if(!priced && mu<0.5*(st.floor||0)) continue;   // deep bench: books don't post these
-    rows.push({p, mu, med:propMedian(mu,s), priced});
-  }
-  rows.sort((a,b)=>(b.priced-a.priced)||(b.med-a.med));
-  const v=x=>x==null?'':String(x).replace(/"/g,'&quot;');
-  body.innerHTML=rows.map(({p,mu,med})=>{ const pm=LAST.propMap[s+'|'+p._key]||{}, pp=p.pp||{}, avg=pp.avg&&pp.avg[s];
-    const tip=`mean ${mu.toFixed(1)} · weighted avg ${pp.w[s]}${st.method==='snap'&&pp.sf&&pp.sf!==1?` · snaps ×${pp.sf}`:''}${st.ctx?' · game context applied':''}`;
-    const alts=(pm.alts||[]).length?`<div class="muted" style="font-size:11px" title="${esc(pm.alts.map(a=>a.line+'+ '+a.odds).join('  '))}">+${pm.alts.length} ladder</div>`:'';
-    return `<tr data-key="${p._key}">
-      <td class="l"><div class="plname"><span class="accent" style="background:${teamColor(p._abbr)}"></span>${logo(p._abbr)?`<img src="${logo(p._abbr)}">`:''}<span>${esc(p.name)}</span><span class="pos">${p.pos}</span>${p._status!=='ACT'?`<span class="pos" style="color:var(--warn)">${p._status}</span>`:''}</div></td>
-      <td class="l hidecol" style="color:${teamText(p._abbr)};font-weight:700">${p._abbr}</td>
-      <td class="odds big" title="${esc(tip)}">${fmtStat(med)}</td>
-      <td class="hidecol">${avg!=null?`${fmtStat(avg)} <span class="muted" style="font-size:11px">(${pp.cg})</span>`:'<span class="muted">—</span>'}</td>
-      <td class="l"><input class="bookin propin" data-f="line" data-key="${p._key}" placeholder="${fmtStat(Math.round(med)+0.5)}" value="${v(pm.line)}" style="width:66px">${alts}</td>
-      <td class="l"><input class="bookin propin" data-f="over" data-key="${p._key}" placeholder="-110" value="${v(pm.over)}" style="width:66px"></td>
-      <td class="l"><input class="bookin propin" data-f="under" data-key="${p._key}" placeholder="-110" value="${v(pm.under)}" style="width:66px"></td>
-      <td class="pover">—</td><td class="pfair hidecol">—</td><td class="pbest">—</td><td class="verdict pverdict">—</td></tr>`; }).join('')
-    || `<tr><td class="l muted" colspan="11">No ${PROP_SHORT[s]} props for this game.</td></tr>`;
-  body.querySelectorAll('.propin').forEach(inp=>{ inp.oninput=e=>{ const t=e.target, k=s+'|'+t.dataset.key;
-    const cur=LAST.propMap[k]||(LAST.propMap[k]={line:null, over:'', under:'', alts:[]});
-    if(t.dataset.f==='line'){ const n=parseFloat(t.value); cur.line=isFinite(n)&&n>=0?n:null; } else cur[t.dataset.f]=t.value.trim();
-    propCompute(); computeTopPlays(); refreshSlipAdder(); boardChanged(); }; });
-  propCompute(); propNote();
-}
-// fill the computed cells (keeps the inputs, so typing never loses focus)
-function propCompute(){
-  const s=PROP_STAT, all=LAST.awayR.concat(LAST.homeR);
-  $('propBody').querySelectorAll('tr[data-key]').forEach(tr=>{
-    const p=all.find(x=>x._key===tr.dataset.key); if(!p) return; const mu=propMu(p,s), pm=LAST.propMap[s+'|'+p._key]||{};
-    const C=c=>tr.querySelector(c); tr.classList.remove('rowtake','oncard');
-    const L=pm.line!=null?pm.line:null, pr=(mu!=null&&L!=null)?propSides(mu,s,L):null;
-    C('.pover').textContent=pr?pct(pr.over):'—';
-    C('.pfair').innerHTML=pr?`<span class="odds">${probToAmerican(pr.over)}</span> / <span class="odds">${probToAmerican(pr.under)}</span>`:'—';
-    // main over/under plus any ladder rungs; the row shows whichever side/rung has the best EV
-    const mk=(sd,line,odds,alt)=>{ if(mu==null||line==null||!odds) return null; const q=propSides(mu,s,line); if(!q) return null;
-      return propEval({key:p._key,label:p.name,abbr:p._abbr,market:propMktKey(s,sd,line),odds,mp:sd==='O'?q.over:q.under,ref:p,prop:{s,side:sd,line,mu,med:propMedian(mu,s),alt}}); };
-    const ev=[mk('O',L,pm.over), mk('U',L,pm.under), ...(pm.alts||[]).map(a=>mk('O',a.line,a.odds,true))].filter(Boolean);
-    const b=ev.sort((x,y)=>y.ev-x.ev)[0];
-    if(!b){ C('.pbest').textContent='—'; C('.pverdict').innerHTML='—'; return; }
-    C('.pbest').innerHTML=`${b.prop.side==='O'?'Over':'Under'}${b.prop.alt||b.prop.line!==L?` ${b.prop.line} <span class="muted" style="font-size:11px">(${pct(b.mp)})</span>`:''} <b class="${b.ev>0&&b.tier==='take'?'ev-pos':'ev-neg'}">${b.ev>=0?'+':''}${(b.ev*100).toFixed(1)}%</b>`;
-    const onCard=CARD.find(c=>c.key===p._key && isPropMkt(c.market) && c.market.split('|')[1]===s);
-    C('.pverdict').innerHTML=(onCard?betBadge(onCard):({pass:'<span class="vb-pass">pass</span>', flag:'<span class="vbadge vb-flag">⚠ check</span>', take:edgeBadge(p._key+'|'+b.market)}[b.tier]))+' '+confBadge(b.conf)+
-      ` <button class="statussel propslip" style="padding:0 6px;font-size:11px" title="add ${esc(mktLabel(b.market))} to the cross-game slip">➕</button><button class="statussel proplog" style="padding:0 6px;font-size:11px" title="log ${esc(mktLabel(b.market))} ${esc(b.odds)} in the bet log">📓</button>`;
-    tr.classList.toggle('rowtake', !!onCard); tr.classList.toggle('oncard', !!onCard);
-    C('.propslip').onclick=()=>{ const ok=addLeg({key:b.key, name:b.label, abbr:b.abbr, mp:b.mp, odds:b.odds, ref:p, conf:b.conf}, b.market); C('.propslip').textContent=ok?'✓':'in slip'; };
-    C('.proplog').onclick=()=>{ const pick=CARD.find(c=>c.key===b.key&&c.market===b.market);
-      if(logBetFrom(b, pick?pick.stake:sugStake(b))){ saveBets(); renderBets(); } else C('.proplog').textContent='logged'; };
-  });
 }
 function propNote(){
   const el=$('propNote'); if(!el||!PM) return; const bt=PM.backtest||{}, s=PROP_STAT, b=bt[s], st=PM.stats[s];
@@ -2048,53 +1982,6 @@ function propNote(){
     (b?`<b>Held-out test (${PM.testSeason}):</b> ${PROP_SHORT[s]} scored ${b.h1.toFixed(3)} / ${b.h2.toFixed(3)} (Brier, weeks 1–9 / 10–18; lower is better) vs ${b.naive.h1.toFixed(3)} / ${b.naive.h2.toFixed(3)} for his plain season average; predicted → actual over rates ${calTxt}. `:'')+
     `Passing TDs aren't offered: they didn't beat a plain season average clearly on both halves. `+
     `<b>Honest limit:</b> this proves the projection is accurate and calibrated, not that it beats the book's line — props are among the sharper markets. Log what you bet; CLV will say.`;
-}
-document.querySelectorAll('.propbtn').forEach(b=>{ b.onclick=()=>{ setPropStat(b.dataset.stat); if(LAST) renderProps(); }; });
-
-const dstKey=(abbr)=>MARKET+'|DST|'+abbr;   // D/ST book odds, per market
-function renderDST(){
-  const {away,home,dst,awayExp,homeExp}=LAST;
-  const body=$('dstBody'); body.innerHTML='';
-  const act=m=>MARKET===m?' active':'';
-  const hasMkt = MARKET!=='two';   // no 2+ TD market for a defense
-  [[away,dst.dstAway,awayExp],[home,dst.dstHome,homeExp]].forEach(([abbr,d,exp])=>{
-    const fair = hasMkt ? probToAmerican(d[MARKET]) : '—';
-    const bookVal=(LAST.bookMap[dstKey(abbr)]||'').replace(/"/g,'&quot;');
-    const tr=document.createElement('tr');
-    // why this unit is rated where it is: the line + the opposing offense's turnover rate
-    const other=abbr===away?home:away, mg=abbr===away?LAST.imp.away-LAST.imp.home:LAST.imp.home-LAST.imp.away;
-    const og=(S.profiles[other]||{}).giveawayPg, lgv=(C.DST_MODEL||{}).leagueGive;
-    const why=`${Math.abs(mg)<0.5?'pick\'em':mg>0?'favored by '+mg.toFixed(1):'underdog by '+(-mg).toFixed(1)}`+(og?` · ${S.teams[other].short} give it away ${og.toFixed(2)}/gm${lgv?` (league ${lgv.toFixed(2)})`:''}`:'');
-    tr.innerHTML=`<td class="l"><div class="plname"><span class="accent" style="background:${teamColor(abbr)}"></span>${logo(abbr)?`<img src="${logo(abbr)}">`:''}<span><span style="color:${teamText(abbr)};font-weight:700">${S.teams[abbr].short} Defense</span><br><span class="muted" style="font-size:11px">${why}</span></span></div></td>
-      <td>${exp.nonOff.toFixed(2)}</td>
-      <td class="probcell${act('anytime')}">${pct(d.anytime)}</td>
-      <td class="probcell${act('first')}">${pct(d.first)}</td>
-      <td class="probcell${act('last')}">${pct(d.last)}</td>
-      <td class="odds big">${fair}</td>
-      <td class="l"><input class="bookin dst" data-abbr="${abbr}" placeholder="${hasMkt?'+450':'—'}" ${hasMkt?'':'disabled'} value="${bookVal}"></td>
-      <td class="ev">—</td><td class="verdict">—</td>`;
-    body.appendChild(tr);
-  });
-  body.querySelectorAll('.bookin.dst').forEach(inp=>{
-    inp.oninput=e=>{ if(LAST) LAST.bookMap[dstKey(e.target.dataset.abbr)]=e.target.value; computeDstEV(); refreshSlipAdder(); parlaysSoon(); boardChanged(); };
-  });
-  computeDstEV();
-}
-function computeDstEV(){
-  const {away,home,dst}=LAST; const hasMkt = MARKET!=='two';
-  [...$('dstBody').querySelectorAll('tr')].forEach(tr=>{
-    const inp=tr.querySelector('.bookin.dst'); if(!inp) return;
-    const evC=tr.querySelector('.ev'), vC=tr.querySelector('.verdict');
-    const abbr=inp.dataset.abbr; const d= abbr===away?dst.dstAway:dst.dstHome;
-    if(!hasMkt || !inp.value.trim()){ evC.textContent='—'; vC.textContent='—'; vC.className='verdict'; tr.classList.remove('rowtake'); return; }
-    const mp=d[MARKET], r=evalBet(mp, inp.value);
-    if(!r){ evC.textContent='—'; vC.textContent='—'; vC.className='verdict'; tr.classList.remove('rowtake'); return; }
-    const {ev}=r, tier=tierOf(mp, r.edge, ev, false);
-    evC.textContent=(ev>=0?'+':'')+(ev*100).toFixed(1)+'%'; evC.className='ev '+(ev>0 ? (tier==='take'?'ev-pos':'ev-dart') : 'ev-neg');
-    vC.innerHTML={pass:'<span class="vb-pass">pass</span>', dart:'<span class="vbadge vb-dart">🎲 dart</span>', flag:'<span class="vbadge vb-flag">⚠ check</span>', take:'<span class="vbadge vb-edge">edge</span>'}[tier]; vC.className='verdict';
-    tr.classList.remove('rowtake');
-  });
-  computeTopPlays();
 }
 
 // ---------- calibration badge + footer ----------
@@ -2107,6 +1994,7 @@ function computeDstEV(){
     `<span>Log loss <b>${bt.logloss!=null?bt.logloss.toFixed(4):'—'}</b></span>`+
     (skill!=null?`<span>Skill <b class="${skill>0?'ev-pos':'ev-neg'}">${(skill*100).toFixed(1)}%</b></span>`:'')+
     `<span class="muted">N=${bt.n.toLocaleString()}</span>`;
+  $('calSum').innerHTML=`📊 Backtest on unseen games: <b>${skill!=null?(skill*100).toFixed(1)+'% skill':'—'}</b> <span class="muted">(Brier ${bt.brier!=null?bt.brier.toFixed(4):'—'}) · details</span>`;
   const db=S.dstBacktest;
   $('dstNote').innerHTML=`<b>Defensive TDs only</b> (pick-6 / fumble return) — books don't pay the defense prop on kick or punt return TDs; those go to the <b>returner's</b> player prop, so the sim credits them to each team's returners (<span class="pos">↩</span> in the table) at the league rate (${(((C.DST_MODEL||{}).stBase||0.03)*100).toFixed(1)}% a game). The defense rate starts at the league average (${(((C.DST_MODEL||{}).base||0.08)*100).toFixed(1)}% a game) and goes up for the <b>favorite</b> (the other side is trailing and throwing) and against a <b>turnover-prone offense</b>. A defense's own TD history is mostly luck — it barely repeats year to year — so it isn't used.`+
     (db?` Tested on every ${bt.testSeason} game: Brier <b>${db.brier.toFixed(4)}</b> vs ${db.baselineBrier.toFixed(4)} for giving every defense the league average (the old history-based rate scored ${db.oldBrier.toFixed(4)} — worse than average). Predicted ${db.thirds.map(t=>(t.pred*100).toFixed(0)+'%').join(' / ')} → actual ${db.thirds.map(t=>(t.actual*100).toFixed(0)+'%').join(' / ')} by third.`:'');
@@ -2231,7 +2119,7 @@ function applyPastedOdds(){
     unmatched.push(raw||name);
   }
   renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder();   // rebuild inputs from bookMap + recompute EV + parlays + slip adder
-  if(filled){ $('oddsPaste').value=''; boardChanged(); }
+  if(filled){ $('oddsPaste').value=''; boardChanged(); if(MTAB!=='td'&&MTAB!=='all') setMTab('td'); }
   const lbl=['anytime','first','last','two'].filter(m=>touched.has(m)).map(m=>MKT[m].label).join(', ');
   $('oddsMsg').innerHTML=`Filled <b>${filled}</b> ${filled===1?'player':'players'}${lbl?` across <b>${lbl}</b>`:''}.`+
     (unmatched.length?` <span style="color:var(--warn)">Couldn't match:</span> ${unmatched.slice(0,12).map(u=>`<code>${esc(u)}</code>`).join(' · ')}${unmatched.length>12?' …':''}`:' ✓');
@@ -2265,6 +2153,7 @@ $('pricedChips').addEventListener('click', e=>{ const b=e.target.closest('.chipx
   else Object.keys(LAST.propMap).forEach(k=>{ if(k.startsWith(m+'|')) delete LAST.propMap[k]; });
   renderPlayers(); renderDST(); renderProps(); computeParlays(); refreshSlipAdder(); boardChanged(); });
 $('boardPass').onchange=renderBoard;
+$('cardBody').addEventListener('click', e=>{ if(e.target.closest('.seeall')) setMTab('all'); });
 $('boardBody').addEventListener('click', e=>{ const b=e.target.closest('button[data-act]'); if(!b) return; const c=BOARDROWS[+b.dataset.i]; if(!c) return;
   if(b.dataset.act==='log'){ const pick=CARD.find(p=>p.key===c.key&&p.market===c.market); if(logBetFrom(c, pick?pick.stake:sugStake(c))){ saveBets(); renderBets(); } }
   else { const ok=addLeg({key:c.key, name:c.label, abbr:c.abbr, mp:c.mp, odds:c.odds, ref:c.ref||{dst:true}, conf:c.conf}, c.market); b.textContent=ok?'✓':'in slip'; } });
@@ -2300,18 +2189,12 @@ $('betBody').addEventListener('click', e=>{ const t=e.target.closest('.trimbtn')
 $('betBody').addEventListener('toggle', e=>{ const d=e.target; if(d&&d.classList&&d.classList.contains('gamegrp')) LOGOPEN.set(d.dataset.g, d.open); }, true);
 $('betBody').addEventListener('click', e=>{ const d=e.target.closest('.betdel'); if(!d) return; bets=bets.filter(x=>x.id!==d.dataset.id); saveBets(); renderBets(); });
 $('oddsPaste').addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); applyPastedOdds(); }});
-// pricing-market switch: re-point Fair/Book/EV/Verdict + sort at the chosen market
+// which TD market a one-price-per-name board fills (every market has its own box in the Markets panel)
 document.querySelectorAll('.mktbtn[data-mkt]').forEach(b=>{
   b.onclick=()=>{
-    MARKET=b.dataset.mkt; sortK=MARKET; sortDir=-1;
+    MARKET=b.dataset.mkt;
     document.querySelectorAll('.mktbtn[data-mkt]').forEach(x=>x.classList.toggle('active', x===b));
-    $('fairMkt').textContent='('+MKT[MARKET].label+')';
-    $('bookMkt').textContent='('+MKT[MARKET].label+')';
-    $('dstFairMkt').textContent='('+MKT[MARKET].label+')';
-    document.querySelectorAll('#playerTable th').forEach(x=>x.classList.remove('sorted'));
-    const th=document.querySelector(`#playerTable th[data-k="${MARKET}"]`); if(th) th.classList.add('sorted');
     const sm=$('slipMarket'); if(sm){ sm.value=MARKET; refreshSlipAdder(); }  // slip adder follows the pricing market
-    if(LAST){ renderPlayers(); renderDST(); }
   };
 });
 

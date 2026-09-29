@@ -35,8 +35,15 @@ silently to the baked snapshot when not.
 - **Weather** — domes and roofed stadiums are indoor (a curated roof table wins over ESPN's venue flag); outdoor
   games pull the [Open-Meteo](https://open-meteo.com) forecast at kickoff: condition (clear / cloudy / rain /
   snow / storm), temperature and wind.
-- **Layout** — a sticky jump bar (Price · Card · All bets · TD table · Props · Defense · Teams & QBs · Slip · Log) keeps
-  every section one click away. Top to bottom: price the game → Your card → every priced bet → the full tables.
+- **Sportsbook layout** — on a wide screen the paste box and **Your card** sit in a right-hand **bet slip** that stays in
+  view while you browse the markets; on a phone they stack above. A sticky jump bar (Price · Card · Markets · Teams & QBs
+  · Parlays · Slip · Log) keeps every section one click away, and the game controls fit on one row.
+- **Markets** — one panel for everything: tabs for **TD scorer** (anytime / 1st / last / 2+, with each team's defense
+  at the bottom), **Receptions**, **Rec yds**, **Rush yds**, **Rush + Rec** and **Pass yds**, plus **★ Priced** (every
+  price you've entered, card picks first). Both teams side by side, one compact row per player, one price box per bet:
+  it shows the model's fair odds until you enter the book's, then the model's chance and EV — green **★ BET** = on your
+  card, outlined = an edge that didn't make the card (hover for why), dashed = ⚠ too good to trust. Tabs show how many
+  prices you've entered; the deep bench sits behind "+N more".
 - **Price this game** — ONE paste box for every market: TD boards (stacked Anytime / 1st / Last, or one price per name
   for the market picked under the box) and player-prop boards (Over / Under lines, detected automatically). Paste one
   market at a time; chips show what's priced (× clears one market). Prices are kept **per game** — switch games and
@@ -46,7 +53,7 @@ silently to the baked snapshot when not.
   stakes with 4% of bankroll per team. It looks at everything you've priced **and** everything already in your log for
   the game, so you can log every edge as you go and it (or the log) tells you which to keep. Only card picks read
   **★ BET** in the tables; other +EV rows read **edge** (hover for why they didn't make it).
-- **Every priced bet** — TD and prop prices together in one list: card picks first, then the other edges (no-edge
+- **★ Priced** (Markets tab) — TD and prop prices together in one list: card picks first, then the other edges (no-edge
   prices hidden unless you tick the box), each with 📓 log / ➕ slip buttons and a "📓 Log every edge" button.
 - **Four priceable markets** — the Anytime / 1st TD / Last TD / 2+ TD toggle re-points Fair / Book / Edge /
   EV / Verdict; each market remembers its own odds.
