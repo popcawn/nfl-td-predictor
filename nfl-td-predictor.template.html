@@ -137,7 +137,7 @@
   .mtab.active .mtabc{background:rgba(4,18,31,.22)}
   .mgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
   @container (max-width:760px){ .mgrid{grid-template-columns:1fr} }
-  @container (max-width:460px){ .mrow .mname .nm{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.15;font-size:13px} }
+  @container (max-width:460px){ .mrow .mname .nm{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.15;font-size:13px} .mrow .mcell .msub{white-space:normal;overflow:visible} .mrow .mtags{flex-wrap:wrap} .mrow .mtags .muted{display:none} }
   .mteam{min-width:0}
   .mthead{display:flex;align-items:center;gap:9px;padding:6px 9px;border-radius:10px;background:var(--panel2);border-top:3px solid var(--tc,#888);margin-bottom:2px}
   .mthead img{width:26px;height:26px;object-fit:contain}
@@ -147,15 +147,15 @@
   .mrow.out{opacity:.4} .mrow.lowsnap{opacity:.55}
   .mname{display:flex;flex-direction:column;align-items:stretch;gap:2px;min-width:0}
   .mname .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;font-size:13.5px;min-width:0}
-  .mtags{display:flex;gap:4px;align-items:center;min-width:0;overflow:hidden;white-space:nowrap}
-  .mtags .pos{font-size:10px;padding:0 4px;min-width:0;margin-left:0}
-  .mtags .snaptag{font-size:10px}
-  .mtags .statussel{font-size:10px;padding:0 2px;margin-left:auto;flex:0 0 auto}
+  .mtags{display:flex;gap:3px;align-items:center;min-width:0;white-space:nowrap}
+  .mtags .pos{font-size:10px;padding:0 3px;min-width:0;margin-left:0;border-radius:4px}
+  .mtags .snaptag{font-size:10px;padding:0 2px;margin-left:0}
+  .mtags .statussel{font-size:10px;padding:0;margin-left:auto;flex:0 0 auto;max-width:44px}
   .mcell{border:1px solid var(--line2);border-radius:8px;background:var(--panel2);text-align:center;padding:1px 3px 2px;transition:border-color .1s,background .1s;min-width:0}
   .mcell:focus-within{border-color:var(--accent)}
   .mcell input{width:100%;border:none;background:transparent;color:var(--ink);text-align:center;font-family:var(--mono);font-size:13px;font-weight:700;padding:1px 0;line-height:1.2;outline:none}
   .mcell input::placeholder{color:var(--ink3);font-weight:400}
-  .mcell .msub{display:block;font-size:10.5px;color:var(--ink3);line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mcell .msub{display:block;font-size:10.5px;color:var(--ink3);line-height:1.15;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .mcell.bet{border-color:var(--good);background:rgba(51,217,134,.14)} .mcell.bet .msub{color:var(--good);font-weight:800}
   .mcell.edge{border-color:rgba(166,183,202,.8)}
   .mcell.flag{border:1px dashed var(--warn)} .mcell.dart{border-color:rgba(255,207,77,.55)}
@@ -304,7 +304,7 @@
       <div id="mktGrid"></div>
       <details class="legend" style="margin-top:8px">
         <summary style="cursor:pointer">ⓘ How to read this</summary>
-        <div style="margin-top:6px;line-height:1.55">Each box is a bet. Before you enter the book's price it shows the model's <b>fair odds</b> (grey) and chance; type or paste the book's price and it shows the model's chance and <b>EV</b>. <span class="mcell bet" style="display:inline-block;padding:0 7px">green ★ BET</span> = on Your card, bet this at this stake · <span class="mcell edge" style="display:inline-block;padding:0 7px">outlined</span> = beats the price but didn't make the card (hover for why) · <span class="mcell flag" style="display:inline-block;padding:0 7px">dashed</span> = edge too big to trust, likely injury/role news · no outline = no edge. Hover any box for the details.
+        <div style="margin-top:6px;line-height:1.55">Each box is a bet. Before you enter the book's price it shows the model's <b>fair odds</b> (grey) and chance; type or paste the book's price and it shows the model's chance, then the <b>EV</b> (e.g. <b>30% +12%</b>). <span class="mcell bet" style="display:inline-block;padding:0 7px">green ★ 2.1u</span> = on Your card: bet this, for that stake · <span class="mcell edge" style="display:inline-block;padding:0 7px">outlined</span> = beats the price but didn't make the card (hover for why) · <span class="mcell flag" style="display:inline-block;padding:0 7px">dashed</span> = edge too big to trust, likely injury/role news · no outline = no edge. Hover any box for the details.
           Status: <b>ACT</b> · <b>Q</b> questionable (×0.85) · <b>DBT</b> doubtful (×0.35) · <b>OUT</b> — change it and the game re-simulates; a starting QB ruled OUT promotes the next QB. The <span class="snaptag">72%</span> tag is this season's offensive snap share (<span class="snaptag low">🪑 —</span> = no snaps two-plus weeks in); rotational players and QBs are role-calibrated. <span class="pos">↩</span> = kick/punt returner (a return TD pays his prop); <span class="pos" style="color:var(--warn)">◦</span> = no history, priced from a position prior. Props: <b>Model</b> is the model's 50/50 line, with his season average underneath.</div>
         <div id="propNote" style="margin-top:6px"></div>
         <div id="dstNote" style="margin-top:6px"></div>
@@ -1019,7 +1019,7 @@ function tdRows(abbr, roster){
   const main=vis.filter(p=>p._status!=='OUT' && (p.anytime>=0.04 || priced(p))).sort((a,b)=>b.anytime-a.anytime);
   const extra=vis.filter(p=>!main.includes(p)).sort((a,b)=>((a._status==='OUT')-(b._status==='OUT'))||(b.anytime-a.anytime));
   const open=MMORE.has('td|'+abbr);
-  const cell=(bk,key,m,p)=>`<div class="mcell" data-key="${key}" data-mkt="${m}" data-base="${pct(p)}" data-tip="model ${pct(p)} · fair ${probToAmerican(p)}"><input class="mprice" data-bk="${bk}" value="${esc(LAST.bookMap[bk]||'')}" placeholder="${probToAmerican(p)}" autocomplete="off" spellcheck="false"><span class="msub">${pct(p)}</span></div>`;
+  const cell=(bk,key,m,p)=>`<div class="mcell" data-key="${key}" data-mkt="${m}" data-base="${pctS(p)}" data-tip="model ${pct(p)} · fair ${probToAmerican(p)}"><input class="mprice" data-bk="${bk}" value="${esc(LAST.bookMap[bk]||'')}" placeholder="${probToAmerican(p)}" autocomplete="off" spellcheck="false"><span class="msub">${pctS(p)}</span></div>`;
   const row=p=>{ const out=p._status==='OUT', low=!out&&snapLow(p)&&p.anytime<0.03;
     return `<div class="mrow${out?' out':low?' lowsnap':''}"><div class="mname"><span class="nm" title="${esc(p.name+' — '+roleLabel(p))}">${esc(p.name)}</span><span class="mtags"><span class="pos">${p.pos}</span>${p.matched?'':'<span class="pos" title="no play-by-play history — priced from a position prior" style="color:var(--warn)">◦</span>'}${snapTag(p)}${(p.ret||0)>=3?'<span class="pos" title="kick/punt returner — a return TD pays his player prop">↩</span>':''}`+
       `<select class="statussel mstat" data-key="${p._key}" title="status — change it and the game re-simulates">${['ACT','Q','DBT','OUT'].map(s=>`<option ${s===p._status?'selected':''}>${s}</option>`).join('')}</select></span></div>`+
@@ -1027,7 +1027,7 @@ function tdRows(abbr, roster){
   const d=abbr===LAST.away?LAST.dst.dstAway:LAST.dst.dstHome, dk='DST|'+abbr;
   const dstRow=`<div class="mrow"><div class="mname"><span class="nm" title="defensive TDs only (pick-6 / fumble return) — kick/punt return TDs pay the returner">🛡 Defense</span><span class="mtags"><span class="pos">DEF</span><span class="muted" style="font-size:10px">pick-6 / fumble return</span></span></div>`+
     ['anytime','first','last'].map(m=>cell(m+'|'+dk, dk, m, d[m])).join('')+`<div class="mcell off"><span class="msub">—</span></div></div>`;
-  return `<div class="mrow hdr"><div>Player</div><div>Anytime</div><div>1st TD</div><div>Last TD</div><div>2+ TD</div></div>`+
+  return `<div class="mrow hdr"><div title="each box: the book price you enter (or the model's fair odds in grey), then the model's chance and the EV">Player <span style="text-transform:none;letter-spacing:0">· chance / EV</span></div><div>Anytime</div><div>1st TD</div><div>Last TD</div><div>2+ TD</div></div>`+
     main.map(row).join('')+dstRow+(open?extra.map(row).join(''):'')+moreBtn('td|'+abbr, extra.length, open);
 }
 function propRows(abbr, roster, s){
@@ -1047,7 +1047,7 @@ function propRows(abbr, roster, s){
       `<div class="mcell" data-lk="${p._key}" data-s="${s}">${inp('line', fmtStat(Math.round(med)+0.5))}<span class="msub">line</span></div>`+
       `<div class="mcell" data-key="${p._key}" data-s="${s}" data-side="O" data-mu="${mu}">${inp('over','over')}<span class="msub">over</span></div>`+
       `<div class="mcell" data-key="${p._key}" data-s="${s}" data-side="U" data-mu="${mu}">${inp('under','under')}<span class="msub">under</span></div></div>`; };
-  return `<div class="mrow hdr"><div>Player</div><div>Model</div><div>Line</div><div>Over</div><div>Under</div></div>`+
+  return `<div class="mrow hdr"><div title="each box: the book price you enter (or the model's fair odds in grey), then the model's chance and the EV">Player <span style="text-transform:none;letter-spacing:0">· chance / EV</span></div><div>Model</div><div>Line</div><div>Over</div><div>Under</div></div>`+
     (main.length?main.map(row).join(''):'<div class="muted" style="padding:6px 2px;font-size:13px">No regular in this market.</div>')+(open?extra.map(row).join(''):'')+moreBtn(s+'|'+abbr, extra.length, open);
 }
 // colour + label every box from the latest CANDS / CARD — never re-renders, so typing keeps focus
@@ -1058,20 +1058,20 @@ function decorateMarkets(){
     if(!c){ sub.innerHTML=base; cell.title=tip||''; return; }
     const pick=cardK.get(c.key+'|'+c.market), cls=pick?'bet':c.tier==='take'?'edge':(c.tier==='flag'||c.tier==='dart')?c.tier:'';
     if(cls) cell.classList.add(cls);
-    sub.innerHTML = pick ? `★ BET ${pick.stake.toFixed(1)}u` : `${pct(c.mp)} · <span class="${c.ev>0&&c.tier==='take'?'ev-pos':c.ev>0?'ev-dart':''}">EV ${c.ev>=0?'+':''}${(c.ev*100).toFixed(0)}%</span>`;
+    sub.innerHTML = pick ? `★ ${pick.stake.toFixed(1)}u` : `${pctS(c.mp)} <span class="${c.ev>0&&c.tier==='take'?'ev-pos':c.ev>0?'ev-dart':''}" style="font-weight:700">${c.ev>=0?'+':''}${(c.ev*100).toFixed(0)}%</span>`;
     cell.title=`${c.label} — ${mktLabel(c.market)} ${c.odds}\nmodel ${pct(c.mp)} (fair ${probToAmerican(c.mp)}) vs book ${pct(c.bimp)} · EV ${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}% · confidence ${Math.round(c.conf.score*100)}\n`+
       (pick?'★ On Your card — bet this.':c.tier==='take'?'Edge, but not on the card: '+(SKIPWHY.get(c.key+'|'+c.market)||'the card keeps only the best bets per game')+'.':c.tier==='flag'?'⚠ Edge too big to trust — likely injury/role news; verify first.':c.tier==='dart'?'🎲 Lottery price — too rare or uncertain to price.':'No edge at this price.'); };
   grid.querySelectorAll('.mcell[data-mkt]').forEach(cell=>paint(cell, byK.get(cell.dataset.key+'|'+cell.dataset.mkt), cell.dataset.base, cell.dataset.tip));
   grid.querySelectorAll('.mcell[data-side]').forEach(cell=>{ const s=cell.dataset.s, key=cell.dataset.key, side=cell.dataset.side, mu=+cell.dataset.mu, nm=side==='O'?'over':'under';
     const pm=LAST.propMap[s+'|'+key], L=pm&&pm.line!=null?pm.line:null, q=L!=null?propSides(mu,s,L):null, pr=q?(side==='O'?q.over:q.under):null;
     const inp=cell.querySelector('input'); if(inp) inp.placeholder = pr!=null?probToAmerican(pr):nm;
-    paint(cell, L!=null?byK.get(key+'|'+propMktKey(s,side,L)):null, pr!=null?`${nm} ${pct(pr)}`:nm, pr!=null?`model ${pct(pr)} · fair ${probToAmerican(pr)}`:'type the line first'); });
+    paint(cell, L!=null?byK.get(key+'|'+propMktKey(s,side,L)):null, pr!=null?`${nm} ${pctS(pr)}`:nm, pr!=null?`model ${pct(pr)} · fair ${probToAmerican(pr)}`:'type the line first'); });
   grid.querySelectorAll('.mcell[data-lk]').forEach(cell=>{ const s=cell.dataset.s, key=cell.dataset.lk, pm=LAST.propMap[s+'|'+key]||{}, n=(pm.alts||[]).length, sub=cell.querySelector('.msub');
     const rungs=CANDS.filter(c=>c.key===key&&c.prop&&c.prop.alt&&c.prop.s===s), pick=rungs.map(c=>cardK.get(c.key+'|'+c.market)).find(Boolean), best=rungs.filter(c=>c.tier==='take').sort((a,b)=>b.kelly-a.kelly)[0];
     cell.classList.remove('bet','edge');
-    if(pick){ cell.classList.add('bet'); sub.textContent=`★ ${pick.prop.line+0.5}+ ${pick.stake.toFixed(1)}u`; }
-    else if(best){ cell.classList.add('edge'); sub.textContent=`ladder ${best.prop.line+0.5}+ edge`; }
-    else sub.textContent=n?`line · +${n} ladder`:'line';
+    if(pick){ cell.classList.add('bet'); sub.textContent=`★ ${pick.prop.line+0.5}+`; }
+    else if(best){ cell.classList.add('edge'); sub.textContent=`${best.prop.line+0.5}+ edge`; }
+    else sub.textContent=n?`+${n} ladder`:'line';
     cell.title=n?'ladder rungs: '+pm.alts.map(a=>(a.line+0.5)+'+ '+a.odds).join('   '):''; });
 }
 // tab labels carry how many prices you've entered in each market
@@ -1858,6 +1858,7 @@ function propSides(mu, s, L){
   const o=propPOver(tab,mu,L); return {over:cl(o), under:cl(1-o), push:0};
 }
 const fmtStat=v=>v==null?'—':(+v).toFixed(1);
+const pctS=p=>(p*100<0.95?(p*100).toFixed(1):Math.round(p*100))+'%';
 // confidence for a prop pick (same idea as legConfidence: how much of the model's edge to believe)
 function propConfidence(p, s, r, mu){
   const parts=[], f=(v,label)=>{ if(v<1) parts.push([label,v]); return v; };
