@@ -74,8 +74,13 @@ silently to the baked snapshot when not.
   parlay that **grows a bankroll fastest** (Kelly growth), not the highest EV% — plus a bigger-payout option and an honest
   comparison with betting the same legs as singles (usually 2–3× faster growth). Confidence weights are a reasoned
   heuristic, not fitted (no historical prices exist to fit them); the bet log's CLV is how they get checked.
-- **Parlays** — the same-game picker ranks combos by a conservative EV (the worse of independent and
-  simulated-correlation EV); enter your book's actual SGP price for the real number. The **cross-game slip**
+- **Parlays** — the same-game picker mixes 🏈 TD legs and 📈 prop legs (filter: at least one TD / TD + prop mix / TD
+  only / any) and ranks combos by a conservative EV (the worse of independent and simulated-correlation EV); enter your
+  book's actual SGP price for the real number. Prop legs move with each simulated game's TD outcome: a player's yards
+  and catches run higher when he scores, and a QB's passing yards with his team's passing TDs. Tested on every 2025
+  game, "he scores and goes over / under" came out more accurate than treating the legs as independent, on both
+  halves, for all five props — so "TD + his own over" shows as legs that cash together, and "TD + his own under" as
+  legs that fight each other. The **cross-game slip**
   collects legs across games (independent legs, so books pay full odds and the EV is real) and persists.
 - **Player props** — paste the book's over/unders into the same box (FanDuel stacked `Name / O 64.5 / -114 / U 64.5 / -114`,
   one-line `O 64.5 -114 U 64.5 -114`, or ladder rungs `60+ +120`); headers like "Receiving Yards" route each block to

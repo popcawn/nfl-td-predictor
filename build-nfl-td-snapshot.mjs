@@ -247,7 +247,7 @@ const returns = new Map();   // gsis -> {season: returns}
 // every REG game's closing line + offensive TDs per side (all seasons) -> empirical kappa
 const gameLines = new Map();   // gid -> {season, week, home, away, total, spread, homeTD, awayTD}
 const propBox = new Map();     // gid|gsis -> {rec, recyd, ryd, pyd, ptd} (REG season, every season) for player props
-function boxRec(gid, pid) { const k = gid + '|' + pid; let b = propBox.get(k); if (!b) { b = { rec: 0, recyd: 0, ryd: 0, pyd: 0, ptd: 0 }; propBox.set(k, b); } return b; }
+function boxRec(gid, pid) { const k = gid + '|' + pid; let b = propBox.get(k); if (!b) { b = { rec: 0, recyd: 0, ryd: 0, pyd: 0, ptd: 0, td: 0 }; propBox.set(k, b); } return b; }
 
 // load nflverse rosters (newest first) -> espn<->gsis id maps + gsis->position.
 // Positions must be known BEFORE parsing PBP so we can bucket each TD scorer.
@@ -418,8 +418,9 @@ async function parseSeason(season) {
     // ---- per-game closing line + offensive TDs (every REG game, every season) ----
     if (stype === 'REG' && gid) {
       let gl = gameLines.get(gid);
-      if (!gl) { gl = { season, week: +f[idx.week], home, away, total: num(f[idx.total_line]), spread: num(f[idx.spread_line]), homeTD: 0, awayTD: 0 }; gameLines.set(gid, gl); }
+      if (!gl) { gl = { season, week: +f[idx.week], home, away, total: num(f[idx.total_line]), spread: num(f[idx.spread_line]), homeTD: 0, awayTD: 0, homePTD: 0, awayPTD: 0 }; gameLines.set(gid, gl); }
       if ((rushTD || passTD) && pos) { if (pos === home) gl.homeTD++; else if (pos === away) gl.awayTD++; }
+      if (passTD && pos) { if (pos === home) gl.homePTD++; else if (pos === away) gl.awayPTD++; }   // team passing TDs (prop joint model)
       // per-player box score for the prop model (official-stat style: no 2-pt tries, no penalty-nullified plays;
       // passer yards are gross, sacks are not pass attempts)
       if (!isTrue(f[idx.two_point_attempt]) && playType !== 'no_play') {
@@ -428,6 +429,7 @@ async function parseSeason(season) {
         if (isRush && rr) { const b = boxRec(gid, rr); b.ryd += num(f[idx.rushing_yards]); }
         if (dropback && cc && done) { const b = boxRec(gid, cc); b.rec++; b.recyd += num(f[idx.receiving_yards]); }
         if (dropback && qq) { const b = boxRec(gid, qq); if (done) b.pyd += num(f[idx.passing_yards]); if (passTD) b.ptd++; }
+        if ((rushTD || passTD) && f[idx.td_player_id]) boxRec(gid, f[idx.td_player_id]).td++;   // who scored (TD + yards joint)
       }
     }
 
@@ -1054,7 +1056,8 @@ async function parseSeason(season) {
       const F = propFeatures(r.gsis, S, r.week, wP), home = G.home === r.team;
       F.imp = G.total / 2 + (home ? G.spread : -G.spread) / 2; F.margin = home ? G.spread : -G.spread; F.avgImp = teamNorm(r.team, S, r.week, wP);
       const b = propBox.get(r.gid + '|' + r.gsis);
-      out.push({ week: r.week, pos: r.pos, pct: r.pct, F, act: Object.fromEntries(PSTATS.map(s => [s, statOf(b, s)])) });
+      out.push({ week: r.week, pos: r.pos, pct: r.pct, F, act: Object.fromEntries(PSTATS.map(s => [s, statOf(b, s)])),
+        gid: r.gid, gsis: r.gsis, td: b ? b.td : 0, tpd: home ? G.homePTD : G.awayPTD });
     }
     return out; };
   let propTrain = propRows(TRAIN_SEASON, 4, 0), propTest = propRows(TEST_SEASON, 1, PM.wPrior);
@@ -1143,7 +1146,56 @@ async function parseSeason(season) {
     }
     return Object.keys(w).length ? { g: +F.g.toFixed(1), cg: Math.max(...Object.values(F.cur.g)), sf: +F.sf.toFixed(3), w, avg } : null;
   };
-  const propModelOut = { wPrior: PM.wPrior, trainSeason: TRAIN_SEASON, testSeason: TEST_SEASON, stats: propStats, tables: propTables, backtest: propBT,
+  // ---- TD + prop JOINT model (for same-game parlays that mix TD and prop legs) ----
+  // A player's yards/catches are not independent of whether he scores: learn the actual/projection ratio
+  // SEPARATELY for games where he scored vs didn't (passing yards: by his team's passing TDs 0 / 1 / 2+,
+  // which also ties a QB's yards to his receivers' TDs). The app's simulation then draws each prop from the
+  // table matching that simulated game's TD outcome. Validated below against assuming independence.
+  const condBy = st => st === 'pyd' ? 'ptd' : 'td', NCOND = st => st === 'pyd' ? 3 : 2;
+  const condOf = (st, r) => st === 'pyd' ? Math.min(2, r.tpd || 0) : (r.td > 0 ? 1 : 0);
+  const condTable = (st, v, ctx, rows) => {   // 2 projection-size buckets x conditions, 101 quantiles each
+    const pts = [];
+    for (const r of rows) { const mu = propProject(v, st, r.pos, r.F, ctx); if (mu == null || !(mu > 0.05)) continue; pts.push({ mu, x: r.act[st] / mu, c: condOf(st, r) }); }
+    pts.sort((a, b) => a.mu - b.mu); const mid = Math.floor(pts.length / 2), nq = 101, q = [];
+    for (const part of [pts.slice(0, mid), pts.slice(mid)]) { const row = [];
+      for (let c = 0; c < NCOND(st); c++) { const xs = part.filter(p => p.c === c).map(p => p.x).sort((a, b) => a - b);
+        row.push(xs.length >= 15 ? Array.from({ length: nq }, (_, j) => +xs[Math.round(j * (xs.length - 1) / (nq - 1))].toFixed(4)) : null); }
+      q.push(row); }
+    return { by: condBy(st), edges: [+pts[mid - 1].mu.toFixed(3)], q };
+  };
+  const pOverQ = (qarr, mu, L) => propPOver({ edges: [], q: [qarr] }, mu, L);
+  const pCond = (tab, uncond, mu, L, c) => { const bk = mu <= tab.edges[0] ? 0 : 1, qa = tab.q[bk][c]; return qa ? pOverQ(qa, mu, L) : propPOver(uncond, mu, L); };
+  const btP = new Map(btRows.map(r => [r.g + '|' + r.pid, r.p]));
+  const propCond = {}, condBT = {};
+  for (const st of PSTATS) {
+    if (!propStats[st].offered) continue;
+    const cfg = PM.stats[st], ctx = propStats[st].ctx, pop = propTest.filter(r => inPop(r, st));
+    const H = h => pop.filter(r => h === 1 ? r.week <= 9 : r.week >= 10);
+    const res = { 1: { ind: 0, cond: 0, n: 0 }, 2: { ind: 0, cond: 0, n: 0 } };
+    for (const h of [1, 2]) {
+      const other = H(h === 1 ? 2 : 1), ut = ratioTable(st, cfg.method, ctx, other), ct = condTable(st, cfg.method, ctx, other);
+      for (const r of H(h)) {
+        const mu = propProject(cfg.method, st, r.pos, r.F, ctx); if (mu == null || !(mu > 0)) continue;
+        if (st === 'pyd') {   // given his team's actual passing-TD count, are the conditional tables sharper than the plain one?
+          const c = condOf(st, r);
+          for (const L of cfg.grid) { const o = r.act[st] > L ? 1 : 0, pu = propPOver(ut, mu, L), pc = pCond(ct, ut, mu, L, c);
+            res[h].ind += (pu - o) ** 2; res[h].cond += (pc - o) ** 2; res[h].n++; }
+        } else {              // the parlay event itself: "he scores AND goes over / under", with the model's own TD probability
+          const pT = btP.get(r.gid + '|' + r.gsis); if (pT == null) continue;
+          const scored = r.td > 0 ? 1 : 0;
+          for (const L of cfg.grid) { const over = r.act[st] > L ? 1 : 0, pu = propPOver(ut, mu, L), pc = pCond(ct, ut, mu, L, 1);
+            for (const [pi, pcj, y] of [[pT * pu, pT * pc, scored && over], [pT * (1 - pu), pT * (1 - pc), scored && !over]]) {
+              res[h].ind += (pi - y) ** 2; res[h].cond += (pcj - y) ** 2; res[h].n++; } }
+        }
+      }
+    }
+    const b = h => ({ ind: +(res[h].ind / res[h].n).toFixed(5), cond: +(res[h].cond / res[h].n).toFixed(5), n: res[h].n });
+    const wins = b(1).cond < b(1).ind && b(2).cond < b(2).ind;
+    condBT[st] = { event: st === 'pyd' ? 'over/under given team passing TDs' : 'TD and over / TD and under', h1: b(1), h2: b(2), beatsIndependence: wins };
+    if (wins) propCond[st] = condTable(st, cfg.method, ctx, pop);   // ship only what beat independence on BOTH halves
+    log(`  joint ${st.padEnd(5)} ${condBT[st].event}: Brier H1 ${b(1).cond} vs independent ${b(1).ind} | H2 ${b(2).cond} vs ${b(2).ind}  -> ${wins ? 'SHIPPED' : 'not used (independence)'}`);
+  }
+  const propModelOut = { wPrior: PM.wPrior, cond: propCond, condBacktest: condBT, trainSeason: TRAIN_SEASON, testSeason: TEST_SEASON, stats: propStats, tables: propTables, backtest: propBT,
     teamImp: Object.fromEntries([...teamImp.keys()].map(t => [t, +teamNorm(t, CUR, 99, PM.wPrior).toFixed(2)])) };
 
   // ==========================================================================

@@ -45,6 +45,11 @@ See README.md for what the model does and how it was validated.
   actual/projection ratios in 4 projection-size buckets, fit on the test season — what ships is what was scored.
 - Live inputs per rostered player: `pp = {g, cg, sf, w:{stat: weighted per-game}, avg}`; the app applies snap + context.
 - Prop confidence/tier (`propConfidence`, `propTier`) are reasoned, not fitted — same caveat as legConfidence.
+- TD + prop JOINT model (same-game parlays): build ships `propModel.cond[stat]` = actual/projection quantiles split by
+  whether he scored (pyd: team passing TDs 0/1/2+), 2 projection buckets; each stat ships only if "TD & over / TD &
+  under" (pyd: over given team pass TDs) beat independence on BOTH halves (all 5 did, 2026-09-29). simulate() records
+  `passT` per sim; the picker's joint = product of each leg's own probability x the sim's correlation lift
+  (legVec/jointOf), so TD-only combos equal the old role-calibrated joint.
 
 ## The user
 - Bets FanDuel props, pastes boards in FanDuel's stacked format, builds cross-game parlays.

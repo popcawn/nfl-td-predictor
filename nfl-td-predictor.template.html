@@ -322,8 +322,9 @@
     <h2 id="parlaySec">Parlay picker</h2>
     <div class="panel" id="parlayPanel" style="padding:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
-        <div style="font-weight:700;font-size:13px">🎰 Same-game parlay candidates from your priced legs — ranked by conservative EV</div>
-        <div style="display:flex;gap:10px;align-items:center">
+        <div style="font-weight:700;font-size:13px">🎰 Same-game parlays from your priced legs — 🏈 TD scorers and 📈 player props — ranked by conservative EV</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <label class="muted" style="font-size:12px">Legs <select id="parlayMix" class="statussel"><option value="anchor" selected>at least one TD (+ props)</option><option value="both">TD + prop mix</option><option value="td">TD only</option><option value="any">any</option></select></label>
           <label class="muted" style="font-size:12px">Max legs <select id="parlayLegs" class="statussel"><option>2</option><option selected>3</option><option>4</option></select></label>
           <button class="btn" id="findParlays" style="padding:7px 16px;font-size:13px">Find parlays</button>
         </div>
@@ -817,6 +818,7 @@ function simulate(cfg){
   // countMat[s*M+gi] = that player's TD count in sim s; firstArr/lastArr = scorer index.
   const A=awayR.length, H=homeR.length, M=A+H+2, dA=A+H, dH=A+H+1;
   const countMat=new Uint8Array(nsims*M), firstArr=new Int16Array(nsims).fill(-1), lastArr=new Int16Array(nsims).fill(-1);
+  const passT=new Uint8Array(nsims*2);   // passT[s*2+side] = that team's passing TDs in sim s (away 0, home 1)
 
   for(let s=0;s<nsims;s++){
     cnt.clear();
@@ -828,6 +830,7 @@ function simulate(cfg){
         const isRush = rnd() < sd.E.rushShare;
         const j = isRush ? pick(sd.cumRush) : pick(sd.cumRec);
         if(j<0) continue;
+        if(!isRush && passT[s*2+(sd.tag==='away'?0:1)]<255) passT[s*2+(sd.tag==='away'?0:1)]++;
         const key=sd.tag+':'+j;
         cnt.set(key,(cnt.get(key)||0)+1);
         const t=rnd();
@@ -864,7 +867,7 @@ function simulate(cfg){
   const playerIdx=new Map(); awayR.forEach((p,i)=>playerIdx.set(p._key,i)); homeR.forEach((p,i)=>playerIdx.set(p._key,A+i));
   return { dstAway:{anytime:dst.away.any*inv, first:dst.away.first*inv, last:dst.away.last*inv},
            dstHome:{anytime:dst.home.any*inv, first:dst.home.first*inv, last:dst.home.last*inv},
-           joint:{countMat, firstArr, lastArr, M, nsims, playerIdx, dstAwayIdx:dA, dstHomeIdx:dH} };
+           joint:{countMat, firstArr, lastArr, passT, M, nsims, playerIdx, dstAwayIdx:dA, dstHomeIdx:dH} };
 }
 
 // ---------- run + render ----------
@@ -1305,6 +1308,13 @@ function logCard(){
 // joint hit-rate (share of sims where ALL legs hit -> captures correlation) ----------
 function oddsDec(str){ const a=parseAmerican(str); return a==null?null:americanToDec(a); }
 function amStr(a){ return a==null?'—':(a>0?'+':'')+a; }
+// per-sim hit value for a leg: 1/0 for a TD leg; for a prop leg, its win probability GIVEN that sim's TD outcome
+function legVec(J, leg){
+  const n=J.nsims, v=new Float32Array(n);
+  if(leg.kind==='prop'){ for(let s=0;s<n;s++){ const c=leg.by==='ptd' ? Math.min(2, J.passT?J.passT[s*2+leg.side]:0) : leg.by==='td' ? (J.countMat[s*J.M+leg.gi]>=1?1:0) : 0; v[s]=leg.qc[c]; } }
+  else for(let s=0;s<n;s++) v[s]=legOutcome(J,leg,s)?1:0;
+  return v;
+}
 function legOutcome(J, leg, s){ const b=s*J.M;
   if(leg.market==='anytime') return J.countMat[b+leg.gi]>=1;
   if(leg.market==='two')     return J.countMat[b+leg.gi]>=2;
@@ -1340,22 +1350,40 @@ function parlayCandidates(){
     for(const m of ['anytime','first','last']){ const o=LAST.bookMap[m+'|DST|'+abbr], dec=oddsDec(o); if(!dec)continue;
       const r=evalBet(d[m],o); if(!r)continue;
       cand.push({who:'DST|'+abbr,label:S.teams[abbr].short+' Defense',abbr,market:m,gi,dec,odds:o,mp:d[m],ev:r.ev,tier:tierOf(d[m],r.edge,r.ev,false)}); } }
+  cand.forEach(c=>c.kind='td');
   // per-leg: drop dart/flag tiers and thin sub-5% legs; player reliability is already gated above
-  return cand.filter(c=>c.tier!=='dart'&&c.tier!=='flag'&&c.mp>=0.05).sort((a,b)=>b.ev-a.ev).slice(0,12);
+  const tdLegs=cand.filter(c=>c.tier!=='dart'&&c.tier!=='flag'&&c.mp>=0.05).sort((a,b)=>b.ev-a.ev).slice(0,10);
+  // player props join: each one's yards/catches move with that sim's TD outcome (his own TD; a QB's passing
+  // yards with his team's passing TDs) — the joint model the build validated against independence
+  const propLegs=[];
+  if(PM) for(const c0 of propCandidates()){ const e=propEval(c0); if(!e||e.tier==='flag'||e.tier==='dart') continue;
+    const p=e.ref; if(!p||p._status==='OUT') continue; const gi=J.playerIdx.get(p._key); if(gi==null) continue;
+    const st=e.prop.s, by=(PM.cond&&PM.cond[st]&&PM.cond[st].by)||null;
+    const qc=by?[0,1,2].map(cc=>propSideCond(st, e.prop.mu, e.prop.line, e.prop.side, cc)):[e.mp,e.mp,e.mp];
+    propLegs.push({who:p._key, label:p.name, abbr:p._abbr, market:e.market, kind:'prop', gi, side:p._abbr===LAST.away?0:1, by, qc, dec:oddsDec(e.odds), odds:e.odds, mp:e.mp, ev:e.ev, tier:e.tier}); }
+  return tdLegs.concat(propLegs.sort((a,b)=>b.ev-a.ev).slice(0,8));
 }
 function computeParlays(){
   const body=$('parlayBody'); if(!LAST||!LAST.dst||!LAST.dst.joint||!body) return;
   const J=LAST.dst.joint, pool=parlayCandidates(), maxLegs=+(($('parlayLegs')&&$('parlayLegs').value)||3);
-  if(pool.length<2){ body.innerHTML=`Enter book odds on at least <b>2</b> reliable legs (any markets, model <b>anytime ≥12%</b>, a real role &amp; a snap last week, no 🎲/⚠) and I'll rank the best parlays here.`+parlayNote(); return; }
-  const combos=(arr,k)=>{ const out=[]; (function rec(st,acc){ if(acc.length===k){out.push(acc.slice());return;} for(let i=st;i<arr.length;i++){ if(acc.some(x=>x.who===arr[i].who))continue; acc.push(arr[i]); rec(i+1,acc); acc.pop(); } })(0,[]); return out; };
+  if(pool.length<2){ body.innerHTML=`Price at least <b>2</b> reliable legs — TD scorers (model <b>anytime ≥12%</b>, a real role &amp; a snap last week, no 🎲/⚠) and/or player props — and I'll rank the best same-game parlays here.`+parlayNote(); return; }
+  // a player can carry one TD leg AND one prop leg (the classic "scores + goes over"), never two of the same kind
+  const combos=(arr,k)=>{ const out=[]; (function rec(st,acc){ if(acc.length===k){out.push(acc.slice());return;} for(let i=st;i<arr.length;i++){ if(acc.some(x=>x.who===arr[i].who&&x.kind===arr[i].kind))continue; acc.push(arr[i]); rec(i+1,acc); acc.pop(); } })(0,[]); return out; };
+  const mix=(($('parlayMix')||{}).value)||'anchor';
+  const okMix=c=>{ const t=c.some(x=>x.kind==='td'), p=c.some(x=>x.kind==='prop'); return mix==='td'?!p : mix==='both'?(t&&p) : mix==='any'?true : t; };
+  const vec=new Map(pool.map(l=>[l, legVec(J,l)])), marg=new Map(pool.map(l=>{ const v=vec.get(l); let a=0; for(let i=0;i<v.length;i++) a+=v[i]; return [l, a/v.length]; }));
+  // joint = product of each leg's own (validated) probability x the sim's correlation lift between them
+  const jointOf=combo=>{ const vs=combo.map(l=>vec.get(l)), n=J.nsims; let h=0; for(let s=0;s<n;s++){ let x=1; for(const v of vs){ x*=v[s]; if(!x) break; } h+=x; }
+    const den=combo.reduce((a,l)=>a*marg.get(l),1); return den>0 ? combo.reduce((a,l)=>a*l.mp,1)*(h/n)/den : 0; };
   const LONGSHOT=0.02;   // a parlay that hits <2% of sims is a lottery ticket, not a lead
   const isDST=c=>String(c.who).startsWith('DST|');
   const results=[];
   for(let k=2;k<=maxLegs;k++) for(const combo of combos(pool,k)){
+    if(!okMix(combo)) continue;
     // never stack two opposing defenses: both D/STs returning a TD in one game is rare AND
     // anti-correlated, yet independent-EV on long (+700/+750) odds kept floating it to the top
     if(combo.filter(isDST).length>1) continue;
-    const jp=jointProb(J,combo)*combo.reduce((a,c)=>a*(c.cal||1),1); if(jp<=0)continue;   // joint from raw draws, role-calibrated per leg
+    const jp=jointOf(combo); if(jp<=0)continue;   // same as the old role-calibrated TD joint for TD-only combos
     const dec=combo.reduce((a,c)=>a*c.dec,1), indepP=combo.reduce((a,c)=>a*c.mp,1);
     const indepEV=combo.reduce((a,c)=>a*(c.mp*c.dec),1)-1;  // full odds, legs treated independent
     const ceilEV=jp*dec-1;                                  // full odds with the sim's TRUE correlation
@@ -1372,13 +1400,14 @@ function computeParlays(){
   const top=results.slice(0,6);
   parlayRows=top;
   let html='';
+  if(!top.length){ body.innerHTML=`No combos fit "${esc(($('parlayMix').selectedOptions[0]||{}).text||'')}" yet — price more legs (TD odds and/or props), or loosen the filter.`+parlayNote(); parlayRows=[]; return; }
   if(!top.some(r=>r.rankEV>0 && r.jp>=LONGSHOT)) html+=`<div style="margin-bottom:7px"><b>No parlay worth it</b> at these prices — normal, because the market is efficient on most legs. Closest ones for reference:</div>`;
   html+='<div style="display:flex;flex-direction:column;gap:8px">';
   top.forEach((r,i)=>{
-    const legs=r.legs.map(c=>`<b style="color:${teamText(c.abbr)}">${c.label}</b> <span class="muted">${MKT[c.market].label}</span> <span class="odds">${c.odds}</span>`).join(' <span class="muted">+</span> ');
+    const legs=r.legs.map(c=>`${c.kind==='prop'?'📈':'🏈'} <b style="color:${teamText(c.abbr)}">${esc(c.label)}</b> <span class="muted">${mktLabel(c.market)}</span> <span class="odds">${esc(c.odds)}</span>`).join(' <span class="muted">+</span> ');
     const corrTxt = r.corr>0.02?`legs cash together <b>+${(r.corr*100).toFixed(0)}%</b>` : r.corr<-0.02?`<span style="color:var(--warn)">work against each other ${(r.corr*100).toFixed(0)}%</span>` : `~independent`;
     const longshot = r.jp<LONGSHOT ? ` · <span style="color:var(--warn)">🎲 longshot (hits &lt;2%)</span>` : '';
-    const upside = r.corr>0.02 && r.ceilEV>r.rankEV ? ` <span class="muted">→ up to +${(r.ceilEV*100).toFixed(0)}% if paid full</span>` : '';
+    const upside = r.corr>0.02 && r.ceilEV>r.rankEV && r.ceilEV>0 ? ` <span class="muted">→ up to +${(r.ceilEV*100).toFixed(0)}% if paid full</span>` : '';
     const isPick = r.rankEV>0 && r.jp>=LONGSHOT;
     html+=`<div style="border-top:1px solid var(--line);padding-top:7px">${isPick?'<span class="star">★</span> ':`<span class="muted">${i+1}.</span> `}${legs}`+
       `<div style="margin-top:3px;font-size:12px">${r.legs.length} legs · hits <b>${pct(r.jp)}</b> (${corrTxt})${longshot} · <b>fair <span class="odds">${probToAmerican(Math.min(r.jp,r.ip))}</span></b> · <span class="muted">full-odds pays ${amStr(decToAmerican(r.dec))}, EV ${r.rankEV>=0?'+':''}${(r.rankEV*100).toFixed(1)}% (conservative)${upside}</span></div>`+
@@ -1413,6 +1442,7 @@ function sgpEV(i){
   res.innerHTML=`→ real EV <b class="${evcls}">${ev>=0?'+':''}${(ev*100).toFixed(1)}%</b> <span class="vbadge ${cls}" style="padding:1px 8px">${badge}</span> <span class="muted">vs fair ${probToAmerican(p)} · full odds ${amStr(decToAmerican(r.dec))}</span>${note}`;
 }
 function parlayNote(){ return `<div class="muted" style="margin-top:9px;font-size:12px;border-top:1px solid var(--line);padding-top:8px;line-height:1.5">`+
+  `<b>TD + prop legs:</b> in each of the 10k simulated games a prop leg's chance moves with that game's TD outcome — a player's yards and catches run higher in games he scores, and a QB's passing yards with his team's passing TDs (so a QB-yards over and his receiver's TD pull together). Tested on every 2025 game: for "he scores and goes over / under" this beat treating the legs as independent on both halves of the season, for every prop. Each leg keeps its own tested probability; the sim supplies how they move together. `+
   `<b>Reading this:</b> "hits %" is straight from the 10k sims (the share where <i>all</i> legs cash — correlation already included). The ranked "<b>EV</b>" is the <b>conservative</b> one: the worse of treating the legs as independent and using the sim's true correlation — so a stack whose legs <b>fight each other</b> (like two opposing defenses) can't ride long odds to the top, and a <span style="color:var(--warn)">🎲 longshot</span> that hits &lt;2% is never starred. `+
   `<b>Which legs are eligible:</b> only players who are a real threat (model <b>anytime ≥12%</b>) with an actual role and a snap last week — a deep longshot whose thin edge on long odds is just noise can't anchor a parlay. `+
   `<b>Why a "pass" leg appears:</b> a leg that's a pass on its own can still ride in a parlay carried by the strong leg — the parlay's edge isn't each leg standing alone. `+
@@ -1858,6 +1888,14 @@ function propSides(mu, s, L){
   const o=propPOver(tab,mu,L); return {over:cl(o), under:cl(1-o), push:0};
 }
 const fmtStat=v=>v==null?'—':(+v).toFixed(1);
+// P(this prop side wins | the simulated game's TD outcome c): c = he scored (0/1), or for passing yards his team's
+// passing TDs (0 / 1 / 2+). Tables from the build's joint model; falls back to the plain table where thin.
+function propSideCond(s, mu, L, side, c){
+  const ct=PM.cond&&PM.cond[s], ut=PM.tables[s];
+  const po=LL=>{ const qa=ct?ct.q[mu<=ct.edges[0]?0:1][c]:null; return qa?propPOver({edges:[],q:[qa]},mu,LL):propPOver(ut,mu,LL); };
+  if(Number.isInteger(L)){ const o=po(L+0.5), u=1-po(L-0.5), t=o+u; return t>0?(side==='O'?o/t:u/t):0.5; }
+  const o=po(L); return side==='O'?o:1-o;
+}
 const pctS=p=>(p*100<0.95?(p*100).toFixed(1):Math.round(p*100))+'%';
 // confidence for a prop pick (same idea as legConfidence: how much of the model's edge to believe)
 function propConfidence(p, s, r, mu){
@@ -2167,6 +2205,7 @@ function setNavH(){ const n=$('jumpNav'); if(n) document.documentElement.style.s
 window.addEventListener('resize', setNavH);
 $('findParlays').onclick=computeParlays;
 $('parlayLegs').onchange=computeParlays;
+$('parlayMix').onchange=computeParlays;
 // cross-game slip wiring
 $('slipMarket').onchange=refreshSlipAdder;
 $('slipAdd').onclick=()=>{ const i=$('slipPlayer').value; if(i==='') return; const l=slipLegCache[+i]; if(!addLeg(l, l.market||$('slipMarket').value)) $('slipGameLbl').title='already in slip'; };
