@@ -88,4 +88,8 @@ See README.md for what the model does and how it was validated.
   across PCs through a secret gist (`nfl-td-sync.json`) using a gist-scope token the user pastes into each browser.
   Records carry `mt`; deletions are tombstones (`nfltd_tomb`); `saveBets()/saveSlip()` stamp changes automatically,
   so any new code that edits bets/slip must go through them. Never put a token in the repo. Export / Import still work.
+- ESPN calls in the build retry (curlJsonRetry); a team whose roster still fails is rebuilt from the PREVIOUS
+  snapshot's player list, and the build throws (no files written, the bot commits nothing) if any team is still missing.
+  A one-off ESPN failure dropped PIT on 2026-10-01 and blanked the app. Test with `FAIL_ROSTER=PIT`. The app also skips
+  scheduled games whose team isn't in `S.teamList`.
 - Commits end with the Co-Authored-By line from the session's instructions.

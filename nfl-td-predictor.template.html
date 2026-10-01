@@ -526,13 +526,13 @@ function nbCount(mean){ if(mean<=0) return 0; const lam=gamma(NB_SIZE)*(mean/NB_
 
 // ---------- populate team pickers ----------
 const teamList=S.teamList.slice().sort((a,b)=> S.teams[a].name.localeCompare(S.teams[b].name));
-function opt(sel,arr,val){ sel.innerHTML=arr.map(a=>`<option value="${a}">${S.teams[a].name}</option>`).join(''); if(val) sel.value=val; }
+function opt(sel,arr,val){ sel.innerHTML=arr.map(a=>`<option value="${a}">${S.teams[a].name}</option>`).join(''); sel.value=(val&&arr.includes(val))?val:arr[0]; }
 // this week's games (kickoff order); the app opens on the next game to kick off, not a fixed matchup.
 // The baked slate is replaced live on every visit (refreshSlate), so it never goes stale between builds.
 let SCHED=[], userPicked=false;
 function setSchedule(list){
   S.schedule=list;
-  SCHED=list.filter(g=>S.teams[g.home]&&S.teams[g.away]).sort((a,b)=>new Date(a.kickoff)-new Date(b.kickoff));
+  SCHED=list.filter(g=>S.teamList.includes(g.home)&&S.teamList.includes(g.away)).sort((a,b)=>new Date(a.kickoff)-new Date(b.kickoff));
   $('gameSel').innerHTML=`<option value="">— or pick any two teams below —</option>`+SCHED.map((g,i)=>`<option value="${i}">${gameLabel(g)}</option>`).join('');
 }
 const nextGame=()=>SCHED.find(g=>new Date(g.kickoff).getTime()>Date.now()-3.5*3600e3)||null;

@@ -1203,7 +1203,13 @@ async function parseSeason(season) {
   // ==========================================================================
   // (espn2gsis / name2gsis / gsis2pos already loaded by loadRosters at the top)
   log(`  pulling ESPN teams / rosters / injuries ...`);
-  const espnTeams = curlJson('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams')
+  // ESPN occasionally fails one request. Retry, and if a team's roster still won't load, rebuild that team from the
+  // previous snapshot's player list (with today's numbers) rather than dropping it — a dropped team (PIT, 2026-10-01)
+  // left the opening game with no away team and broke the whole app.
+  let prevSnap = null; try { prevSnap = JSON.parse(fs.readFileSync(path.join(__dirname, 'nfl-td-snapshot.json'), 'utf8')); } catch { }
+  const sleepMs = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  const curlJsonRetry = (url, tries = 4) => { for (let i = 1; ; i++) { try { return curlJson(url); } catch (e) { if (i >= tries) throw e; sleepMs(2000 * i); } } };
+  const espnTeams = curlJsonRetry('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams')
     .sports[0].leagues[0].teams.map(t => t.team);
 
   // current-week schedule (kickoff time + per-game indoor flag) so the app can pull
@@ -1255,8 +1261,15 @@ async function parseSeason(season) {
     };
 
     let roster;
-    try { roster = curlJson(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${t.id}/roster`); }
-    catch { log(`    ! roster failed for ${abbr}`); continue; }
+    try { if ((process.env.FAIL_ROSTER || '').split(',').includes(abbr)) throw new Error('simulated');   // test knob: FAIL_ROSTER=PIT
+      roster = curlJsonRetry(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${t.id}/roster`); }
+    catch {
+      const prev = prevSnap && prevSnap.rosters && prevSnap.rosters[abbr];
+      if (!prev || !prev.length) { log(`    ! roster failed for ${abbr} and there's no previous roster to fall back on`); continue; }
+      log(`    ! roster failed for ${abbr} after retries — rebuilding it from the previous snapshot's player list`);
+      const stTxt = { OUT: 'Out', DBT: 'Doubtful', Q: 'Questionable' };
+      roster = { athletes: [{ position: 'offense', items: prev.map(p => ({ id: p.id, fullName: p.name, jersey: p.jersey, position: { abbreviation: p.pos }, injuries: stTxt[p.status] ? [{ status: stTxt[p.status] }] : [] })) }] };
+    }
     const rows = [];
     for (const grp of (roster.athletes || [])) {
       const groupOut = grp.position === 'injuredReserveOrOut';
@@ -1319,6 +1332,10 @@ async function parseSeason(season) {
   const teamList = Object.keys(teamsOut)
     .filter(a => teamProfiles[a] && rostersOut[a])
     .sort();
+  // never publish a snapshot with a team missing: fail the build (the refresh bot then commits nothing and the
+  // site keeps the last good version)
+  const missingTeams = Object.keys(teamsOut).filter(a => !teamList.includes(a));
+  if (missingTeams.length) throw new Error(`teams missing from the snapshot: ${missingTeams.join(', ')} — refusing to write a broken build`);
 
   // attach profiles keyed by abbr for teams we ship
   const profilesOut = {};
