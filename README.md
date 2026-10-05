@@ -54,7 +54,8 @@ silently to the baked snapshot when not.
   automatically when you open a game) fills FanDuel's current prices for that game: TD scorer markets (4 credits per game)
   and/or player props (5 credits). Auto-pulls stop below a credit reserve so other apps on the same key keep working;
   the free plan has 500 credits a month. In the bet log, **⚡ Pull closing prices** fills Close on every open bet before
-  kickoff (moved prop lines are estimated, ≈). The key stays in your browser.
+  kickoff (moved prop lines are estimated, ≈). The key stays in your browser. A pull returns **every US book** for the
+  same credits; FanDuel's price is what you bet, and the other books set the starting chance (see *Market anchor*).
 - **Price this game** — ONE paste box for every market: TD boards (stacked Anytime / 1st / Last, or one price per name
   for the market picked under the box) and player-prop boards (Over / Under lines, detected automatically). Paste one
   market at a time; chips show what's priced (× clears one market). Prices are kept **per game** — switch games and
@@ -115,6 +116,7 @@ silently to the baked snapshot when not.
 | `market_lines_<season>.json` | Cached output of the above (which players the book priced, per game). |
 | `nfl-td-predictor.template.html` | UI + model source (the build injects the snapshot into it). |
 | `nfl-td-snapshot.json` | The compact data snapshot (also embedded in the HTML). |
+| `market-backtest.mjs` | Historical-price test (paid Odds API plan): fits the market-anchor weight → `market_anchor.json`. |
 | `refresh.bat` | Runs the build and logs to `refresh.log` (for a weekly scheduled task). |
 
 ## Refreshing the data
@@ -209,6 +211,28 @@ from the model's own distribution (marked ≈).
 Restricted to exactly the players the book priced: **Brier 0.1490** on 1,065 players (baseline 0.1639), and the
 book listed **94% of actual scorers**. ESPN exposes the line, **not the price**, so this is a calibration and
 coverage check — not a beat-the-odds result. A price comparison needs a paid odds feed.
+
+### Market anchor (bet chance = other books + the model)
+Side by side with six books (ATL@NO, 2026 wk 5), the model was much **flatter** than the market: Bijan 55% vs the
+books' 70%, Drake London 28% vs 47% — so its "edges" piled onto backups and second tight ends. It gets the game's TD
+count right (that part is Vegas-anchored and backtested) but spreads the TDs too evenly. So when a pull has other books,
+the chance used for EV, the card, the slate and parlays is a log-odds blend:
+`logit(chance) = 0.65 × logit(other books) + 0.35 × logit(model)`. TD prices are one-sided (no "No" price to remove
+the books' cut), so for now "other books" keeps the market's **shape** (who scores) at the model's **level** (how many):
+each player's consensus price is scaled so the game's total matches the model. Props are two-sided, so each book's
+over/under is de-vigged directly. Hover a price box for "other books X blended with the model's Y"; logged bets keep
+both numbers. Pasted boards (no other books) use the model alone.
+
+**The 0.35 is a starting value, not a fitted one.** `market-backtest.mjs` fits it (and a calibration of the books'
+prices) against real 2025 closing and early-week prices from The Odds API's historical feed — paid plans only:
+```bash
+DUMP_BT=1 node build-nfl-td-snapshot.mjs     # writes bt_rows_2025.json (leak-free model predictions); then git checkout the shipped files
+node market-backtest.mjs                     # dry run: estimated credits (~5,500 for 2025)
+node market-backtest.mjs --go                # fetch (cached in market_hist/, gitignored)
+node market-backtest.mjs analyze             # Brier per half: model / market / blends, ROI at FanDuel → market_anchor.json
+```
+The next build ships `market_anchor.json`'s fitted weight and calibration into the app. Raw paid price data never goes
+in the repo.
 
 **Where the edge is (and isn't).** The model tracks the market about as well as the market prices itself —
 it's a lead generator, not a line-beater. Edge, when it exists, lives in speed (repricing after injury news

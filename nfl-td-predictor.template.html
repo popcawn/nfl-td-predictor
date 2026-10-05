@@ -248,7 +248,7 @@
             <label><input type="checkbox" id="oddsProps"> Player props — receptions, rec / rush / rush+rec / pass yds <span class="muted">(5 credits / game)</span></label>
             <label><input type="checkbox" id="oddsAuto"> Pull automatically when I open a game <span class="muted">(if its prices are over 20 min old)</span></label>
             <div>Auto-pulls stop below <input id="oddsReserve" type="number" min="0" step="10" style="width:70px;padding:3px 6px;font-size:12px"> credits <span class="muted">(left for other apps on the same key, e.g. the UFC scanner)</span></div>
-            <div class="muted">The key is saved in this browser only, never in the site's code. Prices come from FanDuel via The Odds API; the free plan has 500 credits a month. Pasting still works and overrides anything.</div>
+            <div class="muted">Pulls take every US book's prices (same credits): you bet FanDuel's price, and each bet's chance starts from the other books' consensus and moves part-way toward the model — see Your card ("mkt · model →"). The key is saved in this browser only, never in the site's code. Prices come from FanDuel via The Odds API; the free plan has 500 credits a month. Pasting still works and overrides anything.</div>
           </div>
         </details>
       </div>
@@ -768,13 +768,13 @@ let BOARDS=(()=>{ try{ const b=JSON.parse(localStorage.getItem(BOARD_KEY)||'{}')
 function saveBoard(){
   if(!LAST) return; const g=LAST.away+'@'+LAST.home;
   const has=Object.values(LAST.bookMap).some(v=>v&&String(v).trim()) || Object.values(LAST.propMap||{}).some(pm=>pm&&(pm.over||pm.under||(pm.alts||[]).length));
-  if(has) BOARDS[g]={t:Date.now(), book:LAST.bookMap, prop:LAST.propMap}; else delete BOARDS[g];
+  if(has) BOARDS[g]={t:Date.now(), book:LAST.bookMap, prop:LAST.propMap, mkt:LAST.mktMap||{}}; else delete BOARDS[g];
   try{ localStorage.setItem(BOARD_KEY, JSON.stringify(BOARDS)); }catch(e){}
 }
 function boardChanged(){ clearTimeout(boardChanged.t); boardChanged.t=setTimeout(saveBoard, 300); renderPriced(); }
 // switching games: keep this game's prices, bring back the next game's (empty if it was never priced)
 function clearOddsBoard(){
-  if(LAST){ saveBoard(); const b=BOARDS[$('awaySel').value+'@'+$('homeSel').value]; LAST.bookMap=b?Object.assign({},b.book):{}; LAST.propMap=b?b.prop:{}; }
+  if(LAST){ saveBoard(); const b=BOARDS[$('awaySel').value+'@'+$('homeSel').value]; LAST.bookMap=b?Object.assign({},b.book):{}; LAST.propMap=b?b.prop:{}; LAST.mktMap=b?(b.mkt||{}):{}; }
   sgpMap={};
   $('oddsPaste').value=''; $('oddsMsg').textContent='';
 }
@@ -936,10 +936,11 @@ function run(){
   const saved = LAST ? null : (BOARDS[away+'@'+home]||null);   // first sim of the visit: bring back this game's prices
   const prevBook = LAST ? LAST.bookMap : ((saved&&saved.book)||{});
   const prevProp = LAST ? LAST.propMap : ((saved&&saved.prop)||{});   // player-prop lines/prices, keyed stat|player
+  const prevMkt = LAST ? (LAST.mktMap||{}) : ((saved&&saved.mkt)||{});   // other books' consensus (market anchor)
   const {imp,offA,offH,awayExp,homeExp,awayR,homeR,dst}=simGame({away, home, total, spreadPts, fav, outdoor, wind, wx:WX, statusMap:prevStatus});
 
   LAST={away,home,total,spreadPts,fav,imp,offA,offH,awayExp,homeExp,awayR,homeR,dst,
-        statusMap:Object.assign({}, prevStatus), bookMap:Object.assign({}, prevBook), propMap:prevProp};
+        statusMap:Object.assign({}, prevStatus), bookMap:Object.assign({}, prevBook), propMap:prevProp, mktMap:prevMkt};
   awayR.concat(homeR).forEach(p=>{ LAST.statusMap[p._key]=p._status; });
 
   $('impliedNote').textContent = `Implied points — ${S.teams[away].short}: ${imp.away.toFixed(1)}, ${S.teams[home].short}: ${imp.home.toFixed(1)}  ·  exp. off. TDs ${awayExp.expOff.toFixed(2)} / ${homeExp.expOff.toFixed(2)}`;
@@ -1104,7 +1105,7 @@ function decorateMarkets(){
     const pick=cardK.get(c.key+'|'+c.market), cls=pick?'bet':c.tier==='take'?'edge':(c.tier==='flag'||c.tier==='dart')?c.tier:'';
     if(cls) cell.classList.add(cls);
     sub.innerHTML = pick ? `★ ${pick.stake.toFixed(1)}u` : `${pctS(c.mp)} <span class="${c.ev>0&&c.tier==='take'?'ev-pos':c.ev>0?'ev-dart':''}" style="font-weight:700">${c.ev>=0?'+':''}${(c.ev*100).toFixed(0)}%</span>`;
-    cell.title=`${c.label} — ${mktLabel(c.market)} ${c.odds}\nmodel ${pct(c.mp)} (fair ${probToAmerican(c.mp)}) vs book ${pct(c.bimp)} · EV ${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}% · confidence ${Math.round(c.conf.score*100)}\n`+
+    cell.title=`${c.label} — ${mktLabel(c.market)} ${c.odds}\n${c.mkt!=null?`chance ${pct(c.mp)} = other books ${pct(c.mkt)} (their cut removed) blended with the model's ${pct(c.model)}`:`model ${pct(c.mp)} (no other-book prices)`} · fair ${probToAmerican(c.mp)} vs book ${pct(c.bimp)} · EV ${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}% · confidence ${Math.round(c.conf.score*100)}\n`+
       (pick?'★ On Your card — bet this.':c.tier==='take'?'Edge, but not on the card: '+(SKIPWHY.get(c.key+'|'+c.market)||'the card keeps only the best bets per game')+'.':c.tier==='flag'?'⚠ Edge too big to trust — likely injury/role news; verify first.':c.tier==='dart'?'🎲 Lottery price — too rare or uncertain to price.':'No edge at this price.'); };
   grid.querySelectorAll('.mcell[data-mkt]').forEach(cell=>paint(cell, byK.get(cell.dataset.key+'|'+cell.dataset.mkt), cell.dataset.base, cell.dataset.tip));
   grid.querySelectorAll('.mcell[data-side]').forEach(cell=>{ const s=cell.dataset.s, key=cell.dataset.key, side=cell.dataset.side, mu=+cell.dataset.mu, nm=side==='O'?'over':'under';
@@ -1218,7 +1219,7 @@ function logBetFrom(c, stake, gameIn){
   const game=gameIn||curGameId();
   if(bets.some(b=>b.game===game && b.key===c.key && b.market===c.market && b.result==='pending')) return false;
   bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), game, key:c.key, player:c.label, market:c.market, odds:c.odds,
-    modelProb:+(+c.mp).toFixed(4), rk:+(c.kelly!=null?c.kelly:(c.rk||0)).toFixed(5), cf:c.conf?c.conf.score:null, ...(c.prop?{pmu:+c.prop.mu.toFixed(3)}:{}),
+    modelProb:+(+c.mp).toFixed(4), ...(c.model!=null?{rawP:+(+c.model).toFixed(4)}:{}), ...(c.mkt!=null?{mktP:+(+c.mkt).toFixed(4)}:{}), rk:+(c.kelly!=null?c.kelly:(c.rk||0)).toFixed(5), cf:c.conf?c.conf.score:null, ...(c.prop?{pmu:+c.prop.mu.toFixed(3)}:{}),
     stake:+(+stake).toFixed(1), closeOdds:'', result:'pending'});
   return true;
 }
@@ -1236,10 +1237,11 @@ function computeTopPlays(){
   const bank=getBankroll(), cand=[];
   const add=o=>{ const r=evalBet(o.mp,o.odds); if(!r) return; const conf=confFor(o.ref,o.market,r);
     cand.push({...o, ...r, conf, tier:tierOf(o.mp,r.edge,r.ev,o.prior), kelly:r.edge>0 ? conf.score*r.edge/(1-r.bimp) : 0}); };   // Kelly on the confidence-adjusted edge
+  const ANC=lastAnchors();
   for(const p of LAST.awayR.concat(LAST.homeR)){ if(p._status==='OUT') continue;
     for(const m of ['anytime','first','last','two']){ const odds=LAST.bookMap[m+'|'+p._key]; if(!odds) continue;
-      const f=m==='two'?(p._cal||1)**2:(p._cal||1);
-      add({key:p._key, label:p.name, abbr:p._abbr, market:m, odds, mp:p[m], mpRaw:p[m]/f, prior:!p.matched, role:roleLabel(p), cal:f, ref:p}); } }
+      const f=m==='two'?(p._cal||1)**2:(p._cal||1), A=ANC[m].get(p._key);
+      add({key:p._key, label:p.name, abbr:p._abbr, market:m, odds, mp:A?A.p:p[m], model:p[m], mkt:A?A.mkt:null, mpRaw:p[m]/f, prior:!p.matched, role:roleLabel(p), cal:f, ref:p}); } }
   for(const [abbr,d] of [[LAST.away,LAST.dst.dstAway],[LAST.home,LAST.dst.dstHome]])
     for(const m of ['anytime','first','last']){ const odds=LAST.bookMap[m+'|DST|'+abbr]; if(!odds) continue;
       add({key:'DST|'+abbr, label:S.teams[abbr].short+' Defense', abbr, market:m, odds, mp:d[m], mpRaw:d[m], prior:false, role:'defense (pick-6 / fumble return)', cal:1, ref:{dst:true}}); }
@@ -1279,7 +1281,7 @@ function computeTopPlays(){
       const why=`model ${pct(c.mp)} vs book ${pct(bimp)} · edge ${edge>=0?'+':''}${(edge*100).toFixed(1)} pts${c.role?' · '+c.role:''}${c.cal&&c.cal<1?' · calibrated ×'+c.cal.toFixed(2):''}${c.capped?' · scaled to the team cap':''}`;
       html+=`<div class="cpick" title="${esc(why)}"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
       `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="vbadge vb-take" style="font-size:12px;margin-left:auto">bet ${u(c.stake)}</span></div>`+
-      `<div class="cp2">${mktLabel(c.market)} <span class="odds">${esc(c.odds)}</span> ${confBadge(c.conf)}${inLog} <span class="muted" style="font-size:12px">${pct(c.mp)} vs ${pct(bimp)} (${edge>=0?'+':''}${(edge*100).toFixed(1)})</span></div></div>`; });
+      `<div class="cp2">${mktLabel(c.market)} <span class="odds">${esc(c.odds)}</span> ${confBadge(c.conf)}${inLog} <span class="muted" style="font-size:12px" title="${c.mkt!=null?esc('model '+pct(c.model)+' · other books (fair) '+pct(c.mkt)+' → blended '+pct(c.mp)):'model only (no other-book prices)'}">${c.mkt!=null?'mkt '+pct(c.mkt)+' · model '+pct(c.model)+' → ':''}${pct(c.mp)} vs ${pct(bimp)} (${edge>=0?'+':''}${(edge*100).toFixed(1)})</span></div></div>`; });
     html+='</div>';
     const teams={}; picks.forEach(c=>{ teams[c.abbr]=(teams[c.abbr]||0)+c.stake; });
     const tot=picks.reduce((a,c)=>a+c.stake,0);
@@ -1383,11 +1385,12 @@ function parlayReliable(p){
   return true;
 }
 function parlayCandidates(){
-  const J=LAST.dst.joint, all=LAST.awayR.concat(LAST.homeR), cand=[];
+  const J=LAST.dst.joint, all=LAST.awayR.concat(LAST.homeR), cand=[], PANC=lastAnchors();
   for(const p of all){ if(!parlayReliable(p))continue; const gi=J.playerIdx.get(p._key); if(gi==null)continue;
     for(const m of ['anytime','first','last','two']){ const o=LAST.bookMap[m+'|'+p._key], dec=oddsDec(o); if(!dec)continue;
       const r=evalBet(p[m],o); if(!r)continue;
-      cand.push({who:p._key,label:p.name,abbr:p._abbr,market:m,gi,dec,odds:o,mp:p[m],ev:r.ev,tier:tierOf(p[m],r.edge,r.ev,!p.matched),cal:m==='two'?(p._cal||1)**2:(p._cal||1)}); } }
+      const A=PANC[m].get(p._key), mp=A?A.p:p[m], r2=A?evalBet(mp,o):r; if(!r2) continue;
+      cand.push({who:p._key,label:p.name,abbr:p._abbr,market:m,gi,dec,odds:o,mp,ev:r2.ev,tier:tierOf(mp,r2.edge,r2.ev,!p.matched),cal:m==='two'?(p._cal||1)**2:(p._cal||1)}); } }
   for(const [abbr,d] of [[LAST.away,LAST.dst.dstAway],[LAST.home,LAST.dst.dstHome]]){ const gi=abbr===LAST.away?J.dstAwayIdx:J.dstHomeIdx;
     for(const m of ['anytime','first','last']){ const o=LAST.bookMap[m+'|DST|'+abbr], dec=oddsDec(o); if(!dec)continue;
       const r=evalBet(d[m],o); if(!r)continue;
@@ -1815,10 +1818,10 @@ async function fetchGameOdds(away, home, markets, mustBeUpcoming){
   const ev=(await oddsEventsList(key)).find(e=>abbrByTeamName(e.away_team)===away && abbrByTeamName(e.home_team)===home);
   if(!ev) throw oddsFail('noevent');
   if(mustBeUpcoming && new Date(ev.commence_time).getTime()<=Date.now()) throw oddsFail('started');
-  const r=await fetch(`${ODDS_API}/events/${ev.id}/odds?apiKey=${encodeURIComponent(key)}&bookmakers=fanduel&markets=${markets.join(',')}&oddsFormat=american`);
+  const r=await fetch(`${ODDS_API}/events/${ev.id}/odds?apiKey=${encodeURIComponent(key)}&regions=us&markets=${markets.join(',')}&oddsFormat=american`);   // all US books: same credits, gives the consensus
   const rem=r.headers.get('x-requests-remaining'); if(rem!=null){ oddsRemaining=+rem; lsW('nfltd_oddsleft', oddsRemaining); }
   if(!r.ok) throw oddsFail(r.status);
-  const j=await r.json(), bk=(j.bookmakers||[]).find(b=>b.key==='fanduel'), out={td:{}, props:{}};
+  const j=await r.json(), bk=(j.bookmakers||[]).find(b=>b.key==='fanduel'), out={td:{}, props:{}, cons:consensusFrom(j.bookmakers||[]), books:(j.bookmakers||[]).map(b=>b.key)};
   for(const m of (bk?bk.markets:[])){
     if(OA_TD[m.key]){ const mk=OA_TD[m.key];
       for(const o of m.outcomes){ if(m.key==='player_tds_over' ? (o.name!=='Over'||+o.point!==1.5) : o.name!=='Yes') continue;   // 2+ TD = "over 1.5"
@@ -1829,11 +1832,57 @@ async function fetchGameOdds(away, home, markets, mustBeUpcoming){
   }
   return out;
 }
+// ---------- MARKET ANCHOR: the bet probability starts from the market and moves part-way to the model ----------
+// The model is good at HOW MANY TDs a game has (Vegas-anchored, backtested) but spreads them flatter than the market
+// across players (it fades every star and leans on backups / TE2s). Pulled prices now include every US book, so the
+// probability used for EV is a log-odds blend: logit(p) = (1-w)*logit(market fair) + w*logit(model), w = the model's
+// share. TD prices are one-sided (no "No" side), so until the historical-price test fits a calibration, "market fair"
+// takes the market's SHAPE (who) at the model's LEVEL (how many): fair_i = consensus_i * sum(model) / sum(consensus)
+// over the players both price. Props are two-sided, so each book's over/under is de-vigged directly.
+// S.marketAnchor (from the historical backtest, when it exists) overrides w and supplies the fitted calibration.
+const ANCHOR=Object.assign({w:0.35, cal:null, fitted:false}, S.marketAnchor||{});
+const logit=p=>Math.log(p/(1-p)), expit=x=>1/(1+Math.exp(-x));
+const blendP=(mkt, model)=>expit((1-ANCHOR.w)*logit(clamp(mkt,0.003,0.995))+ANCHOR.w*logit(clamp(model,0.003,0.995)));
+// one TD market for one game: Map(player key -> {p: blended, mkt: market fair, model})
+function anchorTD(players, mktMap, mk){
+  const out=new Map(); if(!mktMap) return out;
+  const rows=[]; let sm=0, si=0;
+  for(const p of players){ if(p._status==='OUT') continue; const m=mktMap[mk+'|'+p._key]; if(!m||!(m.ip>0)||!(p[mk]>0)) continue; rows.push([p,m]); sm+=p[mk]; si+=m.ip; }
+  if(rows.length<4 || !(si>0)) return out;   // too few prices to read the market's shape -> model only
+  const k=sm/si;
+  for(const [p,m] of rows){ const fair=ANCHOR.cal ? expit(ANCHOR.cal.a+ANCHOR.cal.b*logit(clamp(m.ip,0.003,0.995))) : clamp(m.ip*k,0.002,0.97);
+    out.set(p._key,{p:blendP(fair,p[mk]), mkt:fair, model:p[mk]}); }
+  return out;
+}
+function lastAnchors(){ const pl=LAST.awayR.concat(LAST.homeR), a={}; for(const m of ['anytime','first','last','two']) a[m]=anchorTD(pl, LAST.mktMap, m); return a; }
+// book consensus from a multi-book pull: TD = median implied prob of the OTHER books (FanDuel's own price is what we judge);
+// props = median de-vigged P(over) of the other books at FanDuel's line
+const ipOf=a=>a>0?100/(a+100):-a/(-a+100);
+const median=a=>{ const s=a.slice().sort((x,y)=>x-y), n=s.length; return n?(n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2):null; };
+function consensusFrom(books){
+  const td={}, pr={};
+  for(const b of books) for(const m of (b.markets||[])){
+    if(OA_TD[m.key]){ const mk=OA_TD[m.key];
+      for(const o of m.outcomes){ if(m.key==='player_tds_over' ? (o.name!=='Over'||+o.point!==1.5) : o.name!=='Yes') continue;
+        const t=((td[mk]=td[mk]||{})[o.description]=(td[mk]&&td[mk][o.description])||{fd:null, oth:[]}); if(b.key==='fanduel') t.fd=ipOf(o.price); else t.oth.push(ipOf(o.price)); } }
+    else if(OA_PROP[m.key]){ const s=OA_PROP[m.key], pairs={};
+      for(const o of m.outcomes){ if(o.point==null) continue; const k=o.description+'|'+o.point; (pairs[k]=pairs[k]||{name:o.description, line:+o.point})[o.name==='Over'?'O':'U']=o.price; }
+      for(const q of Object.values(pairs)){ if(q.O==null||q.U==null) continue; const fo=ipOf(q.O)/(ipOf(q.O)+ipOf(q.U));
+        const t=((pr[s]=pr[s]||{})[q.name+'|'+q.line]=(pr[s]&&pr[s][q.name+'|'+q.line])||{fd:null, oth:[]}); if(b.key==='fanduel') t.fd=fo; else t.oth.push(fo); } }
+  }
+  const out={td:{}, props:{}};
+  for(const [mk,o] of Object.entries(td)){ out.td[mk]={}; for(const [n,t] of Object.entries(o)){ if(!t.oth.length) continue; const xs=t.oth.length>=2?t.oth:t.oth.concat(t.fd!=null?[t.fd]:[]); out.td[mk][n]={ip:median(xs), n:t.oth.length}; } }
+  for(const [s,o] of Object.entries(pr)){ out.props[s]={}; for(const [k,t] of Object.entries(o)){ const xs=t.oth; if(xs.length){ const [n,l]=[k.slice(0,k.lastIndexOf('|')), +k.slice(k.lastIndexOf('|')+1)]; out.props[s][k]={name:n, line:l, fairOver:median(xs), n:xs.length}; } } }
+  return out;
+}
 const fmtAm=v=>(v>0?'+':'')+v;
 // write a pull into this game's board (same maps the paste box fills); returns {n, miss}
 function fillGameFromOdds(d){
   const idx=buildPlayerIndex(), miss=new Set(); let n=0;
   const dstOf=name=>{ const nn=normName(name); return [LAST.away,LAST.home].find(a=>nn.includes(normName(S.teams[a].short))||nn.includes(normName(S.teams[a].name))); };
+  const C2=d.cons||{td:{}, props:{}}; LAST.mktMap=LAST.mktMap||{};
+  for(const [mk,o] of Object.entries(C2.td)) for(const [name,c] of Object.entries(o)){ const p=matchPlayer(cleanName(name), idx); if(p) LAST.mktMap[mk+'|'+p._key]={ip:c.ip, n:c.n}; }
+  for(const [st,o] of Object.entries(C2.props)) for(const c of Object.values(o)){ const p=matchPlayer(cleanName(c.name), idx); if(p) (LAST.mktMap['P|'+st+'|'+p._key]=LAST.mktMap['P|'+st+'|'+p._key]||{})[c.line]=c.fairOver; }
   for(const [mk,arr] of Object.entries(d.td)) for(const o of arr){
     const p=matchPlayer(cleanName(o.name), idx); if(p){ LAST.bookMap[mk+'|'+p._key]=fmtAm(o.price); n++; continue; }
     const t=dstOf(o.name); if(t){ if(mk!=='two'){ LAST.bookMap[mk+'|DST|'+t]=fmtAm(o.price); n++; } continue; }   // defenses have no 2+ market here
@@ -1937,19 +1986,22 @@ async function buildSlate(){
       for(const ab of [g.away,g.home]) for(const p of (S.rosters[ab]||[])){ const c=injMap.get(String(p.id)); if(c) statusMap[ab+'|'+p.id]=c; }
       if(LAST) for(const [k,v] of Object.entries(LAST.statusMap)) if(k.startsWith(g.away+'|')||k.startsWith(g.home+'|')) statusMap[k]=v;   // your own status edits win
       let prices=fresh(gid)?SLATEPX[gid].prices:null;
-      if(!prices){ try{ prices=(await fetchGameOdds(g.away, g.home, ['player_anytime_td'], true)).td.anytime||[]; SLATEPX[gid]={t:Date.now(), prices}; }
+      let cons=fresh(gid)?(SLATEPX[gid].cons||null):null;
+      if(!prices){ try{ const d=await fetchGameOdds(g.away, g.home, ['player_anytime_td'], true); prices=d.td.anytime||[]; cons=(d.cons&&d.cons.td.anytime)||{}; SLATEPX[gid]={t:Date.now(), prices, cons}; }
         catch(e){ notes.push(`${fmtGame(gid)}: ${oddsWhy(e)}`); continue; } }
       if(!prices.length){ notes.push(`${fmtGame(gid)}: FanDuel hasn't posted TD prices yet`); continue; }
       const W=await gameWeather(g), badWx=W.outdoor && (W.wind>=15 || (W.wx.pp>=50 && W.wx.precip!=='none'));
       const sim=simGame({away:g.away, home:g.home, total:g.total||44.5, spreadPts:Math.abs(g.spread||0), fav:g.fav||g.home, outdoor:W.outdoor, wind:W.wind, wx:W.wx, statusMap});
-      const idx=buildPlayerIndex(sim.awayR.concat(sim.homeR)), book={}, cands=[];
+      const players=sim.awayR.concat(sim.homeR), idx=buildPlayerIndex(players), book={}, cands=[], mm={};
+      for(const [name,c] of Object.entries(cons||{})){ const p=matchPlayer(cleanName(name), idx); if(p) mm['anytime|'+p._key]={ip:c.ip, n:c.n}; }
+      const SA=anchorTD(players, mm, 'anytime');
       for(const o of prices){ const p=matchPlayer(cleanName(o.name), idx); if(!p) continue;
         const odds=fmtAm(o.price); book['anytime|'+p._key]=odds; if(p._status==='OUT') continue;
-        const r=evalBet(p.anytime, odds); if(!r) continue;
-        const conf=confFor(p,'anytime',r,badWx), tier=tierOf(p.anytime,r.edge,r.ev,!p.matched); if(tier!=='take') continue;
+        const A=SA.get(p._key), mp=A?A.p:p.anytime, r=evalBet(mp, odds); if(!r) continue;
+        const conf=confFor(p,'anytime',r,badWx), tier=tierOf(mp,r.edge,r.ev,!p.matched); if(tier!=='take') continue;
         const k=r.edge>0?conf.score*r.edge/(1-r.bimp):0;
-        cands.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds, mp:p.anytime, ev:r.ev, edge:r.edge, bimp:r.bimp, conf, kelly:k, rk:k, game:gid, kickoff:g.kickoff}); }
-      const B=BOARDS[gid]||(BOARDS[gid]={t:Date.now(), book:{}, prop:{}}); Object.assign(B.book, book); B.t=Date.now();   // open the game later: prices are there
+        cands.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds, mp, model:p.anytime, mkt:A?A.mkt:null, ev:r.ev, edge:r.edge, bimp:r.bimp, conf, kelly:k, rk:k, game:gid, kickoff:g.kickoff}); }
+      const B=BOARDS[gid]||(BOARDS[gid]={t:Date.now(), book:{}, prop:{}, mkt:{}}); Object.assign(B.book, book); B.mkt=Object.assign(B.mkt||{}, mm); B.t=Date.now();   // open the game later: prices are there
       all.push(...pickPlays(cands).picks);   // per game: same rule as Your card
     }
     try{ localStorage.setItem(BOARD_KEY, JSON.stringify(BOARDS)); }catch(e){}
@@ -1960,7 +2012,7 @@ async function buildSlate(){
     const {best}=bestParlay(legs.map(legView));
     const room=SLATE_CAP*bank-(best?slateParlayStake(best,bank):0), tot=picks.reduce((a,c)=>a+c.stake,0);
     if(tot>room) picks.forEach(c=>{ c.stake=Math.floor(c.stake*room/tot*10)/10; });   // floor: the whole day never tops the cap
-    SLATE={at:Date.now(), day:games[0].kickoff, checked:games.length, notes, picks:picks.map(({key,label,abbr,market,odds,mp,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev})=>({key,label,abbr,market,odds,mp,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev})),
+    SLATE={at:Date.now(), day:games[0].kickoff, checked:games.length, notes, picks:picks.map(({key,label,abbr,market,odds,mp,model,mkt,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev})=>({key,label,abbr,market,odds,mp,model,mkt,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev})),
       parlay:best?{legs:best.legs.map(v=>v.l), P:best.P, D:best.D}:null};
     lsW('nfltd_slate', SLATE); renderSlate();
   }finally{ btn.disabled=false; oddsStatus(); }
@@ -1975,7 +2027,7 @@ function renderSlate(){
   let html=`<div style="font-size:13px;margin-bottom:4px"><b>Your ${SLATE.picks.length} TD bet${SLATE.picks.length>1?'s':''} for ${dayName}</b> <span class="muted">— the best of ${SLATE.checked} game${SLATE.checked>1?'s':''}, FanDuel prices from ${when}</span>${stale}</div>`;
   SLATE.picks.forEach((c,i)=>{ html+=`<div class="cpick spick" data-g="${esc(c.game)}" title="open this game"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
     `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="muted" style="font-size:12px">${fmtGame(c.game)}</span><span class="vbadge vb-take" style="margin-left:auto;font-size:12px">bet ${u(c.stake)}</span></div>`+
-    `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span> ${confBadge(c.conf)} <span class="muted" style="font-size:12px">${pct(c.mp)} vs ${pct(c.bimp)}</span></div></div>`; });
+    `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span> ${confBadge(c.conf)} <span class="muted" style="font-size:12px">${c.mkt!=null?'mkt '+pct(c.mkt)+' · model '+pct(c.model)+' → ':''}${pct(c.mp)} vs ${pct(c.bimp)}</span></div></div>`; });
   const tot=SLATE.picks.reduce((a,c)=>a+c.stake,0)+(SLATE.parlay?slateParlayStake(SLATE.parlay,bank):0);
   html+=`<div class="muted" style="font-size:12px;margin-top:5px">Whole day <b>${u(tot)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll, parlay included — capped at ${SLATE_CAP*100}%)</div>`;
   const P=SLATE.parlay;
@@ -2175,7 +2227,8 @@ function propCandidates(){
     const i=k.indexOf('|'), s=k.slice(0,i), p=byKey.get(k.slice(i+1)); if(!p||p._status==='OUT'||!PSTAT.includes(s)) continue;
     const mu=propMu(p,s); if(mu==null) continue; const med=propMedian(mu,s);
     const side=(sd,line,odds,alt)=>{ if(!odds||line==null) return; const pr=propSides(mu,s,line); if(!pr) return;
-      out.push({key:p._key, label:p.name, abbr:p._abbr, market:propMktKey(s,sd,line), odds, mp:sd==='O'?pr.over:pr.under, ref:p, prop:{s,side:sd,line,mu,med,alt}}); };
+      const model=sd==='O'?pr.over:pr.under, mo=((LAST.mktMap||{})['P|'+s+'|'+p._key]||{})[line], mkt=mo!=null?(sd==='O'?mo:1-mo):null;
+      out.push({key:p._key, label:p.name, abbr:p._abbr, market:propMktKey(s,sd,line), odds, mp:mkt!=null?blendP(mkt,model):model, model, mkt, ref:p, prop:{s,side:sd,line,mu,med,alt}}); };
     if(pm.line!=null){ side('O',pm.line,pm.over); side('U',pm.line,pm.under); }
     for(const a of (pm.alts||[])) side('O',a.line,a.odds,true);
   }
@@ -2418,7 +2471,7 @@ function applyPastedOdds(){
 function clearAllOdds(){
   const has=LAST && (Object.values(LAST.bookMap).some(v=>v&&String(v).trim()) || Object.keys(LAST.propMap||{}).length);
   if(has && !confirm('Clear every price you pasted for this game (TD odds and props)?')) return;
-  if(LAST){ LAST.bookMap={}; LAST.propMap={}; renderPlayers(); renderDST(); renderProps(); computeParlays(); refreshSlipAdder(); boardChanged(); }
+  if(LAST){ LAST.bookMap={}; LAST.propMap={}; LAST.mktMap={}; renderPlayers(); renderDST(); renderProps(); computeParlays(); refreshSlipAdder(); boardChanged(); }
   $('oddsPaste').value=''; $('oddsMsg').textContent='';
 }
 // what's priced for this game, per market — the × on a chip clears that market
@@ -2442,6 +2495,7 @@ $('clearOdds').onclick=clearAllOdds;
 $('pricedChips').addEventListener('click', e=>{ const b=e.target.closest('.chipx'); if(!b||!LAST) return; const [kind,m]=b.dataset.c.split(':');
   if(kind==='td') Object.keys(LAST.bookMap).forEach(k=>{ if(k.startsWith(m+'|')) delete LAST.bookMap[k]; });
   else Object.keys(LAST.propMap).forEach(k=>{ if(k.startsWith(m+'|')) delete LAST.propMap[k]; });
+  Object.keys(LAST.mktMap||{}).forEach(k=>{ if(kind==='td'?k.startsWith(m+'|'):k.startsWith('P|'+m+'|')) delete LAST.mktMap[k]; });
   renderPlayers(); renderDST(); renderProps(); computeParlays(); refreshSlipAdder(); boardChanged(); });
 $('boardPass').onchange=renderBoard;
 $('cardBody').addEventListener('click', e=>{ if(e.target.closest('.seeall')) setMTab('all'); });

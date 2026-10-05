@@ -3,3 +3,8 @@ refresh.log
 _serve.mjs
 *.log
 node_modules/
+# The Odds API: key + raw historical prices stay local (paid data, not for a public repo); market_anchor.json (fitted numbers) is committed
+.odds-key
+market_hist/
+market_td_*.json
+bt_rows_*.json

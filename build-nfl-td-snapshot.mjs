@@ -230,7 +230,7 @@ function teamDefRec(team, season) {
   return r;
 }
 // gsis_id -> scoring-position bucket, and the ESPN<->gsis id maps (filled by loadRosters)
-const gsis2pos = new Map(), espn2gsis = new Map(), name2gsis = new Map(), pfr2gsis = new Map();
+const gsis2pos = new Map(), espn2gsis = new Map(), name2gsis = new Map(), pfr2gsis = new Map(), gsis2name = new Map();
 const snapByGsis = new Map();   // gsis -> {snapPct (recency-wtd), lastPct, lastWk} for the current season
 let snapWeeks = 0;              // weeks of current-season snap data available
 function posBucket(p) { p = (p || '').toUpperCase(); if (p === 'RB' || p === 'FB' || p === 'HB') return 'RB'; if (p === 'WR') return 'WR'; if (p === 'TE') return 'TE'; if (p === 'QB') return 'QB'; return null; }
@@ -270,7 +270,7 @@ async function loadRosters() {
       const gsis = f[ix.gsis_id]; if (!gsis) continue;
       const espn = f[ix.espn_id], full = f[ix.full_name], pos = f[ix.position], pfr = f[ix.pfr_id];
       if (espn && !espn2gsis.has(String(espn))) espn2gsis.set(String(espn), gsis);
-      if (full) { const nn = normName(full); if (!name2gsis.has(nn)) name2gsis.set(nn, gsis); }
+      if (full) { const nn = normName(full); if (!name2gsis.has(nn)) name2gsis.set(nn, gsis); if (!gsis2name.has(gsis)) gsis2name.set(gsis, full); }
       if (pfr && !pfr2gsis.has(pfr)) pfr2gsis.set(pfr, gsis);
       const bk = posBucket(pos); if (bk && !gsis2pos.has(gsis)) gsis2pos.set(gsis, bk);
     }
@@ -942,6 +942,18 @@ async function parseSeason(season) {
   log(`  role recalibration shipped: rotational x${ROLE_CAL.rot}, QB x${ROLE_CAL.qb} (cross-fit halves: H1 ${JSON.stringify(fH1)} H2 ${JSON.stringify(fH2)})`);
   log(`  reliability: ` + backtest.reliability.map(b => `${(b.pred*100)|0}->${(b.actual*100)|0}%(${b.n})`).join(' '));
   log(`  by position (pred->actual): ${byPosCal(btRows)}`);
+  // DUMP_BT=1: write the model's leak-free predictions for every rostered player-game (the same cross-fitted role
+  // recalibration as the headline) so market-backtest.mjs can score them against real historical book prices.
+  // 'active' = he played offensive snaps that week (a priced player who didn't play is a void bet, not a loss).
+  if (process.env.DUMP_BT) {
+    const rr = rosterRows.map(r => recal(r, r.wk <= 9 ? fH2 : fH1));
+    const rows = rr.map(r => { const sm = btSnaps && btSnaps.get(r.pid), pct = sm ? sm.get(r.wk) : null;
+      return { g: r.g, pid: r.pid, wk: r.wk, p: +r.p.toFixed(5), y: r.y, active: (pct != null && pct > 0) || r.y === 1 }; });
+    const names = {}; for (const r of rows) if (gsis2name.has(r.pid)) names[r.pid] = gsis2name.get(r.pid);
+    const games = {}; for (const [gid, g] of btGames) games[gid] = { home: g.home, away: g.away, week: g.week };
+    fs.writeFileSync(path.join(__dirname, `bt_rows_${TEST_SEASON}.json`), JSON.stringify({ season: TEST_SEASON, builtAt: new Date().toISOString(), rows, names, games }));
+    log(`  DUMP_BT: wrote bt_rows_${TEST_SEASON}.json (${rows.length} player-games, ${rows.filter(r => r.active).length} active)`);
+  }
   if (process.env.BT_WEEKLY) for (const wk of [...new Set(btRows.map(r => r.wk))].sort((x, y) => x - y)) {   // diagnostic: how each week went, by position
     const R = btRows.filter(r => r.wk === wk), b = R.reduce((a, r) => a + (r.p - r.y) ** 2, 0) / R.length, base = R.reduce((a, r) => a + r.y, 0) / R.length;
     log(`    wk${wk}: Brier ${b.toFixed(4)} (base-rate ${(base * (1 - base)).toFixed(4)}) · ${byPosCal(R)}`); }
@@ -1388,6 +1400,8 @@ async function parseSeason(season) {
     dstBacktest,
     marketBacktest,
     propModel: propModelOut,
+    // fitted by market-backtest.mjs against real historical prices (absent until that has run -> the app's interim blend)
+    marketAnchor: (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'market_anchor.json'), 'utf8')).app || null; } catch { return null; } })(),
   };
 
   const jsonPath = path.join(__dirname, 'nfl-td-snapshot.json');
