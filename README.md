@@ -44,6 +44,12 @@ silently to the baked snapshot when not.
   it shows the model's fair odds until you enter the book's, then the model's chance and EV — green **★ BET** = on your
   card, outlined = an edge that didn't make the card (hover for why), dashed = ⚠ too good to trust. Tabs show how many
   prices you've entered; the deep bench sits behind "+N more".
+- **🎯 My TD picks** — the low-effort way to bet: one click checks every game of the next game day (or the rest of the
+  week) — ESPN injuries, live lines, kickoff weather, FanDuel's anytime prices (1 odds credit per game, reused for 20
+  min) — runs each game's simulation and returns only the best few anytime-TD bets across all games (3 / 5 / 8) with
+  stakes, plus one cross-game parlay. Same picking rule as Your card; the whole day (parlay included, parlay ≤ 1%) is
+  capped at 15% of bankroll. One click logs the picks or the parlay, or sends the parlay to the slip; click a pick to
+  open its game.
 - **⚡ Pull FanDuel odds** — with a [The Odds API](https://the-odds-api.com) key saved under *odds settings*, one click (or
   automatically when you open a game) fills FanDuel's current prices for that game: TD scorer markets (4 credits per game)
   and/or player props (5 credits). Auto-pulls stop below a credit reserve so other apps on the same key keep working;

@@ -102,4 +102,8 @@ See README.md for what the model does and how it was validated.
   /events is free; /events/{id}/odds costs 1 credit per market per game. 2+ TD = player_tds_over at point 1.5. Settings
   `nfltd_oddscfg` (td 4 / props 5 credits, auto-pull, reserve 150), `nfltd_pulled` = last pull per game (20-min guard).
   The free 500/month is shared with the UFC scanner (~370/month) — the reserve protects it. Test with a mocked fetch.
+- `simGame()` is the one model entry point (no DOM): run() and the slate picker (`buildSlate`) both call it — a refactor
+  test showed identical fair odds for all players before/after. teamExpectations/confFor take an optional wx/badWx so
+  off-screen games use their own forecast. The user gets overwhelmed by options: the slate gives ONLY the best N picks +
+  one parlay; keep it that short.
 - Commits end with the Co-Authored-By line from the session's instructions.

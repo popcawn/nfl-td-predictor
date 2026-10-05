@@ -177,6 +177,7 @@
   .mktbtn.sm{padding:2px 9px;font-size:12px;border-radius:7px}
   .cpick{padding:6px 0;border-bottom:1px solid var(--line)} .cpick:last-child{border-bottom:none}
   .cp1{display:flex;gap:8px;align-items:center}
+  .spick{cursor:pointer} .spick:hover{background:rgba(120,160,220,.06)}
   .cp2{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px;margin:2px 0 0 26px}
   footer{color:var(--ink3);font-size:12px;margin-top:30px;border-top:1px solid var(--line);padding-top:14px}
 </style>
@@ -221,6 +222,7 @@
     <!-- JUMP BAR: sticks to the top so any section is one click away -->
     <nav class="jump" id="jumpNav">
       <b class="jgame" id="jumpGame"></b>
+      <a href="#slateSec">🎯 Picks</a>
       <a href="#priceSec">⚡ Price</a>
       <a href="#cardSec">🎯 Card</a>
       <a href="#mktSec">📈 Markets</a>
@@ -281,6 +283,18 @@
 
     </aside>
     <div class="bmain">
+    <!-- 🎯 MY TD PICKS: the whole game day in one click -->
+    <h2 id="slateSec">🎯 My TD picks — the whole game day</h2>
+    <div class="note info" style="margin:0 0 10px">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn" id="slateBtn" style="padding:8px 18px">🎯 Build my TD picks</button>
+        <label class="muted" style="font-size:12px">for <select id="slateScope" class="statussel" style="font-size:12px"><option value="day" selected>the next game day</option><option value="week">every game left this week</option></select></label>
+        <label class="muted" style="font-size:12px">show <select id="slateN" class="statussel" style="font-size:12px"><option>3</option><option selected>5</option><option>8</option></select> bets</label>
+        <span class="muted" style="font-size:12px">· 1 odds credit per game</span>
+      </div>
+      <div id="slateBody" style="margin-top:8px" class="muted">One click checks every game — injuries, lines, weather and FanDuel's anytime prices — and hands you just the best few TD bets and one parlay. No tables, no per-game decisions.</div>
+    </div>
+
     <!-- MARKETS: sportsbook-style — every market for this game in one panel -->
     <h2 id="mktSec">Markets</h2>
     <div class="panel" style="padding:10px 12px 8px">
@@ -506,9 +520,9 @@ function legConfidence(o){   // o: {dst, role, pos, games, status, matched, mark
   s=clamp(s,0.1,1);
   return { score:+s.toFixed(2), label:s>=0.7?'High':s>=0.45?'Medium':'Low', parts };
 }
-function confFor(ref, market, r){   // ref = roster player, or {dst:true} for a defense
+function confFor(ref, market, r, badWxIn){   // ref = roster player, or {dst:true} for a defense
   if(!ref || ref.dst) return legConfidence({dst:true, market, edge:r.edge, bimp:r.bimp, mp:r.bimp+r.edge});
-  const badWx=$('outdoor').checked && ((+$('wind').value||0)>=15 || (WX.pp>=50 && WX.precip!=='none'));
+  const badWx=badWxIn!=null ? badWxIn : $('outdoor').checked && ((+$('wind').value||0)>=15 || (WX.pp>=50 && WX.precip!=='none'));
   return legConfidence({role:ref.pos==='QB'?'qb':roleOf(ref), pos:ref.pos, games:ref.games, status:ref._status, matched:ref.matched, market, edge:r.edge, bimp:r.bimp, mp:r.bimp+r.edge, badWx});
 }
 function confBadge(c){
@@ -678,6 +692,19 @@ async function refreshSlate(){
     else syncGameSel();
   }catch(e){ /* offline: keep the baked slate */ }
 }
+// ESPN league injury feed -> Map(athlete id -> ACT/Q/DBT/OUT)
+function parseInjuries(inj){
+  const m=new Map();
+  for(const tm of (inj.injuries||[])) for(const it of (tm.injuries||[])){ const id=it.athlete&&it.athlete.id; if(!id)continue;
+    const st=String(it.status||(it.type&&it.type.description)||'').toLowerCase(); let code=null;
+    if(/out|injured reserve|\bir\b|\bpup\b|suspend|inactive/.test(st)) code='OUT';
+    else if(/doubt/.test(st)) code='DBT';
+    else if(/quest/.test(st)) code='Q';
+    else if(/active|probable|available|healthy/.test(st)) code='ACT';
+    if(code) m.set(String(id), code);
+  }
+  return m;
+}
 let liveToken=0;
 async function refreshLive(){
   const away=$('awaySel').value, home=$('homeSel').value, my=++liveToken;
@@ -707,15 +734,7 @@ async function refreshLive(){
       break;
     }
     // --- injury status (authoritative; overrides baked + prior state for injured players) ---
-    const liveMap=new Map();
-    for(const tm of (inj.injuries||[])) for(const it of (tm.injuries||[])){ const id=it.athlete&&it.athlete.id; if(!id)continue;
-      const st=String(it.status||(it.type&&it.type.description)||'').toLowerCase(); let code=null;
-      if(/out|injured reserve|\bir\b|\bpup\b|suspend|inactive/.test(st)) code='OUT';
-      else if(/doubt/.test(st)) code='DBT';
-      else if(/quest/.test(st)) code='Q';
-      else if(/active|probable|available|healthy/.test(st)) code='ACT';
-      if(code) liveMap.set(String(id), code);
-    }
+    const liveMap=parseInjuries(inj);
     for(const ab of [away,home]) for(const p of (S.rosters[ab]||[])){ const c=liveMap.get(String(p.id)); if(c && c!==p.status){ p.status=c; if(LAST) LAST.statusMap[ab+'|'+p.id]=c; changed=true; } }
     if(changed) scheduleRun();
   }catch(e){ /* offline / API hiccup: keep the baked line + status */ }
@@ -780,7 +799,8 @@ function dstRate(marginPts, opp){
   const give=(opp&&opp.giveawayPg)||D.leagueGive;
   return clamp(D.base*Math.exp(D.slope*marginPts)*Math.pow(give/D.leagueGive, D.giveExp), 0.02, 0.5);
 }
-function teamExpectations(off, opp, impPts, marginPts, outdoor, wind){
+function teamExpectations(off, opp, impPts, marginPts, outdoor, wind, wx){
+  const W=wx||WX;   // the on-screen game's forecast unless one is passed in
   const oppDef=opp.def;
   // Stage 1: expected offensive TDs anchored to the implied team total (= the exact
   // formula the backtest validated). A red-zone-matchup reshape used to sit here but
@@ -795,7 +815,7 @@ function teamExpectations(off, opp, impPts, marginPts, outdoor, wind){
   if(M.script) rushShare += clamp(0.012*marginPts, -0.10, 0.12);           // favorites run, dogs pass
   if(M.weather!==false && outdoor){
     if(wind>12) rushShare += Math.min(0.09,(wind-12)*0.005);                  // wind suppresses passing TDs
-    if(WX.pp>=50){ if(WX.precip==='snow') rushShare += 0.05; else if(WX.precip==='rain') rushShare += 0.03; } // wet/snow ball
+    if(W.pp>=50){ if(W.precip==='snow') rushShare += 0.05; else if(W.precip==='rain') rushShare += 0.03; } // wet/snow ball
   }
   rushShare = clamp(rushShare, 0.24, 0.80);
 
@@ -910,19 +930,32 @@ function run(){
   const fav=$('favSel').value;
   const outdoor=$('outdoor').checked, wind=+$('wind').value||0;
 
-  const imp=impliedPoints(total, spreadPts, fav, home, away);
-  const offA=S.profiles[away], offH=S.profiles[home];
-  const marginA = imp.away - imp.home; // positive if away favored
-  const marginH = imp.home - imp.away;
-  const awayExp=teamExpectations(offA, offH, imp.away, marginA, outdoor, wind);
-  const homeExp=teamExpectations(offH, offA, imp.home, marginH, outdoor, wind);
-
   // fresh roster copies; preserve the user's status + book-odds overrides across
   // re-sims via persistent maps keyed by player (survives status toggles etc.)
   const prevStatus = LAST ? LAST.statusMap : {};
   const saved = LAST ? null : (BOARDS[away+'@'+home]||null);   // first sim of the visit: bring back this game's prices
   const prevBook = LAST ? LAST.bookMap : ((saved&&saved.book)||{});
   const prevProp = LAST ? LAST.propMap : ((saved&&saved.prop)||{});   // player-prop lines/prices, keyed stat|player
+  const {imp,offA,offH,awayExp,homeExp,awayR,homeR,dst}=simGame({away, home, total, spreadPts, fav, outdoor, wind, wx:WX, statusMap:prevStatus});
+
+  LAST={away,home,total,spreadPts,fav,imp,offA,offH,awayExp,homeExp,awayR,homeR,dst,
+        statusMap:Object.assign({}, prevStatus), bookMap:Object.assign({}, prevBook), propMap:prevProp};
+  awayR.concat(homeR).forEach(p=>{ LAST.statusMap[p._key]=p._status; });
+
+  $('impliedNote').textContent = `Implied points — ${S.teams[away].short}: ${imp.away.toFixed(1)}, ${S.teams[home].short}: ${imp.home.toFixed(1)}  ·  exp. off. TDs ${awayExp.expOff.toFixed(2)} / ${homeExp.expOff.toFixed(2)}`;
+  $('results').classList.remove('hidden'); setNavH();
+  renderTott(); renderProps(); renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder(); refreshBetForm();
+  renderPriced(); gameHeader(); autoPullSoon();
+}
+// the model for one game, no screen involved: the on-screen game (run) and the slate picker use the same code
+function simGame({away, home, total, spreadPts, fav, outdoor, wind, wx, statusMap}){
+  const imp=impliedPoints(total, spreadPts, fav, home, away);
+  const offA=S.profiles[away], offH=S.profiles[home];
+  const marginA = imp.away - imp.home; // positive if away favored
+  const marginH = imp.home - imp.away;
+  const awayExp=teamExpectations(offA, offH, imp.away, marginA, outdoor, wind, wx);
+  const homeExp=teamExpectations(offH, offA, imp.home, marginH, outdoor, wind, wx);
+
   // matchup multiplier: boost/cut a player's scoring weight by how many TDs the
   // opposing defense allows to that player's position vs league average (dampened).
   function posMF(pos, oppDef){
@@ -932,7 +965,7 @@ function run(){
     return Math.pow(clamp(r,0.55,1.6), M.posPow||0.5);
   }
   function mkRoster(abbr, oppDef){
-    const statusOf=q=>prevStatus[abbr+'|'+q.id]||q.status||'ACT';
+    const statusOf=q=>statusMap[abbr+'|'+q.id]||q.status||'ACT';
     const starterId=String(starterQBId(abbr, statusOf));
     return S.rosters[abbr].map(p=>{
       const key=abbr+'|'+p.id, mf=M.posMF ? posMF(p.pos, oppDef) : 1;   // matchup nudge off: it hurt out-of-sample
@@ -943,7 +976,7 @@ function run(){
       // a designated starting QB plays ~every offensive snap, so his role is full regardless of
       // prior-week snap share (a QB about to start for the first time this season reads as 0 snaps).
       const sf = isStarterQB ? 1 : snapMF(p);
-      return {...p, _abbr:abbr, _status: prevStatus[key] || p.status || 'ACT', _key:key,
+      return {...p, _abbr:abbr, _status: statusMap[key] || p.status || 'ACT', _key:key,
               _base:(p.rushScore+p.recScore)*qbMf,   // pre-scaling score, for visibility/flags
               rushScore:p.rushScore*mf*sf*qbMf, recScore:p.recScore*mf*sf*qbMf,
               _mf:+mf.toFixed(2), _snapMF:+sf.toFixed(2), _isQB:p.pos==='QB', _isStarterQB:isStarterQB};
@@ -957,14 +990,7 @@ function run(){
   // by the square (it moves like the scoring rate squared). Parlay joints apply the same factors.
   awayR.concat(homeR).forEach(p=>{ const f=roleCalFactor(p); p._cal=f; if(f!==1){ p.anytime*=f; p.first*=f; p.last*=f; p.two*=f*f; } });
 
-  LAST={away,home,total,spreadPts,fav,imp,offA,offH,awayExp,homeExp,awayR,homeR,dst,
-        statusMap:Object.assign({}, prevStatus), bookMap:Object.assign({}, prevBook), propMap:prevProp};
-  awayR.concat(homeR).forEach(p=>{ LAST.statusMap[p._key]=p._status; });
-
-  $('impliedNote').textContent = `Implied points — ${S.teams[away].short}: ${imp.away.toFixed(1)}, ${S.teams[home].short}: ${imp.home.toFixed(1)}  ·  exp. off. TDs ${awayExp.expOff.toFixed(2)} / ${homeExp.expOff.toFixed(2)}`;
-  $('results').classList.remove('hidden'); setNavH();
-  renderTott(); renderProps(); renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder(); refreshBetForm();
-  renderPriced(); gameHeader(); autoPullSoon();
+  return {imp, offA, offH, awayExp, homeExp, awayR, homeR, dst};
 }
 function maybeSim(){ if(LAST) run(); }
 // several async updates (forecast, live line, injuries) can land together; batch them into one sim
@@ -1188,8 +1214,8 @@ function planFor(game){ const L=pendingFor(game); if(!L.length) return null;
   return pickPlays(L.map(b=>({key:b.key, label:b.player, abbr:teamOfKey(b.key), market:b.market, odds:b.odds, mp:b.modelProb, rk:betRank(b), bet:b}))); }
 function sugStake(c){ return Math.max(0.1, Math.round(KELLY_FRAC*(c.kelly||c.rk||0)*getBankroll()*10)/10); }
 // the one place a priced bet is written into the log (keeps its rank so the log can pick the best later)
-function logBetFrom(c, stake){
-  const game=curGameId();
+function logBetFrom(c, stake, gameIn){
+  const game=gameIn||curGameId();
   if(bets.some(b=>b.game===game && b.key===c.key && b.market===c.market && b.result==='pending')) return false;
   bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), game, key:c.key, player:c.label, market:c.market, odds:c.odds,
     modelProb:+(+c.mp).toFixed(4), rk:+(c.kelly!=null?c.kelly:(c.rk||0)).toFixed(5), cf:c.conf?c.conf.score:null, ...(c.prop?{pmu:+c.prop.mu.toFixed(3)}:{}),
@@ -1871,6 +1897,104 @@ async function pullCloses(){
   msg.innerHTML=`⚡ filled <b>${filled+est}</b> close${filled+est===1?'':'s'}${est?` (${est} estimated — the line moved, ≈)`:''}${missing?` · ${missing} not found on FanDuel`:''}${oddsRemaining!=null?` · ${oddsRemaining} credits left`:''}`+
     (notes.length?` · <span style="color:var(--warn)">${notes.slice(0,3).join(' · ')}</span>`:'');
 }
+// ---------- 🎯 MY TD PICKS: one click -> the game day's best anytime-TD bets + one parlay, across every game ----------
+// For each game: ESPN injuries, the live line, the kickoff forecast, FanDuel's anytime prices (The Odds API, 1 credit
+// per game, reused if pulled in the last 20 min), the SAME simulation as the game view (simGame) and the SAME picking
+// rule as Your card (pickPlays). Then only the best few across all games are kept, with a day-wide stake cap, and the
+// slip optimizer picks one parlay from them. Built for "too many options": the answer is a short list, not a table.
+const SLATE_CAP=0.15, SLATE_PARLAY=0.01;   // a whole day (singles + the parlay) stakes at most 15% of bankroll; the parlay at most 1%
+const slateParlayStake=(P,bank)=>Math.max(0.1, Math.round(Math.min(0.25*kellyFrac(P.P,P.D), SLATE_PARLAY)*bank*10)/10);   // it rides on the same legs as the singles
+let SLATE=lsJ('nfltd_slate', null), SLATEPX=lsJ('nfltd_slatepx', {});
+async function gameWeather(g){
+  const st=g.neutral?null:((S.stadiums&&S.stadiums[g.home])||null), indoor=g.neutral?!!g.indoor:!!((st&&st.dome)||g.indoor);
+  const calm={outdoor:!indoor, wind:0, wx:{precip:'none', pp:0}};
+  if(indoor) return calm;
+  try{
+    let loc=st;
+    if(!loc && g.city){ const gj=await (await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(g.city)}&count=1`)).json(); const r=gj.results&&gj.results[0]; if(r) loc={lat:r.latitude, lon:r.longitude}; }
+    if(!loc) return calm;
+    const j=await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&hourly=wind_speed_10m,precipitation_probability,weather_code&wind_speed_unit=mph&timeformat=unixtime&forecast_days=7`)).json();
+    const i=nearestHourIdx(j.hourly.time, new Date(g.kickoff).getTime()); if(i<0) return calm;
+    const k=wxKind(j.hourly.weather_code[i]);
+    return {outdoor:true, wind:Math.round(j.hourly.wind_speed_10m[i]), wx:{precip:k.precip, pp:j.hourly.precipitation_probability[i]||0}};
+  }catch(e){ return calm; }
+}
+async function buildSlate(){
+  const out=$('slateBody'), btn=$('slateBtn'), scope=$('slateScope').value, nPick=+$('slateN').value||5;
+  if(!oddsKey()){ out.innerHTML=`The picks need FanDuel's prices — add your The Odds API key once under <b>Price this game → odds settings</b>.`; $('oddsCfg').open=true; $('priceSec').scrollIntoView({behavior:'smooth'}); return; }
+  const now=Date.now(), up=SCHED.filter(g=>new Date(g.kickoff).getTime()>now);
+  if(!up.length){ out.textContent='No upcoming games on this week\'s slate.'; return; }
+  const day=iso=>new Date(iso).toDateString(), games=scope==='week'?up:up.filter(g=>day(g.kickoff)===day(up[0].kickoff));
+  const fresh=gid=>SLATEPX[gid] && Date.now()-SLATEPX[gid].t<20*60e3, cost=games.filter(g=>!fresh(g.away+'@'+g.home)).length;
+  if(cost && oddsRemaining!=null && oddsRemaining-cost<ODDSCFG.reserve &&
+     !confirm(`This uses ${cost} The Odds API credit${cost>1?'s':''} (1 per game). You have ${oddsRemaining} left and your reserve is ${ODDSCFG.reserve}. Go ahead?`)) return;
+  btn.disabled=true; out.innerHTML=`<span class="muted">Checking ${games.length} game${games.length>1?'s':''} — injuries, lines, weather, FanDuel prices…</span>`;
+  try{
+    let injMap=new Map(); try{ injMap=parseInjuries(await (await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries')).json()); }catch(e){}
+    const all=[], notes=[];
+    for(const g of games){
+      const gid=g.away+'@'+g.home, statusMap={};
+      for(const ab of [g.away,g.home]) for(const p of (S.rosters[ab]||[])){ const c=injMap.get(String(p.id)); if(c) statusMap[ab+'|'+p.id]=c; }
+      if(LAST) for(const [k,v] of Object.entries(LAST.statusMap)) if(k.startsWith(g.away+'|')||k.startsWith(g.home+'|')) statusMap[k]=v;   // your own status edits win
+      let prices=fresh(gid)?SLATEPX[gid].prices:null;
+      if(!prices){ try{ prices=(await fetchGameOdds(g.away, g.home, ['player_anytime_td'], true)).td.anytime||[]; SLATEPX[gid]={t:Date.now(), prices}; }
+        catch(e){ notes.push(`${fmtGame(gid)}: ${oddsWhy(e)}`); continue; } }
+      if(!prices.length){ notes.push(`${fmtGame(gid)}: FanDuel hasn't posted TD prices yet`); continue; }
+      const W=await gameWeather(g), badWx=W.outdoor && (W.wind>=15 || (W.wx.pp>=50 && W.wx.precip!=='none'));
+      const sim=simGame({away:g.away, home:g.home, total:g.total||44.5, spreadPts:Math.abs(g.spread||0), fav:g.fav||g.home, outdoor:W.outdoor, wind:W.wind, wx:W.wx, statusMap});
+      const idx=buildPlayerIndex(sim.awayR.concat(sim.homeR)), book={}, cands=[];
+      for(const o of prices){ const p=matchPlayer(cleanName(o.name), idx); if(!p) continue;
+        const odds=fmtAm(o.price); book['anytime|'+p._key]=odds; if(p._status==='OUT') continue;
+        const r=evalBet(p.anytime, odds); if(!r) continue;
+        const conf=confFor(p,'anytime',r,badWx), tier=tierOf(p.anytime,r.edge,r.ev,!p.matched); if(tier!=='take') continue;
+        const k=r.edge>0?conf.score*r.edge/(1-r.bimp):0;
+        cands.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds, mp:p.anytime, ev:r.ev, edge:r.edge, bimp:r.bimp, conf, kelly:k, rk:k, game:gid, kickoff:g.kickoff}); }
+      const B=BOARDS[gid]||(BOARDS[gid]={t:Date.now(), book:{}, prop:{}}); Object.assign(B.book, book); B.t=Date.now();   // open the game later: prices are there
+      all.push(...pickPlays(cands).picks);   // per game: same rule as Your card
+    }
+    try{ localStorage.setItem(BOARD_KEY, JSON.stringify(BOARDS)); }catch(e){}
+    lsW('nfltd_slatepx', SLATEPX);
+    all.sort((a,b)=>b.rk-a.rk);
+    const picks=all.slice(0,nPick), bank=getBankroll();
+    const legs=picks.map(c=>({game:c.game, key:c.key, name:c.label, abbr:c.abbr, market:'anytime', mp:+c.mp.toFixed(4), odds:c.odds, conf:c.conf, ctx:'', kickoff:c.kickoff}));
+    const {best}=bestParlay(legs.map(legView));
+    const room=SLATE_CAP*bank-(best?slateParlayStake(best,bank):0), tot=picks.reduce((a,c)=>a+c.stake,0);
+    if(tot>room) picks.forEach(c=>{ c.stake=Math.floor(c.stake*room/tot*10)/10; });   // floor: the whole day never tops the cap
+    SLATE={at:Date.now(), day:games[0].kickoff, checked:games.length, notes, picks:picks.map(({key,label,abbr,market,odds,mp,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev})=>({key,label,abbr,market,odds,mp,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev})),
+      parlay:best?{legs:best.legs.map(v=>v.l), P:best.P, D:best.D}:null};
+    lsW('nfltd_slate', SLATE); renderSlate();
+  }finally{ btn.disabled=false; oddsStatus(); }
+}
+function renderSlate(){
+  const out=$('slateBody'); if(!out||!SLATE) return;
+  const u=v=>(Math.round(v*10)/10).toFixed(1)+'u', bank=getBankroll(), dayName=new Date(SLATE.day).toLocaleDateString([], {weekday:'long'});
+  const age=Math.round((Date.now()-SLATE.at)/60e3), when=new Date(SLATE.at).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+  const notes=SLATE.notes.length?`<div class="muted" style="font-size:12px;margin-top:6px">Skipped: ${SLATE.notes.map(esc).join(' · ')}</div>`:'';
+  const stale=age>45?` <span style="color:var(--warn)">— ${age} min old, rebuild for fresh prices</span>`:'';
+  if(!SLATE.picks.length){ out.innerHTML=`<div><b>No TD bets worth making</b> across the ${SLATE.checked} game${SLATE.checked>1?'s':''} checked — every price is at or below the model's fair odds. Sitting it out is a win too.${stale}</div>`+notes; return; }
+  let html=`<div style="font-size:13px;margin-bottom:4px"><b>Your ${SLATE.picks.length} TD bet${SLATE.picks.length>1?'s':''} for ${dayName}</b> <span class="muted">— the best of ${SLATE.checked} game${SLATE.checked>1?'s':''}, FanDuel prices from ${when}</span>${stale}</div>`;
+  SLATE.picks.forEach((c,i)=>{ html+=`<div class="cpick spick" data-g="${esc(c.game)}" title="open this game"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
+    `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="muted" style="font-size:12px">${fmtGame(c.game)}</span><span class="vbadge vb-take" style="margin-left:auto;font-size:12px">bet ${u(c.stake)}</span></div>`+
+    `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span> ${confBadge(c.conf)} <span class="muted" style="font-size:12px">${pct(c.mp)} vs ${pct(c.bimp)}</span></div></div>`; });
+  const tot=SLATE.picks.reduce((a,c)=>a+c.stake,0)+(SLATE.parlay?slateParlayStake(SLATE.parlay,bank):0);
+  html+=`<div class="muted" style="font-size:12px;margin-top:5px">Whole day <b>${u(tot)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll, parlay included — capped at ${SLATE_CAP*100}%)</div>`;
+  const P=SLATE.parlay;
+  if(P){ const stake=slateParlayStake(P,bank);
+    html+=`<div style="margin-top:9px;padding:9px 11px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px">`+
+      `<b>🎰 Parlay of the day</b> <span class="muted" style="font-size:12px">— ${P.legs.length} legs, different games</span><div style="margin-top:3px">${P.legs.map(l=>`<b style="color:${teamText(l.abbr)}">${esc(l.name)}</b>`).join(' + ')}</div>`+
+      `<div style="font-size:13px;margin-top:3px">pays <span class="odds">${amStr(decToAmerican(P.D))}</span> · hits ~${pct(P.P)} · <span class="vbadge vb-take" style="font-size:12px">bet ${u(stake)}</span></div></div>`; }
+  else if(SLATE.picks.length>1) html+=`<div class="muted" style="font-size:12px;margin-top:8px">${new Set(SLATE.picks.map(c=>c.game)).size<2 ? 'No parlay — it needs picks from at least two different games.' : 'No parlay today — combining these doesn\'t beat betting them as singles.'}</div>`;
+  html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px"><button class="statussel" id="slateLog" style="padding:4px 11px">📓 log the picks</button>`+
+    (P?`<button class="statussel" id="slateLogParlay" style="padding:4px 11px">📓 log the parlay</button><button class="statussel" id="slateSlip" style="padding:4px 11px">➕ parlay to slip</button>`:'')+`</div>`+notes;
+  out.innerHTML=html;
+  const lp=$('slateLog'); if(lp) lp.onclick=()=>{ let n=0; for(const c of SLATE.picks) if(logBetFrom(Object.assign({market:'anytime'},c), c.stake, c.game)) n++; if(n){ saveBets(); renderBets(); } lp.textContent=n?`✓ logged ${n}`:'already logged'; };
+  const lpp=$('slateLogParlay'); if(lpp) lpp.onclick=()=>{ const stake=slateParlayStake(P,bank);
+    bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), game:'', key:null, player:'Parlay: '+P.legs.map(l=>l.name).join(' + '), market:'custom', odds:amStr(decToAmerican(P.D)), modelProb:+P.P.toFixed(4), stake, closeOdds:'', result:'pending'});
+    saveBets(); renderBets(); lpp.textContent='✓ logged'; };
+  const ls=$('slateSlip'); if(ls) ls.onclick=()=>{ let n=0; for(const l of P.legs) if(!slipHas(l.game,l.key,l.market)){ slip.push(Object.assign({},l)); n++; } if(n){ saveSlip(); renderSlip(); } ls.textContent=n?`✓ added ${n}`:'already in slip'; };
+  out.querySelectorAll('.spick').forEach(el=>{ el.onclick=()=>{ const [a,h]=el.dataset.g.split('@'); if(!S.teamList.includes(a)||!S.teamList.includes(h)) return;
+    $('awaySel').value=a; $('homeSel').value=h; userPicked=true; onMatchupChange(); setTimeout(()=>$('mktSec').scrollIntoView({behavior:'smooth'}), 300); }; });
+}
 function exportData(){
   const data={app:'nfl-td-predictor', version:1, exportedAt:new Date().toISOString(), bets, slip, bankroll:getBankroll()};
   const a=document.createElement('a');
@@ -2231,8 +2355,8 @@ function marketsForCount(n){
   if(n===2) return ['anytime','first'];
   return [MARKET];
 }
-function buildPlayerIndex(){
-  const all=LAST.awayR.concat(LAST.homeR);
+function buildPlayerIndex(list){
+  const all=list||LAST.awayR.concat(LAST.homeR);
   const byFull=new Map(), byIL=new Map(), byLast=new Map();
   const push=(m,k,p)=>{ if(!k)return; let a=m.get(k); if(!a){a=[];m.set(k,a);} a.push(p); };
   for(const p of all){
@@ -2347,6 +2471,8 @@ $('betAdd').onclick=addBet;
 $('betExport').onclick=exportData;
 $('closeApply').onclick=applyClosingPaste;
 $('closePull').onclick=pullCloses;
+$('slateBtn').onclick=buildSlate;
+renderSlate();   // last picks you built (marked stale after 45 min)
 $('pullOdds').onclick=()=>pullOdds(false);
 $('oddsTD').checked=!!ODDSCFG.td; $('oddsProps').checked=!!ODDSCFG.props; $('oddsAuto').checked=!!ODDSCFG.auto; $('oddsReserve').value=ODDSCFG.reserve;
 const saveOddsCfg=()=>{ ODDSCFG={td:$('oddsTD').checked, props:$('oddsProps').checked, auto:$('oddsAuto').checked, reserve:Math.max(0,+$('oddsReserve').value||0)}; lsW('nfltd_oddscfg', ODDSCFG); };
