@@ -235,6 +235,21 @@
     <!-- PRICE THIS GAME: one paste box for every market -->
     <h2 id="priceSec">Price this game</h2>
     <div class="panel" style="padding:10px 12px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <button class="btn" id="pullOdds" style="padding:6px 14px;font-size:13px" title="fetch FanDuel's current prices for this game (The Odds API)">⚡ Pull FanDuel odds</button>
+        <span id="pullMsg" class="muted" style="font-size:12px"></span>
+        <span id="oddsLeft" class="muted" style="font-size:11px;margin-left:auto" title="The Odds API credits left this month"></span>
+        <details id="oddsCfg" style="width:100%;font-size:12px"><summary class="muted" style="cursor:pointer">odds settings</summary>
+          <div style="margin-top:6px;display:flex;flex-direction:column;gap:6px;line-height:1.45">
+            <div>The Odds API key <input id="oddsKeyIn" type="password" placeholder="paste key" autocomplete="off" spellcheck="false" style="width:170px;padding:4px 7px;font-size:12px;background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:7px"> <button class="statussel" id="oddsKeySave" style="padding:2px 9px">save</button> <span id="oddsKeyMsg" class="muted"></span></div>
+            <label><input type="checkbox" id="oddsTD"> TD scorer — anytime, 1st, last, 2+ <span class="muted">(4 credits / game)</span></label>
+            <label><input type="checkbox" id="oddsProps"> Player props — receptions, rec / rush / rush+rec / pass yds <span class="muted">(5 credits / game)</span></label>
+            <label><input type="checkbox" id="oddsAuto"> Pull automatically when I open a game <span class="muted">(if its prices are over 20 min old)</span></label>
+            <div>Auto-pulls stop below <input id="oddsReserve" type="number" min="0" step="10" style="width:70px;padding:3px 6px;font-size:12px"> credits <span class="muted">(left for other apps on the same key, e.g. the UFC scanner)</span></div>
+            <div class="muted">The key is saved in this browser only, never in the site's code. Prices come from FanDuel via The Odds API; the free plan has 500 credits a month. Pasting still works and overrides anything.</div>
+          </div>
+        </details>
+      </div>
       <textarea id="oddsPaste" rows="3" spellcheck="false"
         placeholder="Paste any FanDuel board — TD scorers or player props — then Apply (Ctrl+Enter). One market at a time; the prices stay with this game."
         style="width:100%;background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:10px;padding:9px;font-family:var(--mono);font-size:13px;resize:vertical"></textarea>
@@ -387,6 +402,7 @@
         <div style="display:flex;gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap">
           <select id="closeMarket" class="statussel"><option value="anytime">one price per name = Anytime</option><option value="two">one price per name = 2+ TD</option><option value="first">one price per name = 1st TD</option><option value="last">one price per name = Last TD</option></select>
           <button class="btn" id="closeApply" style="padding:6px 14px;font-size:13px">Fill closes</button>
+          <button class="btn sec" id="closePull" style="padding:6px 12px;font-size:13px" title="fill Close on every open bet from FanDuel's current price (before kickoff) — no pasting">⚡ Pull closing prices</button>
           <span id="closeMsg" class="muted" style="font-size:12px"></span>
         </div>
         <textarea id="closePaste" rows="3" spellcheck="false" placeholder="Same format as the odds paste — stacked Anytime / 1st / Last blocks, or one price per name for the market chosen above. Player-prop boards (Over / Under lines) work too: they fill props whose line did not move."
@@ -948,7 +964,7 @@ function run(){
   $('impliedNote').textContent = `Implied points — ${S.teams[away].short}: ${imp.away.toFixed(1)}, ${S.teams[home].short}: ${imp.home.toFixed(1)}  ·  exp. off. TDs ${awayExp.expOff.toFixed(2)} / ${homeExp.expOff.toFixed(2)}`;
   $('results').classList.remove('hidden'); setNavH();
   renderTott(); renderProps(); renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder(); refreshBetForm();
-  renderPriced(); gameHeader();
+  renderPriced(); gameHeader(); autoPullSoon();
 }
 function maybeSim(){ if(LAST) run(); }
 // several async updates (forecast, live line, injuries) can land together; batch them into one sim
@@ -1743,6 +1759,118 @@ function applyClosingPaste(){
 }
 // Browser storage lives on ONE machine (and one address — the local file and the GitHub Pages copy are
 // separate even on the same PC). Export/import moves the log, slip and bankroll between them.
+// ---------- FanDuel odds from The Odds API: pull this game's prices, and closing prices for the bet log ----------
+// Runs in the browser (the API allows it); the key is saved in this browser only. Cost = 1 credit per market per game
+// (TD scorer = 4 markets, props = 5). Auto-pulls stop when credits fall below the reserve, so other apps that share
+// the key (the UFC scanner) keep working.
+const ODDS_API='https://api.the-odds-api.com/v4/sports/americanfootball_nfl';
+const OA_TD={player_anytime_td:'anytime', player_1st_td:'first', player_last_td:'last', player_tds_over:'two'};
+const OA_PROP={player_receptions:'rec', player_reception_yds:'recyd', player_rush_yds:'ryd', player_rush_reception_yds:'rryd', player_pass_yds:'pyd'};
+const lsJ=(k,d)=>{ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } };
+const lsW=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
+let ODDSCFG=Object.assign({td:true, props:true, auto:true, reserve:150}, lsJ('nfltd_oddscfg',{}));
+let PULLED=(p=>{ const old=Date.now()-2*86400e3; for(const k of Object.keys(p)) if(!(p[k]>old)) delete p[k]; return p; })(lsJ('nfltd_pulled',{}));
+let oddsRemaining=lsJ('nfltd_oddsleft',null), oddsEvents=null, pullToken=0;
+const oddsKey=()=>{ try{ return localStorage.getItem('nfltd_oddskey')||''; }catch(e){ return ''; } };
+const oddsFail=(status)=>Object.assign(new Error('odds '+status),{status});
+function oddsWhy(e){ const s=e&&e.status;
+  return s==='nokey'?'add your The Odds API key under <b>odds settings</b>':s==='noevent'?'this game isn\'t on The Odds API\'s board yet':s==='started'?'already kicked off — closing prices have to be pulled before kickoff'
+    :s===401?'key rejected — check it under odds settings':(s===429||s===422)?'out of credits (or too many requests) on The Odds API':'couldn\'t reach The Odds API (offline?)'; }
+async function oddsEventsList(key){
+  if(oddsEvents && Date.now()-oddsEvents.t<10*60e3) return oddsEvents.list;   // the events list is free; cache it 10 min
+  const r=await fetch(`${ODDS_API}/events?apiKey=${encodeURIComponent(key)}`); if(!r.ok) throw oddsFail(r.status);
+  const list=await r.json(); oddsEvents={t:Date.now(), list}; return list;
+}
+const abbrByTeamName=name=>{ const n=String(name||'').toLowerCase(), nick=n.split(' ').pop();
+  return S.teamList.find(a=>String(S.teams[a].name).toLowerCase()===n) || S.teamList.find(a=>String(S.teams[a].name).toLowerCase().split(' ').pop()===nick) || null; };
+// FanDuel's prices for one game, normalised: {td:{anytime:[{name,price}],...}, props:{recyd:[{name,side,line,price}],...}}
+async function fetchGameOdds(away, home, markets, mustBeUpcoming){
+  const key=oddsKey(); if(!key) throw oddsFail('nokey');
+  const ev=(await oddsEventsList(key)).find(e=>abbrByTeamName(e.away_team)===away && abbrByTeamName(e.home_team)===home);
+  if(!ev) throw oddsFail('noevent');
+  if(mustBeUpcoming && new Date(ev.commence_time).getTime()<=Date.now()) throw oddsFail('started');
+  const r=await fetch(`${ODDS_API}/events/${ev.id}/odds?apiKey=${encodeURIComponent(key)}&bookmakers=fanduel&markets=${markets.join(',')}&oddsFormat=american`);
+  const rem=r.headers.get('x-requests-remaining'); if(rem!=null){ oddsRemaining=+rem; lsW('nfltd_oddsleft', oddsRemaining); }
+  if(!r.ok) throw oddsFail(r.status);
+  const j=await r.json(), bk=(j.bookmakers||[]).find(b=>b.key==='fanduel'), out={td:{}, props:{}};
+  for(const m of (bk?bk.markets:[])){
+    if(OA_TD[m.key]){ const mk=OA_TD[m.key];
+      for(const o of m.outcomes){ if(m.key==='player_tds_over' ? (o.name!=='Over'||+o.point!==1.5) : o.name!=='Yes') continue;   // 2+ TD = "over 1.5"
+        (out.td[mk]=out.td[mk]||[]).push({name:o.description, price:o.price}); } }
+    else if(OA_PROP[m.key]){ const s=OA_PROP[m.key];
+      for(const o of m.outcomes){ if(o.point==null||(o.name!=='Over'&&o.name!=='Under')) continue;
+        (out.props[s]=out.props[s]||[]).push({name:o.description, side:o.name==='Over'?'O':'U', line:+o.point, price:o.price}); } }
+  }
+  return out;
+}
+const fmtAm=v=>(v>0?'+':'')+v;
+// write a pull into this game's board (same maps the paste box fills); returns {n, miss}
+function fillGameFromOdds(d){
+  const idx=buildPlayerIndex(), miss=new Set(); let n=0;
+  const dstOf=name=>{ const nn=normName(name); return [LAST.away,LAST.home].find(a=>nn.includes(normName(S.teams[a].short))||nn.includes(normName(S.teams[a].name))); };
+  for(const [mk,arr] of Object.entries(d.td)) for(const o of arr){
+    const p=matchPlayer(cleanName(o.name), idx); if(p){ LAST.bookMap[mk+'|'+p._key]=fmtAm(o.price); n++; continue; }
+    const t=dstOf(o.name); if(t){ if(mk!=='two'){ LAST.bookMap[mk+'|DST|'+t]=fmtAm(o.price); n++; } continue; }   // defenses have no 2+ market here
+    miss.add(o.name); }
+  for(const [s,arr] of Object.entries(d.props)) for(const o of arr){
+    const p=matchPlayer(cleanName(o.name), idx); if(!p){ miss.add(o.name); continue; }
+    const k=s+'|'+p._key, cur=LAST.propMap[k]||(LAST.propMap[k]={line:null, over:'', under:'', alts:[]});
+    if(cur.line!==o.line){ cur.line=o.line; cur.over=''; cur.under=''; }
+    cur[o.side==='O'?'over':'under']=fmtAm(o.price); n++; }
+  renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder(); boardChanged();
+  return {n, miss:[...miss]};
+}
+const pickedMarkets=()=>[...(ODDSCFG.td?Object.keys(OA_TD):[]), ...(ODDSCFG.props?Object.keys(OA_PROP):[])];
+function oddsStatus(){ const el=$('oddsLeft'); if(el) el.textContent = oddsRemaining!=null ? `${oddsRemaining} credits left` : ''; }
+async function pullOdds(auto){
+  if(!LAST) return; const msg=$('pullMsg'), g=curGameId(), markets=pickedMarkets();
+  if(!oddsKey()){ if(!auto){ msg.innerHTML=oddsWhy({status:'nokey'}); $('oddsCfg').open=true; } return; }
+  if(!markets.length){ if(!auto) msg.textContent='pick TD scorer and/or player props under odds settings'; return; }
+  if(auto && oddsRemaining!=null && oddsRemaining<ODDSCFG.reserve){ msg.textContent=`auto-pull paused — ${oddsRemaining} credits left (reserve ${ODDSCFG.reserve})`; return; }
+  const my=++pullToken; PULLED[g]=Date.now(); lsW('nfltd_pulled', PULLED);
+  msg.textContent='pulling FanDuel odds…';
+  try{
+    const d=await fetchGameOdds(LAST.away, LAST.home, markets, false);
+    if(my!==pullToken || curGameId()!==g) return;   // you moved to another game meanwhile
+    const {n,miss}=fillGameFromOdds(d);
+    msg.innerHTML=`⚡ FanDuel · <b>${n}</b> price${n===1?'':'s'} · ${new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`+
+      (n?'':' — no markets posted for this game yet')+(miss.length?` · <span style="color:var(--warn)" title="${esc(miss.join(', '))}">${miss.length} not on the roster</span>`:'');
+  }catch(e){ PULLED[g]=Date.now()-15*60e3; lsW('nfltd_pulled', PULLED); if(my===pullToken) msg.innerHTML=`<span style="color:var(--warn)">${oddsWhy(e)}</span>`; }   // retry allowed in ~5 min
+  oddsStatus();
+}
+// opening a game pulls its prices if they're more than 20 min old (once per game; never below the reserve)
+function autoPullSoon(){ if(!LAST||!ODDSCFG.auto||!oddsKey()) return; const t=PULLED[curGameId()]; if(t && Date.now()-t<20*60e3) return;
+  clearTimeout(autoPullSoon.t); autoPullSoon.t=setTimeout(()=>pullOdds(true), 400); }
+// closing prices: every open bet whose game hasn't kicked off gets its Close from FanDuel's current price
+function sameName(a,b){ const x=normName(cleanName(a)), y=normName(b); if(x===y) return true;
+  const ta=String(cleanName(a)).split(/\s+/), tb=String(b).split(/\s+/), la=normName(ta[ta.length-1]), lb=normName(tb[tb.length-1]==='Jr.'||tb[tb.length-1]==='Sr.'?tb[tb.length-2]:tb[tb.length-1]);
+  return la===lb && (ta[0]||'')[0]===(tb[0]||'')[0]; }
+async function pullCloses(){
+  const msg=$('closeMsg'); if(!oddsKey()){ msg.innerHTML=oddsWhy({status:'nokey'})+' (in the Price this game panel)'; return; }
+  const open=bets.filter(b=>b.result==='pending' && b.game && b.market!=='custom'), games=[...new Set(open.map(b=>b.game))];
+  if(!games.length){ msg.textContent='no open bets to close'; return; }
+  let filled=0, est=0, missing=0; const notes=[];
+  msg.textContent='pulling closing prices…';
+  for(const g of games){
+    const [away,home]=g.split('@'), L=open.filter(b=>b.game===g), need=new Set();
+    for(const b of L){ const k=isPropMkt(b.market) ? Object.keys(OA_PROP).find(x=>OA_PROP[x]===b.market.split('|')[1]) : Object.keys(OA_TD).find(x=>OA_TD[x]===b.market); if(k) need.add(k); }
+    if(!need.size) continue;
+    let d; try{ d=await fetchGameOdds(away, home, [...need], true); }catch(e){ notes.push(`${fmtGame(g)}: ${oddsWhy(e)}`); continue; }
+    for(const b of L){
+      if(isPropMkt(b.market)){ const [,s,side,l]=b.market.split('|'), o=(d.props[s]||[]).find(x=>x.side===side && sameName(x.name,b.player));
+        if(!o){ missing++; continue; }
+        if(+l===o.line){ b.closeOdds=fmtAm(o.price); delete b.closeEst; filled++; continue; }
+        // the line moved: translate the close to your line with the model's own distribution (same as the paste)
+        const q=b.pmu>0&&PM&&PM.tables[s]?[propSides(b.pmu,s,+l),propSides(b.pmu,s,o.line)]:null;
+        if(q&&q[0]&&q[1]){ const at=x=>side==='O'?x.over:x.under; b.closeOdds=probToAmerican(clamp(americanToProb(o.price)+at(q[0])-at(q[1]),0.02,0.98)); b.closeEst=`${side} ${o.line} ${fmtAm(o.price)}`; est++; }
+        else missing++;
+      } else { const o=(d.td[b.market]||[]).find(x=>sameName(x.name,b.player)); if(o){ b.closeOdds=fmtAm(o.price); delete b.closeEst; filled++; } else missing++; }
+    }
+  }
+  saveBets(); renderBets(); oddsStatus();
+  msg.innerHTML=`⚡ filled <b>${filled+est}</b> close${filled+est===1?'':'s'}${est?` (${est} estimated — the line moved, ≈)`:''}${missing?` · ${missing} not found on FanDuel`:''}${oddsRemaining!=null?` · ${oddsRemaining} credits left`:''}`+
+    (notes.length?` · <span style="color:var(--warn)">${notes.slice(0,3).join(' · ')}</span>`:'');
+}
 function exportData(){
   const data={app:'nfl-td-predictor', version:1, exportedAt:new Date().toISOString(), bets, slip, bankroll:getBankroll()};
   const a=document.createElement('a');
@@ -2218,6 +2346,15 @@ $('betPlayer').onchange=syncBetFormFields;
 $('betAdd').onclick=addBet;
 $('betExport').onclick=exportData;
 $('closeApply').onclick=applyClosingPaste;
+$('closePull').onclick=pullCloses;
+$('pullOdds').onclick=()=>pullOdds(false);
+$('oddsTD').checked=!!ODDSCFG.td; $('oddsProps').checked=!!ODDSCFG.props; $('oddsAuto').checked=!!ODDSCFG.auto; $('oddsReserve').value=ODDSCFG.reserve;
+const saveOddsCfg=()=>{ ODDSCFG={td:$('oddsTD').checked, props:$('oddsProps').checked, auto:$('oddsAuto').checked, reserve:Math.max(0,+$('oddsReserve').value||0)}; lsW('nfltd_oddscfg', ODDSCFG); };
+['oddsTD','oddsProps','oddsAuto','oddsReserve'].forEach(id=>$(id).addEventListener('change', saveOddsCfg));
+$('oddsKeyMsg').textContent=oddsKey()?'saved ✓':'';
+$('oddsKeySave').onclick=()=>{ const v=$('oddsKeyIn').value.trim(); try{ if(v) localStorage.setItem('nfltd_oddskey', v); else localStorage.removeItem('nfltd_oddskey'); }catch(e){}
+  $('oddsKeyIn').value=''; $('oddsKeyMsg').textContent=v?'saved ✓':'removed'; oddsEvents=null; if(v) autoPullSoon(); };
+oddsStatus();
 $('betImport').onclick=()=>$('betImportFile').click();
 $('betImportFile').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f) importData(f); e.target.value=''; };
 $('betClear').onclick=()=>{ if(bets.length && confirm('Clear all '+bets.length+' logged bets?'+(SYNC.token?' This clears them on every synced PC too.':'')+' This can\'t be undone.')){ bets=[]; saveBets(); renderBets(); } };

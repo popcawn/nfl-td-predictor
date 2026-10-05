@@ -44,6 +44,11 @@ silently to the baked snapshot when not.
   it shows the model's fair odds until you enter the book's, then the model's chance and EV — green **★ BET** = on your
   card, outlined = an edge that didn't make the card (hover for why), dashed = ⚠ too good to trust. Tabs show how many
   prices you've entered; the deep bench sits behind "+N more".
+- **⚡ Pull FanDuel odds** — with a [The Odds API](https://the-odds-api.com) key saved under *odds settings*, one click (or
+  automatically when you open a game) fills FanDuel's current prices for that game: TD scorer markets (4 credits per game)
+  and/or player props (5 credits). Auto-pulls stop below a credit reserve so other apps on the same key keep working;
+  the free plan has 500 credits a month. In the bet log, **⚡ Pull closing prices** fills Close on every open bet before
+  kickoff (moved prop lines are estimated, ≈). The key stays in your browser.
 - **Price this game** — ONE paste box for every market: TD boards (stacked Anytime / 1st / Last, or one price per name
   for the market picked under the box) and player-prop boards (Over / Under lines, detected automatically). Paste one
   market at a time; chips show what's priced (× clears one market). Prices are kept **per game** — switch games and

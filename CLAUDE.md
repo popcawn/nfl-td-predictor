@@ -97,4 +97,9 @@ See README.md for what the model does and how it was validated.
   snapshot's player list, and the build throws (no files written, the bot commits nothing) if any team is still missing.
   A one-off ESPN failure dropped PIT on 2026-10-01 and blanked the app. Test with `FAIL_ROSTER=PIT`. The app also skips
   scheduled games whose team isn't in `S.teamList`.
+- FanDuel odds come from The Odds API IN THE BROWSER (CORS is open; x-requests-remaining is exposed): key in localStorage
+  `nfltd_oddskey` (the user's UFC-sim key, in ufc-fight-simulator/.odds-key — never commit it or type it into a page).
+  /events is free; /events/{id}/odds costs 1 credit per market per game. 2+ TD = player_tds_over at point 1.5. Settings
+  `nfltd_oddscfg` (td 4 / props 5 credits, auto-pull, reserve 150), `nfltd_pulled` = last pull per game (20-min guard).
+  The free 500/month is shared with the UFC scanner (~370/month) — the reserve protects it. Test with a mocked fetch.
 - Commits end with the Co-Authored-By line from the session's instructions.
