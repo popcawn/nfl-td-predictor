@@ -2073,6 +2073,8 @@ function renderSlate(){
   }
   // 🎉 fun picks: TD bets for fun, from the price range that lost least on 2025's real prices
   const F=SLATE.fun;
+  if(!F) html+='<div style="margin-top:10px;font-size:13px">🎉 <b>Fun picks</b> are new — hit <b>🎯 Build my TD picks</b> again to see them.</div>';   // a list saved before they existed
+  else if(!F.picks.length) html+='<div class="muted" style="margin-top:10px;font-size:12px">🎉 No fun picks — FanDuel has no anytime prices between +'+FUN_BAND[0]+' and +'+FUN_BAND[1]+' for these games yet.</div>';
   if(F&&F.picks&&F.picks.length){
     const FP=F.parlay, cut=n=>Math.round((1-Math.pow(1-FUN_EDGE,n))*100);
     html+=`<div style="margin-top:12px;padding:10px 12px;border:1px dashed var(--line2);border-radius:10px">`+
@@ -2084,7 +2086,8 @@ function renderSlate(){
     if(FP) html+=`<div style="margin-top:8px;font-size:13px"><b>🎰 Fun parlay</b> ${FP.legs.map(l=>`<b style="color:${teamText(l.abbr)}">${esc(l.name)}</b>`).join(' + ')}<br>`+
       `pays <span class="odds">${amStr(decToAmerican(FP.D))}</span> · hits ~${pct(FP.P)} · <span class="vbadge" style="font-size:12px">bet ${u(FUN_PARLAY_STAKE)}</span> <span class="muted" style="font-size:12px">— a parlay multiplies the house's cut (≈ −${cut(FP.legs.length)}% over time)</span></div>`;
     html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="statussel" id="funLog" style="padding:4px 11px">📓 log fun picks</button>`+
-      (FP?`<button class="statussel" id="funLogParlay" style="padding:4px 11px">📓 log fun parlay</button>`:'')+`</div></div>`;
+      (FP?`<button class="statussel" id="funLogParlay" style="padding:4px 11px">📓 log fun parlay</button>`:'')+`</div>`+
+      (FP?'':'<div class="muted" style="font-size:12px;margin-top:6px">No fun parlay — it needs picks from two different games'+(SLATE.checked<2?' (only one game on this slate)':'')+'.</div>')+`</div>`;
   }
   out.innerHTML=html+notes;
   const lp=$('slateLog'); if(lp) lp.onclick=()=>{ let n=0; for(const c of SLATE.picks) if(logBetFrom(Object.assign({market:'anytime'},c), c.stake, c.game)) n++; if(n){ saveBets(); renderBets(); } lp.textContent=n?`✓ logged ${n}`:'already logged'; };
