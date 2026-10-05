@@ -32,6 +32,11 @@ See README.md for what the model does and how it was validated.
 - Backtests must be leak-free: only data from before each game; kappa/baselines from the train season.
 - Things tested and removed because they hurt out-of-sample: game-script, opponent run/pass funnel, the
   defense-vs-position matchup nudge (shown, not applied), the old snap curve, a defense's own TD history.
+- 2026-10-05, user asked to favour RBs ("RBs dominating TDs"): the data disagreed. 2026 wks 1-4 rush share of TDs 36.0%
+  (2024-25: 38.7/38.6%), RB share 33.4% (35.6/37.1%), weekly RB share swung 25-42% (noise). Tested on 2025 halves AND
+  2026 wks 1-4 (`node build-nfl-td-snapshot.mjs 2025 2026` = train 2025 / test 2026; props crash on an in-progress
+  test season, the TD harness prints first): blanket RB boost x1.1/x1.2 and an in-season league-trend switch
+  (MODEL.trend, K=100/250/600) both WORSE on 2026 -> not shipped. `BT_WEEKLY=1` prints Brier + by-position per week.
 - Defense props = **defensive TDs only** (books don't count special teams); kick/punt return TDs are credited to
   returners. Role calibration (rotational ×~0.87, QB ×~0.85) is cross-fitted — don't extend it without re-testing.
 

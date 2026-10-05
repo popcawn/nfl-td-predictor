@@ -86,6 +86,9 @@ const MODEL = {
   snapFull: 0.35,     // snap share at which the role weight reaches 1
   snapFloor: 0.2,     // minimum role weight for a player with any snaps
   qbSnapExempt: true, // the starting QB skips the snap weight (he plays every snap)
+  trend: 0,          // in-season LEAGUE trend (0 = off): blend this season's league-wide TD mix (run vs pass, RB/WR/TE/QB
+                      //   shares) into every team, K pseudo-TDs of last season. Hurt 2025 H2 and 2026 wks 1-4 at K=100/250/600
+                      //   (2026-10-05) -> off. Backtest only; the app does not implement it — add it there before turning it on
   snap: 'hybrid',     // snap-share role weight: min(1,max(0.2,snap/35%)); no snaps yet = unknown in the
                       //   first 2 weeks, then ~0 (likely scratch). The old 0-at-5% curve hurt accuracy.
 };
@@ -704,6 +707,14 @@ async function parseSeason(season) {
       for (const [key, d] of teamDef) if (+key.split('|')[1] === TRAIN_SEASON && d.games.size) { s += d.byPos[k] / d.games.size; n++; }
       out[k] = n ? s / n : 0.01; } return out; })();
   const weeks = [...new Set([...btGames.values()].map(g => g.week))].filter(w => w > 0).sort((a, b) => a - b);
+  const leagueMix = season => {   // rush share of offensive TDs + share of TDs by scorer position, for one season
+    let r = 0, t = 0; const pos = { RB: 0, WR: 0, TE: 0, QB: 0 };
+    for (const [k, o] of teamOff) if (+k.split('|')[1] === season) { r += o.rushTD; t += o.offTD; }
+    for (const [k, d] of teamDef) if (+k.split('|')[1] === season) for (const p in pos) pos[p] += d.byPos[p];
+    const pt = Object.values(pos).reduce((a, b) => a + b, 0) || 1;
+    return { rush: t ? r / t : 0.38, share: Object.fromEntries(Object.entries(pos).map(([k, v]) => [k, v / pt])), n: t, posN: pos, rushN: r };
+  };
+  const trainMix = leagueMix(TRAIN_SEASON);
 
   function runBacktest(o) {
     const wP = o.wPrior;
@@ -742,13 +753,19 @@ async function parseSeason(season) {
         let a = run.get(pid); if (!a) { a = { g: 0, rushAtt: 0, kneel: 0, rushTD: 0, glCarry: 0, tgt: 0, rzTgt: 0, recTD: 0, airY: 0 }; run.set(pid, a); }
         for (const k in a) a[k] += w[k] || 0; }
       for (const [team, m] of tw) { const w = m.get(wk); if (!w) continue;
-        let a = runTeam.get(team); if (!a) { a = { rushTD: 0, passTD: 0 }; runTeam.set(team, a); } a.rushTD += w.rushTD; a.passTD += w.passTD; }
+        let a = runTeam.get(team); if (!a) { a = { rushTD: 0, passTD: 0 }; runTeam.set(team, a); } a.rushTD += w.rushTD; a.passTD += w.passTD;
+        curR += w.rushTD; curP += w.passTD; }
+      for (const g of btGames.values()) if (g.week === wk) for (const [pid, n] of g.tdn) { const bk = gsis2pos.get(pid); if (curPos.hasOwnProperty(bk)) curPos[bk] += n; }
       for (const [team, m] of dw) { const w = m.get(wk); if (!w) continue;
         let a = runDef.get(team); if (!a) { a = { rushA: 0, passA: 0, g: 0, byPos: { RB: 0, WR: 0, TE: 0, QB: 0 } }; runDef.set(team, a); }
         a.rushA += w.rushA; a.passA += w.passA; a.g += w.g.size; for (const k in a.byPos) a.byPos[k] += w.byPos[k]; }
       if (btSnaps) for (const [pid, m] of btSnaps) { const v = m.get(wk); if (v == null) continue;   // recency weight = week #, like live
         let a = snapRun.get(pid); if (!a) { a = { sw: 0, swp: 0 }; snapRun.set(pid, a); } a.sw += wk; a.swp += wk * v; }
     }
+    const curPos = { RB: 0, WR: 0, TE: 0, QB: 0 }; let curR = 0, curP = 0;   // this season's league TDs so far (weeks < W)
+    const trendPF = bk => { if (!o.trend || !curPos.hasOwnProperty(bk)) return 1; const C = curPos.RB + curPos.WR + curPos.TE + curPos.QB;
+      return ((curPos[bk] + o.trend * trainMix.share[bk]) / (C + o.trend)) / (trainMix.share[bk] || 0.01); };
+    const trendRD = () => o.trend ? (curR + o.trend * trainMix.rush) / (curR + curP + o.trend) - trainMix.rush : 0;
     const acc = { n: 0, brier: 0, ll: 0, pos: 0, sumP: 0 }, bins = Array.from({ length: 10 }, () => ({ n: 0, y: 0, p: 0 })), rows = [];
     for (const wk of weeks) {
       const scoreWk = !o.wk || (wk >= o.wk[0] && wk <= o.wk[1]);   // optional scoring window (all weeks still fold)
@@ -764,6 +781,7 @@ async function parseSeason(season) {
           if (o.funnel) rs += 0.25 * (od.rushAllowShare - 0.5);
           if (o.script) rs += Math.max(-0.10, Math.min(0.12, 0.012 * margin));
           if (o.weather && g.outdoor) { if (g.wind > 12) rs += Math.min(0.09, (g.wind - 12) * 0.005); rs += g.precip === 'snow' ? 0.05 : g.precip === 'rain' ? 0.03 : 0; }
+          rs += trendRD();
           rs = Math.max(0.24, Math.min(0.80, rs));
           const touched = g.side[side];
           const cands = new Map(touched);
@@ -783,6 +801,7 @@ async function parseSeason(season) {
               else { mf = Math.max(0, Math.min(1, (eff - 0.05) / 0.30)); if (mf < 0.05 && (r + c) > 0.05) mf = 0.05; }   // live snapMF
               r *= mf; c *= mf; }
             if (o.posMF && bk) { const mf = Math.pow(Math.max(0.55, Math.min(1.6, od.byPos[bk] / (trainLeagueByPos[bk] || 0.01))), o.posPow); r *= mf; c *= mf; }
+            if (o.trend) { const tf = trendPF(bk); r *= tf; c *= tf; }
             const sa = snapRun.get(pid); sumR += r; sumC += c; return { pid, r, c, bk, se: sa && sa.sw ? sa.swp / sa.sw : null };
           });
           for (const x of pl) {
@@ -827,7 +846,7 @@ async function parseSeason(season) {
     // Validation harness: flip each MODEL switch and score weeks 1-9 (H1) and 10-18 (H2) separately.
     // A change earns its place only if it helps on BOTH halves (so it isn't fitted to one stretch).
     const H1 = [1, 9], H2 = [10, 22], cur = { ...MODEL, cand: 'touched' };
-    const bri = (o, wk) => runBacktest({ ...o, wk }).summary.brier;
+    const bri = (o, wk) => { const b = runBacktest({ ...o, wk }).summary.brier; return b == null ? NaN : b; };   // NaN = no games in that window (a season in progress)
     const flips = [['noKneel', !MODEL.noKneel], ['floor', MODEL.floor === 'prior' ? 'touch' : 'prior'], ['funnel', !MODEL.funnel],
       ['script', !MODEL.script], ['weather', !MODEL.weather], ['posMF', !MODEL.posMF], ['kappa', MODEL.kappa === 'emp' ? 'heur' : 'emp'],
       ['shrinkPrior', !MODEL.shrinkPrior], ['snap', MODEL.snap ? false : 'hybrid'], ['wPrior', MODEL.wPrior === 0.3 ? 0.6 : 0.3], ['eps', MODEL.eps ? 0 : 0.01], ['qbCarry', MODEL.qbCarry === 1 ? 0.5 : 1], ['qbCarry', 0.7], ['qbSnapExempt', !MODEL.qbSnapExempt]];
@@ -840,6 +859,8 @@ async function parseSeason(season) {
       const d1 = bri(o, H1) - bri(b, H1), d2 = bri(o, H2) - bri(b, H2);
       log(`  ${(k + ' -> ' + v + (k === 'snap' ? ' [roster]' : '')).padEnd(24)} H1 ${sg(d1)}  H2 ${sg(d2)}${d1 < 0 && d2 < 0 ? '   <-- better on both halves' : ''}`); }
     log(`  by position (pred->actual): ${byPosCal(runBacktest(cur).rows)}`);
+    for (const K of [100, 250, 600]) { const t = { ...cur, trend: K };
+      log(`  league trend K=${K}: H1 ${bri(t, H1).toFixed(5)} vs off ${bri(cur, H1).toFixed(5)} | H2 ${bri(t, H2).toFixed(5)} vs off ${bri(cur, H2).toFixed(5)} | by position ${byPosCal(runBacktest(t).rows)}`); }
     // calibration by ROLE (prior-week snap share): are part-time players' probabilities trustworthy?
     const tierOf = r => r.bk === 'QB' ? 'QB' : r.se == null ? 'no snap data' : r.se >= 0.6 ? 'full-time 60%+' : r.se >= 0.35 ? 'rotational 35-60%' : 'part-time <35%';
     const calTier = rows => { const t = {}; for (const r of rows) { const k = tierOf(r); const a = t[k] || (t[k] = { n: 0, p: 0, y: 0, b: 0 }); a.n++; a.p += r.p; a.y += r.y; a.b += (r.p - r.y) ** 2; }
@@ -921,6 +942,9 @@ async function parseSeason(season) {
   log(`  role recalibration shipped: rotational x${ROLE_CAL.rot}, QB x${ROLE_CAL.qb} (cross-fit halves: H1 ${JSON.stringify(fH1)} H2 ${JSON.stringify(fH2)})`);
   log(`  reliability: ` + backtest.reliability.map(b => `${(b.pred*100)|0}->${(b.actual*100)|0}%(${b.n})`).join(' '));
   log(`  by position (pred->actual): ${byPosCal(btRows)}`);
+  if (process.env.BT_WEEKLY) for (const wk of [...new Set(btRows.map(r => r.wk))].sort((x, y) => x - y)) {   // diagnostic: how each week went, by position
+    const R = btRows.filter(r => r.wk === wk), b = R.reduce((a, r) => a + (r.p - r.y) ** 2, 0) / R.length, base = R.reduce((a, r) => a + r.y, 0) / R.length;
+    log(`    wk${wk}: Brier ${b.toFixed(4)} (base-rate ${(base * (1 - base)).toFixed(4)}) · ${byPosCal(R)}`); }
 
   // ---- D/ST backtest (rolling, leak-free, TEST season): the shipped D/ST model vs giving every defense
   // the league average vs the old own-history rate. Base + league giveaway rate from the TRAIN season only.
