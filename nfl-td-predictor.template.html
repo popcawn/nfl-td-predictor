@@ -248,7 +248,7 @@
             <label><input type="checkbox" id="oddsProps"> Player props — receptions, rec / rush / rush+rec / pass yds <span class="muted">(5 credits / game)</span></label>
             <label><input type="checkbox" id="oddsAuto"> Pull automatically when I open a game <span class="muted">(if its prices are over 20 min old)</span></label>
             <div>Auto-pulls stop below <input id="oddsReserve" type="number" min="0" step="10" style="width:70px;padding:3px 6px;font-size:12px"> credits <span class="muted">(left for other apps on the same key, e.g. the UFC scanner)</span></div>
-            <div class="muted">Pulls take every US book's prices (same credits): you bet FanDuel's price, and each bet's chance starts from the other books' consensus. For <b>anytime TD</b> it <i>is</i> the consensus: on every 2025 game's real prices the books beat the model, and mixing the model in didn't help. Other markets (1st / last / 2+ TD, props — not tested yet) move part-way toward the model. See Your card ("mkt · model →"). The key is saved in this browser only, never in the site's code. Prices come from FanDuel via The Odds API; the free plan has 500 credits a month. Pasting still works and overrides anything.</div>
+            <div class="muted">Pulls take every US book's prices (same credits): you bet FanDuel's price, and each bet's chance starts from the other books' consensus. On every 2025 game's real prices the books beat the model — anytime TD and receiving / rushing yards — so TD chances <i>are</i> the consensus and props move only 10% toward the model. A bet with no other-book price says <b>model only</b>. See Your card ("mkt · model →"). The key is saved in this browser only, never in the site's code. Prices come from FanDuel via The Odds API; the free plan has 500 credits a month. Pasting still works and overrides anything.</div>
           </div>
         </details>
       </div>
@@ -1105,7 +1105,7 @@ function decorateMarkets(){
     const pick=cardK.get(c.key+'|'+c.market), cls=pick?'bet':c.tier==='take'?'edge':(c.tier==='flag'||c.tier==='dart')?c.tier:'';
     if(cls) cell.classList.add(cls);
     sub.innerHTML = pick ? `★ ${pick.stake.toFixed(1)}u` : `${pctS(c.mp)} <span class="${c.ev>0&&c.tier==='take'?'ev-pos':c.ev>0?'ev-dart':''}" style="font-weight:700">${c.ev>=0?'+':''}${(c.ev*100).toFixed(0)}%</span>`;
-    cell.title=`${c.label} — ${mktLabel(c.market)} ${c.odds}\n${c.mkt!=null?`chance ${pct(c.mp)} from other books ${pct(c.mkt)} (their cut removed) · model alone ${pct(c.model)}`:`model ${pct(c.mp)} (no other-book prices)`} · fair ${probToAmerican(c.mp)} vs book ${pct(c.bimp)} · EV ${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}% · confidence ${Math.round(c.conf.score*100)}\n`+
+    cell.title=`${c.label} — ${mktLabel(c.market)} ${c.odds}\n${c.mkt!=null?`chance ${pct(c.mp)} from other books ${pct(c.mkt)} (their cut removed) · model alone ${pct(c.model)}`:`model only ${pct(c.mp)} — no other-book prices (the model alone lost to the books in testing; ⚡ Pull to check)`} · fair ${probToAmerican(c.mp)} vs book ${pct(c.bimp)} · EV ${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}% · confidence ${Math.round(c.conf.score*100)}\n`+
       (pick?'★ On Your card — bet this.':c.tier==='take'?'Edge, but not on the card: '+(SKIPWHY.get(c.key+'|'+c.market)||'the card keeps only the best bets per game')+'.':c.tier==='flag'?'⚠ Edge too big to trust — likely injury/role news; verify first.':c.tier==='dart'?'🎲 Lottery price — too rare or uncertain to price.':'No edge at this price.'); };
   grid.querySelectorAll('.mcell[data-mkt]').forEach(cell=>paint(cell, byK.get(cell.dataset.key+'|'+cell.dataset.mkt), cell.dataset.base, cell.dataset.tip));
   grid.querySelectorAll('.mcell[data-side]').forEach(cell=>{ const s=cell.dataset.s, key=cell.dataset.key, side=cell.dataset.side, mu=+cell.dataset.mu, nm=side==='O'?'over':'under';
@@ -1281,7 +1281,7 @@ function computeTopPlays(){
       const why=`model ${pct(c.mp)} vs book ${pct(bimp)} · edge ${edge>=0?'+':''}${(edge*100).toFixed(1)} pts${c.role?' · '+c.role:''}${c.cal&&c.cal<1?' · calibrated ×'+c.cal.toFixed(2):''}${c.capped?' · scaled to the team cap':''}`;
       html+=`<div class="cpick" title="${esc(why)}"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
       `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="vbadge vb-take" style="font-size:12px;margin-left:auto">bet ${u(c.stake)}</span></div>`+
-      `<div class="cp2">${mktLabel(c.market)} <span class="odds">${esc(c.odds)}</span> ${confBadge(c.conf)}${inLog} <span class="muted" style="font-size:12px" title="${c.mkt!=null?esc('model '+pct(c.model)+' · other books (fair) '+pct(c.mkt)+' → blended '+pct(c.mp)):'model only (no other-book prices)'}">${c.mkt!=null?'mkt '+pct(c.mkt)+' · model '+pct(c.model)+' → ':''}${pct(c.mp)} vs ${pct(bimp)} (${edge>=0?'+':''}${(edge*100).toFixed(1)})</span></div></div>`; });
+      `<div class="cp2">${mktLabel(c.market)} <span class="odds">${esc(c.odds)}</span> ${confBadge(c.conf)}${inLog} <span class="muted" style="font-size:12px" title="${c.mkt!=null?esc('model '+pct(c.model)+' · other books (fair) '+pct(c.mkt)+' → blended '+pct(c.mp)):'No other-book prices for this bet — the model alone lost to the books in the 2025 real-price test. ⚡ Pull odds to check it against the market.'}">${c.mkt!=null?'mkt '+pct(c.mkt)+' · model '+pct(c.model)+' → ':'<span style="color:var(--warn)">model only</span> · '}${pct(c.mp)} vs ${pct(bimp)} (${edge>=0?'+':''}${(edge*100).toFixed(1)})</span></div></div>`; });
     html+='</div>';
     const teams={}; picks.forEach(c=>{ teams[c.abbr]=(teams[c.abbr]||0)+c.stake; });
     const tot=picks.reduce((a,c)=>a+c.stake,0);
@@ -1833,19 +1833,21 @@ async function fetchGameOdds(away, home, markets, mustBeUpcoming){
   return out;
 }
 // ---------- MARKET ANCHOR: the bet probability starts from the other books ----------
-// Pulled prices include every US book; the probability used for EV is a log-odds blend
-// logit(p) = (1-w)*logit(market fair) + w*logit(model), w = the model's share.
-// ANYTIME TD is FITTED (market-backtest.mjs on 2025's real prices, S.marketAnchor): the other books' median, calibrated,
-// beat the model on both halves and adding the model didn't help (best w 0 / 0.1) — the model spreads TDs too flat
-// (books 65% -> actual 58%, model 47%). So anytime = calibrated consensus, w from the fit.
-// 1st / last / 2+ TD and props are NOT tested: interim w=0.35. TD prices are one-sided, so there "market fair" takes the
-// market's SHAPE (who) at the model's LEVEL (how many): fair_i = consensus_i * sum(model) / sum(consensus); props de-vig
-// each book's over/under directly.
-const FITTED=S.marketAnchor&&S.marketAnchor.fitted&&S.marketAnchor.cal ? S.marketAnchor : null;
-const INTERIM_W=0.35;
-const anchorFor=mk=>mk==='anytime'&&FITTED ? {w:FITTED.w, cal:FITTED.cal} : {w:INTERIM_W, cal:null};
+// Tested on 2025's real prices (market-backtest.mjs; README "Real prices"): the other books beat the model on every
+// market tested — anytime TD (best model share 0; the model spreads TDs too flat: books 65% -> actual 58%, model 47%)
+// and receiving / rushing yards (best share 0.1; the model alone was worse than a coin flip at the books' lines).
+// So logit(p) = (1-w)*logit(market fair) + w*logit(model), with
+//   anytime TD: calibrated consensus (S.marketAnchor.cal), w = its fit (0);
+//   1st / last / 2+ TD (not tested; same lesson): w = the anytime fit. TD prices are one-sided, so "market fair" there
+//     takes the market's SHAPE (who) at the model's LEVEL (how many): fair_i = consensus_i * sum(model) / sum(consensus);
+//   props: each book's over/under de-vigged, w = the props fit (0.1; receptions / rush+rec / passing yds by analogy).
+// No other-book prices (a pasted board) = the model alone, flagged "model only" on the card.
+const MA=S.marketAnchor||{};
+const TD_W=MA.fitted&&MA.w!=null ? MA.w : 0;
+const PROP_W=MA.props&&MA.props.fitted&&MA.props.w!=null ? MA.props.w : 0.1;
+const anchorFor=mk=>({w:TD_W, cal:mk==='anytime'&&MA.fitted&&MA.cal ? MA.cal : null});
 const logit=p=>Math.log(p/(1-p)), expit=x=>1/(1+Math.exp(-x));
-const blendP=(mkt, model, w=INTERIM_W)=>expit((1-w)*logit(clamp(mkt,0.003,0.995))+w*logit(clamp(model,0.003,0.995)));
+const blendP=(mkt, model, w)=>expit((1-w)*logit(clamp(mkt,0.003,0.995))+w*logit(clamp(model,0.003,0.995)));
 // one TD market for one game: Map(player key -> {p: blended, mkt: market fair, model})
 function anchorTD(players, mktMap, mk){
   const out=new Map(); if(!mktMap) return out;
@@ -1885,7 +1887,9 @@ function fillGameFromOdds(d){
   const dstOf=name=>{ const nn=normName(name); return [LAST.away,LAST.home].find(a=>nn.includes(normName(S.teams[a].short))||nn.includes(normName(S.teams[a].name))); };
   const C2=d.cons||{td:{}, props:{}}; LAST.mktMap=LAST.mktMap||{};
   for(const [mk,o] of Object.entries(C2.td)) for(const [name,c] of Object.entries(o)){ const p=matchPlayer(cleanName(name), idx); if(p) LAST.mktMap[mk+'|'+p._key]={ip:c.ip, n:c.n}; }
-  for(const [st,o] of Object.entries(C2.props)) for(const c of Object.values(o)){ const p=matchPlayer(cleanName(c.name), idx); if(p) (LAST.mktMap['P|'+st+'|'+p._key]=LAST.mktMap['P|'+st+'|'+p._key]||{})[c.line]=c.fairOver; }
+  // a pull REPLACES each player's prop consensus (lines move; an old line's consensus mustn't outlive the pull)
+  const freshP={}; for(const [st,o] of Object.entries(C2.props)) for(const c of Object.values(o)){ const p=matchPlayer(cleanName(c.name), idx); if(p) (freshP['P|'+st+'|'+p._key]=freshP['P|'+st+'|'+p._key]||{})[c.line]=c.fairOver; }
+  Object.assign(LAST.mktMap, freshP);
   for(const [mk,arr] of Object.entries(d.td)) for(const o of arr){
     const p=matchPlayer(cleanName(o.name), idx); if(p){ LAST.bookMap[mk+'|'+p._key]=fmtAm(o.price); n++; continue; }
     const t=dstOf(o.name); if(t){ if(mk!=='two'){ LAST.bookMap[mk+'|DST|'+t]=fmtAm(o.price); n++; } continue; }   // defenses have no 2+ market here
@@ -2188,6 +2192,15 @@ function propMu(p, s){
 }
 // win probability of each side at line L. A whole-number line can push (stake back), so each side's
 // probability is conditional on no push — the bet behaves like a binary one on the remaining outcomes.
+// other books' de-vigged P(over) at this line; if none posted it, the nearest line within max(2.5, 12%) moved here by
+// the model's own distribution (tested on the 2025 lines FanDuel posted alone: still beat the model on both halves)
+function propCons(s, key, line, mu){
+  const o=(LAST.mktMap||{})['P|'+s+'|'+key]; if(!o) return null; if(o[line]!=null) return o[line];
+  const tol=Math.max(2.5,0.12*line); let best=null;
+  for(const k of Object.keys(o)){ const L2=+k; if(Math.abs(L2-line)<=tol && (best==null||Math.abs(L2-line)<Math.abs(best-line))) best=L2; }
+  if(best==null) return null; const a=propSides(mu,s,line), b=propSides(mu,s,best); if(!a||!b) return null;
+  return clamp(o[best]+a.over-b.over,0.02,0.98);
+}
 function propSides(mu, s, L){
   if(!(mu>0)||!(L>=0)||!PM.tables[s]) return null;
   const tab=PM.tables[s], cl=v=>clamp(v,0.01,0.99);
@@ -2230,8 +2243,8 @@ function propCandidates(){
     const i=k.indexOf('|'), s=k.slice(0,i), p=byKey.get(k.slice(i+1)); if(!p||p._status==='OUT'||!PSTAT.includes(s)) continue;
     const mu=propMu(p,s); if(mu==null) continue; const med=propMedian(mu,s);
     const side=(sd,line,odds,alt)=>{ if(!odds||line==null) return; const pr=propSides(mu,s,line); if(!pr) return;
-      const model=sd==='O'?pr.over:pr.under, mo=((LAST.mktMap||{})['P|'+s+'|'+p._key]||{})[line], mkt=mo!=null?(sd==='O'?mo:1-mo):null;
-      out.push({key:p._key, label:p.name, abbr:p._abbr, market:propMktKey(s,sd,line), odds, mp:mkt!=null?blendP(mkt,model):model, model, mkt, ref:p, prop:{s,side:sd,line,mu,med,alt}}); };
+      const model=sd==='O'?pr.over:pr.under, mo=propCons(s,p._key,line,mu), mkt=mo!=null?(sd==='O'?mo:1-mo):null;
+      out.push({key:p._key, label:p.name, abbr:p._abbr, market:propMktKey(s,sd,line), odds, mp:mkt!=null?blendP(mkt,model,PROP_W):model, model, mkt, ref:p, prop:{s,side:sd,line,mu,med,alt}}); };
     if(pm.line!=null){ side('O',pm.line,pm.over); side('U',pm.line,pm.under); }
     for(const a of (pm.alts||[])) side('O',a.line,a.odds,true);
   }

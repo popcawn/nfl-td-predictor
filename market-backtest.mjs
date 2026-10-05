@@ -12,6 +12,10 @@
 //       (first: DUMP_BT=1 node build-nfl-td-snapshot.mjs  -> bt_rows_<season>.json, the model's predictions)
 //   options: --season 2025   --snaps close,early   (close = 10 min before kickoff, early = 6 h before)
 //
+// PLAYER PROPS (receiving + rushing yards, closing lines, regular season):
+//   node market-backtest.mjs --props         dry run;  add --go to fetch -> market_props_<season>.json
+//   node market-backtest.mjs analyze-props   score vs bt_props_<season>.json (same DUMP_BT build) -> market_anchor.json .props
+//
 // Key: env ODDS_API_KEY, or a .odds-key file here or in ../ufc-fight-simulator. Raw prices stay local (gitignored).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -198,6 +202,152 @@ function analyze() {
   console.log(`\nwrote market_anchor.json — the app will use model share ${ship.w} and the fitted market calibration after the next build`);
 }
 
+// ================================================================ PLAYER PROPS
+const PROP_MKTS = { player_reception_yds: 'recyd', player_rush_yds: 'ryd' };
+const keyOf = () => process.env.ODDS_API_KEY || readIf(path.join(DIR, '.odds-key')) || readIf(path.join(DIR, '..', 'ufc-fight-simulator', '.odds-key'));
+async function fetchProps(go) {
+  // the weekly event lists were cached by the TD run (free to re-read); regular season only (the model's props
+  // backtest has no playoff games)
+  const files = fs.existsSync(CACHE) ? fs.readdirSync(CACHE).filter(f => f.startsWith('events_')) : [];
+  if (!files.length) throw new Error('run the TD fetch first (it caches the weekly event lists)');
+  const regEnd = Date.parse(`${SEASON + 1}-01-08T00:00:00Z`), events = new Map();
+  for (const fl of files) {
+    const b = JSON.parse(fs.readFileSync(path.join(CACHE, fl), 'utf8')), t0 = Date.parse(fl.slice(7, 17) + 'T12:00:00Z');
+    for (const e of (b.data || [])) { const t = Date.parse(e.commence_time); if (t >= t0 && t < t0 + 7 * 864e5 && t < regEnd && TEAM[e.home_team] && TEAM[e.away_team]) events.set(e.id, e); }
+  }
+  const nm = Object.keys(PROP_MKTS).length, todo = [...events.values()].filter(e => !fs.existsSync(path.join(CACHE, `${e.id}_props_close.json`)));
+  console.log(`props: ${events.size} regular-season games, ${todo.length} not cached yet x ${nm} markets x 10 credits = ~${(todo.length * nm * 10).toLocaleString()} credits`);
+  if (!go) { console.log('dry run — add --go to fetch'); return; }
+  const key = keyOf(); if (!key) throw new Error('no Odds API key');
+  for (const e of events.values()) {
+    const at = new Date(Date.parse(e.commence_time) - OFFSET.close).toISOString().replace('.000', '');
+    await cached(`${e.id}_props_close.json`, `${API}/events/${e.id}/odds?apiKey=${key}&date=${at}&regions=us&markets=${Object.keys(PROP_MKTS).join(',')}&oddsFormat=american`);
+  }
+  const games = [];
+  for (const e of events.values()) {
+    const b = JSON.parse(fs.readFileSync(path.join(CACHE, `${e.id}_props_close.json`), 'utf8')), d = b.data || {}, books = {};
+    for (const bk of (d.bookmakers || [])) for (const m of (bk.markets || [])) {
+      const st = PROP_MKTS[m.key]; if (!st) continue;
+      const pairs = {};
+      for (const o of m.outcomes) { if (o.point == null || (o.name !== 'Over' && o.name !== 'Under')) continue; const k = o.description + '|' + o.point;
+        (pairs[k] = pairs[k] || { name: o.description, line: +o.point })[o.name === 'Over' ? 'O' : 'U'] = o.price; }
+      for (const p of Object.values(pairs)) {
+        if (p.O == null || p.U == null) continue;
+        const bs = (books[bk.key] = books[bk.key] || {}), ss = (bs[st] = bs[st] || {});
+        (ss[p.name] = ss[p.name] || []).push({ line: p.line, O: p.O, U: p.U });
+      }
+    }
+    games.push({ id: e.id, commence: e.commence_time, home: TEAM[e.home_team], away: TEAM[e.away_team], ts: b.timestamp, books });
+  }
+  const out = path.join(DIR, `market_props_${SEASON}.json`);
+  fs.writeFileSync(out, JSON.stringify({ season: SEASON, builtAt: new Date().toISOString(), games }));
+  console.log(`wrote ${path.basename(out)}: ${games.length} games`);
+}
+// P(stat > line) — identical to propPOver() in the build and the app
+const propPOver = (tab, mu, L) => {
+  if (!(mu > 0)) return 0;
+  let bk = tab.edges.findIndex(e => mu <= e); if (bk < 0) bk = tab.q.length - 1;
+  const q = tab.q[bk], n = q.length, x = L / mu;
+  if (x < q[0]) return 1; if (x >= q[n - 1]) return 0;
+  let lo = 0, hi = n - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (q[m] <= x) lo = m; else hi = m - 1; }
+  return 1 - (lo + (q[lo + 1] > q[lo] ? (x - q[lo]) / (q[lo + 1] - q[lo]) : 0)) / (n - 1);
+};
+function analyzeProps() {
+  const bt = JSON.parse(fs.readFileSync(path.join(DIR, `bt_props_${SEASON}.json`), 'utf8'));
+  const mk = JSON.parse(fs.readFileSync(path.join(DIR, `market_props_${SEASON}.json`), 'utf8'));
+  const gidOf = new Map(Object.entries(bt.games).map(([gid, g]) => [g.away + '@' + g.home, gid]));
+  const lastKey = n => { const t = String(n).replace(/\b(Jr|Sr|II|III|IV|V)\b\.?/g, '').trim().split(/\s+/); return norm(t[t.length - 1]) + '|' + norm(t[0]).slice(0, 1); };
+  const W = [0, 0.1, 0.2, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
+  const f5 = x => x == null ? '—' : x.toFixed(5), pc = x => x == null ? '—' : (x * 100).toFixed(1) + '%';
+  const devig = (O, U) => ip(O) / (ip(O) + ip(U));
+  const report = { season: SEASON, stats: {} }, wAll = { 1: {}, 2: {} }, wCal = { 1: {}, 2: {} }; let nAll = 0;
+  for (const [st, B] of Object.entries(bt.stats)) {
+    if (!Object.values(PROP_MKTS).includes(st)) continue;
+    const idx = new Map();   // gid -> names of this stat's rows (full name, then last name + first initial)
+    for (const r of B.rows) {
+      const n = bt.names[r.pid]; if (!n) continue;
+      const gi = idx.get(r.g) || idx.set(r.g, { full: new Map(), last: new Map() }).get(r.g);
+      gi.full.set(norm(n), r); const lk = lastKey(n); gi.last.set(lk, gi.last.has(lk) ? null : r);
+    }
+    const J = [], J2 = []; let fdRows = 0, noOther = 0, noModel = 0, pushes = 0;
+    for (const g of mk.games) {
+      const gid = gidOf.get(g.away + '@' + g.home), fd = g.books.fanduel && g.books.fanduel[st]; if (!gid || !fd) continue;
+      const gi = idx.get(gid);
+      for (const [name, arr] of Object.entries(fd)) {
+        // FanDuel's main line = its most 50/50 one (some books list alternates in the same market)
+        const main = arr.slice().sort((a, b) => Math.abs(devig(a.O, a.U) - 0.5) - Math.abs(devig(b.O, b.U) - 0.5))[0];
+        fdRows++;
+        const r = gi && (gi.full.get(norm(name)) || gi.last.get(lastKey(name)));
+        if (!r) { noModel++; continue; }   // didn't play (void) or not in the model's population
+        if (r.y === main.line) { pushes++; continue; }
+        const h = r.wk <= 9 ? 1 : 2, pAt = L => propPOver(B.tabs[h], r.mu, L);
+        const oth = [], near = [];   // the app's consensus: other books at FanDuel's exact line, each de-vigged
+        for (const [bk, m] of Object.entries(g.books)) {
+          if (bk === 'fanduel' || !m[st] || !m[st][name]) continue;
+          const x = m[st][name].find(z => z.line === main.line); if (x) { oth.push(devig(x.O, x.U)); continue; }
+          // no exact match: the app's fallback — that book's nearest line within max(2.5, 12%), moved to FanDuel's line
+          // by the model's own distribution (the same translation the bet log uses for a moved closing line)
+          const tol = Math.max(2.5, 0.12 * main.line), y2 = m[st][name].filter(z => Math.abs(z.line - main.line) <= tol).sort((a, b) => Math.abs(a.line - main.line) - Math.abs(b.line - main.line))[0];
+          if (y2) near.push(devig(y2.O, y2.U) + pAt(main.line) - pAt(y2.line));
+        }
+        const row = { wk: r.wk, h, line: main.line, mu: r.mu, y: r.y > main.line ? 1 : 0, pm: cl(pAt(main.line)), O: main.O, U: main.U, fdP: devig(main.O, main.U) };
+        if (oth.length) J.push({ ...row, pc: cl(median(oth)), nb: oth.length });
+        else { noOther++; if (near.length) J2.push({ ...row, pc: cl(median(near)), nb: near.length }); }
+      }
+    }
+    const H = h => J.filter(r => r.h === h), brier = (R, f) => R.reduce((a, r) => a + (f(r) - r.y) ** 2, 0) / R.length;
+    const blend = (r, w) => expit((1 - w) * logit(r.pc) + w * logit(r.pm));
+    const roiOn = (R, f) => {
+      const pl = [];
+      for (const r of R) { const p = f(r); for (const [pp, price, win] of [[p, r.O, r.y === 1], [1 - p, r.U, r.y === 0]]) { const d = dec(price); if (pp * d - 1 > 0.03) pl.push(win ? d - 1 : -1); } }
+      const [lo, hi] = boot(pl); return { bets: pl.length, roi: pl.length ? pl.reduce((a, b) => a + b, 0) / pl.length : null, lo, hi };
+    };
+    // books shade yardage lines toward the over: calibrate their de-vigged P(over), learned on the OTHER half (cross-fit)
+    const cals = { 1: fitLogit(H(2).map(r => logit(r.pc)), H(2).map(r => r.y)), 2: fitLogit(H(1).map(r => logit(r.pc)), H(1).map(r => r.y)) };
+    const pcal = r => cl(expit(cals[r.h].a + cals[r.h].b * logit(r.pc))), cblend = (r, w) => expit((1 - w) * logit(pcal(r)) + w * logit(r.pm));
+    const strategies = { 'every over': () => 0.999, 'every under': () => 0.001, model: r => r.pm, market: r => r.pc, interim035: r => blend(r, 0.35),
+      'blend0.1': r => blend(r, 0.1), 'blend0.2': r => blend(r, 0.2), 'blend0.5': r => blend(r, 0.5), 'cal market': pcal, 'cal+0.1': r => cblend(r, 0.1), 'cal+0.2': r => cblend(r, 0.2) };
+    const res = { fdRows, noOther, noModel, pushes, n: J.length, halves: {} };
+    console.log(`\n=== ${st}: ${J.length} FanDuel main lines with another book at the same line (FanDuel lines ${fdRows}; no other book at that line ${noOther}; no model row ${noModel}; pushes ${pushes}) ===`);
+    for (const h of [1, 2]) {
+      const R = H(h), o = { n: R.length, overRate: R.reduce((a, r) => a + r.y, 0) / R.length, model: brier(R, r => r.pm), market: brier(R, r => r.pc), fanduel: brier(R, r => r.fdP), blend: {} };
+      for (const w of W) { o.blend[w] = brier(R, r => blend(r, w)); wAll[h][w] = (wAll[h][w] || 0) + o.blend[w] * R.length; }
+      o.calBlend = {}; for (const w of W) { o.calBlend[w] = brier(R, r => cblend(r, w)); wCal[h][w] = (wCal[h][w] || 0) + o.calBlend[w] * R.length; }
+      console.log(`           calibrated books (cross-fit a=${cals[h].a.toFixed(3)} b=${cals[h].b.toFixed(3)}) + model share w: ` + W.slice(0, 6).map(w => `${w}:${f5(o.calBlend[w])}`).join(' '));
+      o.bets = Object.fromEntries(Object.entries(strategies).map(([k, f2]) => [k, roiOn(R, f2)]));
+      res.halves[h] = o;
+      console.log(`  ${h === 1 ? 'wks 1-9 ' : 'wks 10+ '} n=${o.n} over rate ${pc(o.overRate)} | Brier model ${f5(o.model)}  other books ${f5(o.market)}  FanDuel's own ${f5(o.fanduel)}`);
+      console.log(`           blends (model share w): ` + W.map(w => `${w}:${f5(o.blend[w])}`).join(' '));
+      console.log(`           ROI at FanDuel, EV>3% flat 1u: ` + Object.entries(o.bets).map(([k, v]) => `${k} ${v.bets} bets ${pc(v.roi)}`).join(' | '));
+    }
+    nAll += J.length;
+    res.betsPooled = Object.fromEntries(Object.entries(strategies).map(([k, f2]) => [k, roiOn(J, f2)]));
+    console.log('  ROI both halves, 95% range:  ' + Object.entries(res.betsPooled).map(([k, v]) => `${k} ${v.bets} bets ${pc(v.roi)} [${pc(v.lo)}..${pc(v.hi)}]`).join('\n                              '));
+    // where they disagree: model minus books, bucketed — who was right?
+    res.disagree = [[-1, -0.15], [-0.15, -0.05], [-0.05, 0.05], [0.05, 0.15], [0.15, 1]].map(([lo, hi]) => {
+      const R = J.filter(r => r.pm - r.pc >= lo && r.pm - r.pc < hi), m = f2 => R.reduce((a, r) => a + f2(r), 0) / (R.length || 1);
+      return { lo, hi, n: R.length, market: m(r => r.pc), model: m(r => r.pm), actual: m(r => r.y) };
+    });
+    console.log('  model minus books, P(over):  ' + res.disagree.map(b => `${pc(b.lo)}..${pc(b.hi)} n=${b.n} books ${pc(b.market)} model ${pc(b.model)} actual ${pc(b.actual)}`).join('\n                              '));
+    // FanDuel lines no other book matched: is the nearby-line consensus (moved by the model) still better than the model?
+    res.nearby = {};
+    for (const h of [1, 2]) { const R = J2.filter(r => r.h === h); if (R.length < 30) continue;
+      res.nearby[h] = { n: R.length, model: brier(R, r => r.pm), nearbyBooks: brier(R, r => r.pc), fanduel: brier(R, r => r.fdP), blend01: brier(R, r => blend(r, 0.1)) };
+      const o = res.nearby[h]; console.log(`  no exact match, ${h === 1 ? 'wks 1-9 ' : 'wks 10+ '} n=${o.n} | Brier model ${f5(o.model)}  nearby books moved to FD's line ${f5(o.nearbyBooks)}  w=0.1 ${f5(o.blend01)}  FanDuel's own ${f5(o.fanduel)}`); }
+    report.stats[st] = res;
+  }
+  // one weight for the app's props (both stats pooled, weighted by rows): the share best summed over both halves
+  const tot = w => (wAll[1][w] || 0) + (wAll[2][w] || 0);
+  const best = h => W.reduce((b, w) => wAll[h][w] < wAll[h][b] ? w : b, 0), wFull = W.reduce((b, w) => tot(w) < tot(b) ? w : b, 0);
+  console.log(`\nbest model share for props: H1 ${best(1)}, H2 ${best(2)}, both halves ${wFull}`);
+  const file = path.join(DIR, 'market_anchor.json'), cur = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+  cur.propsReport = report; cur.props = { w: wFull, fitted: true, season: SEASON, n: nAll, stats: Object.keys(report.stats), wHalves: { h1: best(1), h2: best(2) } };
+  fs.writeFileSync(file, JSON.stringify(cur, null, 1));
+  console.log(`wrote market_anchor.json .props — model share ${wFull} for props after the next build`);
+}
+
 const cmd = args.find(a => !a.startsWith('--') && !/^\d+$/.test(a) && a !== opt('--snaps', '_'));
 if (cmd === 'analyze') analyze();
+else if (cmd === 'analyze-props') analyzeProps();
+else if (args.includes('--props')) fetchProps(args.includes('--go')).catch(e => { console.error('failed:', e.message); process.exit(1); });
 else fetchSeason(args.includes('--go')).catch(e => { console.error('failed:', e.message); process.exit(1); });

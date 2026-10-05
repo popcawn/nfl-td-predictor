@@ -8,3 +8,5 @@ node_modules/
 market_hist/
 market_td_*.json
 bt_rows_*.json
+bt_props_*.json
+market_props_*.json

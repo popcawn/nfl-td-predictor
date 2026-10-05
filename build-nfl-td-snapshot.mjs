@@ -1231,6 +1231,28 @@ async function parseSeason(season) {
     if (wins) propCond[st] = condTable(st, cfg.method, ctx, pop);   // ship only what beat independence on BOTH halves
     log(`  joint ${st.padEnd(5)} ${condBT[st].event}: Brier H1 ${b(1).cond} vs independent ${b(1).ind} | H2 ${b(2).cond} vs ${b(2).ind}  -> ${wins ? 'SHIPPED' : 'not used (independence)'}`);
   }
+  // DUMP_BT=1: the props backtest's leak-free projections for every eligible player-game he PLAYED (a prop on a player who
+  // sits is void), plus each half's cross-fitted outcome table, so market-backtest.mjs can price any book's line with
+  // exactly what was validated: P(over L) = propPOver(tabs[half], mu, L).
+  if (process.env.DUMP_BT) {
+    const out = { season: TEST_SEASON, builtAt: new Date().toISOString(), stats: {}, names: {}, games: {} };
+    for (const st of PSTATS) {
+      if (st === 'ptd') continue;
+      const cfg = PM.stats[st], ctx = propStats[st].ctx, pop = propTest.filter(r => inPop(r, st));
+      const tb = h => { const t = ratioTable(st, cfg.method, ctx, pop.filter(r => h === 1 ? r.week >= 10 : r.week <= 9)); return { edges: t.edges, q: t.q }; };
+      const rows = [];
+      for (const r of propTest) {
+        if (!eligible(r, st)) continue;
+        const mu = propProject(cfg.method, st, r.pos, r.F, ctx); if (mu == null || !(mu > 0)) continue;
+        rows.push({ g: r.gid, pid: r.gsis, wk: r.week, mu: +mu.toFixed(3), y: r.act[st], pop: inPop(r, st) ? 1 : 0 });
+        if (gsis2name.has(r.gsis)) out.names[r.gsis] = gsis2name.get(r.gsis);
+        const G = gameLines.get(r.gid); if (G && !out.games[r.gid]) out.games[r.gid] = { home: G.home, away: G.away, week: r.week };
+      }
+      out.stats[st] = { method: cfg.method, ctx, offered: propStats[st].offered, tabs: { 1: tb(1), 2: tb(2) }, rows };
+    }
+    fs.writeFileSync(path.join(__dirname, `bt_props_${TEST_SEASON}.json`), JSON.stringify(out));
+    log(`  DUMP_BT: wrote bt_props_${TEST_SEASON}.json (${Object.entries(out.stats).map(([k, v]) => k + ' ' + v.rows.length).join(', ')})`);
+  }
   const propModelOut = { wPrior: PM.wPrior, cond: propCond, condBacktest: condBT, trainSeason: TRAIN_SEASON, testSeason: TEST_SEASON, stats: propStats, tables: propTables, backtest: propBT,
     teamImp: Object.fromEntries([...teamImp.keys()].map(t => [t, +teamNorm(t, CUR, 99, PM.wPrior).toFixed(2)])) };
 
@@ -1401,7 +1423,9 @@ async function parseSeason(season) {
     marketBacktest,
     propModel: propModelOut,
     // fitted by market-backtest.mjs against real historical prices (absent until that has run -> the app's interim blend)
-    marketAnchor: (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'market_anchor.json'), 'utf8')).app || null; } catch { return null; } })(),
+    // .app = anytime TD fit; .props = the receiving / rushing yards fit (the reports stay in the file, not the app)
+    marketAnchor: (() => { try { const a = JSON.parse(fs.readFileSync(path.join(__dirname, 'market_anchor.json'), 'utf8'));
+      return a.app ? Object.assign({}, a.app, a.props ? { props: a.props } : {}) : null; } catch { return null; } })(),
   };
 
   const jsonPath = path.join(__dirname, 'nfl-td-snapshot.json');

@@ -241,17 +241,45 @@ EV > 3%, both halves, 95% range): every FanDuel price **−8.7%** [−16, −1] 
 +3.4% [−21, +30] on 1,019 bets although it claimed +45% EV; the books' consensus (line shopping) −2.0% [−43, +48];
 blends +30–40% but only from a few +4000 long shots in weeks 1–9 (weeks 10–18 lost). **Nothing showed a proven edge.**
 
-**What the app does with it.** For **anytime TD**, the bet chance is now the other books' consensus, calibrated
-(`logit p = −0.198 + 1.006·logit(median implied)`, which removes their cut) — the model's number is still shown
-on hover. So anytime bets appear only when FanDuel's price is clearly longer than every other book's. 1st / last / 2+ TD
-and props were **not** tested; they keep the interim rule (chance = 65% other books + 35% model in log-odds; TD
-consensus rescaled to the model's game total, props de-vigged per book). Pasted boards with no other books use the model.
+### Real prices: player props (receiving + rushing yards, every 2025 game)
+Same test at the close for every regular-season game: FanDuel's main line, the other books at that same line
+(de-vigged), and the model's P(over) from the props backtest (cross-fitted tables, games he played).
+
+| Closing lines | Rec yds wk 1–9 / 10–18 | Rush yds wk 1–9 / 10–18 |
+|---|---|---|
+| Lines scored | 1,196 / 1,198 | 557 / 597 |
+| Model | 0.2657 / 0.2567 | 0.2737 / 0.2757 |
+| Other books | 0.2499 / 0.2503 | 0.2506 / 0.2485 |
+| Books + 10% model | **0.2496 / 0.2494** | **0.2506 / 0.2478** |
+
+A coin flip at the line scores 0.25, so **the model alone was worse than a coin flip at the books' lines**: it is
+accurate around its own projection (the props table above) but far too sure when it disagrees with the line. When it
+said 15+ points more likely over than the books, the over hit 55% (rec) / 48% (rush); the model had said 71% / 75%.
+A 10% model share was the best mix, a hair better than the books alone on both halves.
+
+**Overs lose.** Overs hit only 46% (rec yds) and 48% (rush yds) while the books price them as 50/50: betting every
+FanDuel over lost **−12.3%** [−16, −8] on rec yds and **−8.3%** [−14, −3] on rush yds. Every under: +1.6% [−2, +5] and
+−2.7% [−8, +3] — about break-even. The model's picks: +0.7% [−4, +5] (rec) / −1.0% [−7, +5] (rush), mostly because it
+leans under. Correcting the books' own over-lean (a calibration) helped rec yds but hurt rush yds, so it isn't applied.
+When no other book posted FanDuel's exact line (16% of lines), their nearest line moved to FanDuel's by the model's own
+distribution still beat the model on both halves — the app uses that fallback.
+
+**What the app does with it.**
+- **Anytime TD:** the bet chance is the other books' consensus, calibrated (`logit p = −0.198 + 1.006·logit(median
+  implied)`, which removes their cut). Bets appear only when FanDuel's price is clearly longer than every other book's.
+- **1st / last / 2+ TD:** not tested, same lesson applied: the books' consensus (rescaled to the model's game total, since
+  these prices are one-sided), no model share.
+- **Props:** the books' de-vigged consensus + 10% model. Receptions, rush + rec and passing yards weren't tested; they
+  use the same 10% by analogy.
+- **No other-book prices** (a pasted board, or nothing pulled): the model alone, flagged **model only** on the card.
 
 ```bash
 DUMP_BT=1 node build-nfl-td-snapshot.mjs     # writes bt_rows_2025.json (leak-free model predictions); then git checkout the shipped files
 node market-backtest.mjs                     # dry run: estimated credits (~5,500 for 2025)
 node market-backtest.mjs --go                # fetch (cached in market_hist/, gitignored) — needs a paid Odds API key in .odds-key
 node market-backtest.mjs analyze             # → market_anchor.json, which the next build ships into the app
+node market-backtest.mjs --props --go        # rec + rush yds closing lines (~5,440 credits)
+node market-backtest.mjs analyze-props       # → market_anchor.json .props
 ```
 Raw paid price data stays local (gitignored); only the summary (`market_anchor.json`) is committed.
 

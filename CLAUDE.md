@@ -112,8 +112,14 @@ See README.md for what the model does and how it was validated.
   anytime player-games: calibrated consensus beat the model on BOTH halves (Brier .1393/.1254 vs .1440/.1299); best model
   share w = 0 / 0.1; model far too flat vs books (books 65% -> actual 59%, model 47%). ROI (EV>3%, flat): every FD price
   -8.7%; model +3.4% [-21,+30] while claiming +45% EV; consensus -2%; blends + only via a few +4000 hits in wks 1-9.
-  => App: ANYTIME uses `anchorFor('anytime')` = S.marketAnchor {w:0, cal:{a:-0.198,b:1.006}}; 1st/last/2+ TD and props
-  use INTERIM_W=0.35 (untested; TD = consensus shape rescaled to the model's game total). Don't raise the model's
-  anytime share without a new test that beats the market on both halves. Flow to refit: `DUMP_BT=1` build (restore
-  shipped files with git checkout) -> `--go` -> `analyze` -> build. Raw prices (market_hist/, market_td_*.json) stay local.
+  PROPS (rec yds + rush yds, close, 272 games, 5,440 credits; DUMP_BT also writes bt_props_<season>.json = mu + cross-fit
+  tables per row): model Brier .2657/.2567 rec, .2737/.2757 rush vs books ~.250 — WORSE than a coin flip at the books'
+  line; best model share 0.1 (both halves). Every FD over -12.3% rec / -8.3% rush (CIs exclude 0); unders ~break-even;
+  model picks ~0. Calibrating the books' over-lean helped rec, hurt rush -> not applied. Nearby-line fallback (other
+  books' nearest line within max(2.5,12%), moved by the model's distribution) beat the model both halves -> `propCons()`.
+  => App: TD_W = S.marketAnchor.w (0) for ALL TD markets (anytime adds cal; 1st/last/2+ use the model-level rescale,
+  untested); PROP_W = S.marketAnchor.props.w (0.1) for all props (rec/rryd/pyd by analogy). No consensus = "model only"
+  on the card. Don't raise either share without a new real-price test that wins both halves. Refit: `DUMP_BT=1` build
+  (restore shipped files with git checkout) -> `--go` / `--props --go` -> `analyze` / `analyze-props` -> build.
+  Raw prices (market_hist/, market_td_*.json, market_props_*.json) and bt_*.json stay local.
 - Commits end with the Co-Authored-By line from the session's instructions.
