@@ -248,7 +248,7 @@
             <label><input type="checkbox" id="oddsProps"> Player props — receptions, rec / rush / rush+rec / pass yds <span class="muted">(5 credits / game)</span></label>
             <label><input type="checkbox" id="oddsAuto"> Pull automatically when I open a game <span class="muted">(if its prices are over 20 min old)</span></label>
             <div>Auto-pulls stop below <input id="oddsReserve" type="number" min="0" step="10" style="width:70px;padding:3px 6px;font-size:12px"> credits <span class="muted">(left for other apps on the same key, e.g. the UFC scanner)</span></div>
-            <div class="muted">Pulls take every US book's prices (same credits): you bet FanDuel's price, and each bet's chance starts from the other books' consensus and moves part-way toward the model — see Your card ("mkt · model →"). The key is saved in this browser only, never in the site's code. Prices come from FanDuel via The Odds API; the free plan has 500 credits a month. Pasting still works and overrides anything.</div>
+            <div class="muted">Pulls take every US book's prices (same credits): you bet FanDuel's price, and each bet's chance starts from the other books' consensus. For <b>anytime TD</b> it <i>is</i> the consensus: on every 2025 game's real prices the books beat the model, and mixing the model in didn't help. Other markets (1st / last / 2+ TD, props — not tested yet) move part-way toward the model. See Your card ("mkt · model →"). The key is saved in this browser only, never in the site's code. Prices come from FanDuel via The Odds API; the free plan has 500 credits a month. Pasting still works and overrides anything.</div>
           </div>
         </details>
       </div>
@@ -1105,7 +1105,7 @@ function decorateMarkets(){
     const pick=cardK.get(c.key+'|'+c.market), cls=pick?'bet':c.tier==='take'?'edge':(c.tier==='flag'||c.tier==='dart')?c.tier:'';
     if(cls) cell.classList.add(cls);
     sub.innerHTML = pick ? `★ ${pick.stake.toFixed(1)}u` : `${pctS(c.mp)} <span class="${c.ev>0&&c.tier==='take'?'ev-pos':c.ev>0?'ev-dart':''}" style="font-weight:700">${c.ev>=0?'+':''}${(c.ev*100).toFixed(0)}%</span>`;
-    cell.title=`${c.label} — ${mktLabel(c.market)} ${c.odds}\n${c.mkt!=null?`chance ${pct(c.mp)} = other books ${pct(c.mkt)} (their cut removed) blended with the model's ${pct(c.model)}`:`model ${pct(c.mp)} (no other-book prices)`} · fair ${probToAmerican(c.mp)} vs book ${pct(c.bimp)} · EV ${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}% · confidence ${Math.round(c.conf.score*100)}\n`+
+    cell.title=`${c.label} — ${mktLabel(c.market)} ${c.odds}\n${c.mkt!=null?`chance ${pct(c.mp)} from other books ${pct(c.mkt)} (their cut removed) · model alone ${pct(c.model)}`:`model ${pct(c.mp)} (no other-book prices)`} · fair ${probToAmerican(c.mp)} vs book ${pct(c.bimp)} · EV ${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}% · confidence ${Math.round(c.conf.score*100)}\n`+
       (pick?'★ On Your card — bet this.':c.tier==='take'?'Edge, but not on the card: '+(SKIPWHY.get(c.key+'|'+c.market)||'the card keeps only the best bets per game')+'.':c.tier==='flag'?'⚠ Edge too big to trust — likely injury/role news; verify first.':c.tier==='dart'?'🎲 Lottery price — too rare or uncertain to price.':'No edge at this price.'); };
   grid.querySelectorAll('.mcell[data-mkt]').forEach(cell=>paint(cell, byK.get(cell.dataset.key+'|'+cell.dataset.mkt), cell.dataset.base, cell.dataset.tip));
   grid.querySelectorAll('.mcell[data-side]').forEach(cell=>{ const s=cell.dataset.s, key=cell.dataset.key, side=cell.dataset.side, mu=+cell.dataset.mu, nm=side==='O'?'over':'under';
@@ -1832,26 +1832,29 @@ async function fetchGameOdds(away, home, markets, mustBeUpcoming){
   }
   return out;
 }
-// ---------- MARKET ANCHOR: the bet probability starts from the market and moves part-way to the model ----------
-// The model is good at HOW MANY TDs a game has (Vegas-anchored, backtested) but spreads them flatter than the market
-// across players (it fades every star and leans on backups / TE2s). Pulled prices now include every US book, so the
-// probability used for EV is a log-odds blend: logit(p) = (1-w)*logit(market fair) + w*logit(model), w = the model's
-// share. TD prices are one-sided (no "No" side), so until the historical-price test fits a calibration, "market fair"
-// takes the market's SHAPE (who) at the model's LEVEL (how many): fair_i = consensus_i * sum(model) / sum(consensus)
-// over the players both price. Props are two-sided, so each book's over/under is de-vigged directly.
-// S.marketAnchor (from the historical backtest, when it exists) overrides w and supplies the fitted calibration.
-const ANCHOR=Object.assign({w:0.35, cal:null, fitted:false}, S.marketAnchor||{});
+// ---------- MARKET ANCHOR: the bet probability starts from the other books ----------
+// Pulled prices include every US book; the probability used for EV is a log-odds blend
+// logit(p) = (1-w)*logit(market fair) + w*logit(model), w = the model's share.
+// ANYTIME TD is FITTED (market-backtest.mjs on 2025's real prices, S.marketAnchor): the other books' median, calibrated,
+// beat the model on both halves and adding the model didn't help (best w 0 / 0.1) — the model spreads TDs too flat
+// (books 65% -> actual 58%, model 47%). So anytime = calibrated consensus, w from the fit.
+// 1st / last / 2+ TD and props are NOT tested: interim w=0.35. TD prices are one-sided, so there "market fair" takes the
+// market's SHAPE (who) at the model's LEVEL (how many): fair_i = consensus_i * sum(model) / sum(consensus); props de-vig
+// each book's over/under directly.
+const FITTED=S.marketAnchor&&S.marketAnchor.fitted&&S.marketAnchor.cal ? S.marketAnchor : null;
+const INTERIM_W=0.35;
+const anchorFor=mk=>mk==='anytime'&&FITTED ? {w:FITTED.w, cal:FITTED.cal} : {w:INTERIM_W, cal:null};
 const logit=p=>Math.log(p/(1-p)), expit=x=>1/(1+Math.exp(-x));
-const blendP=(mkt, model)=>expit((1-ANCHOR.w)*logit(clamp(mkt,0.003,0.995))+ANCHOR.w*logit(clamp(model,0.003,0.995)));
+const blendP=(mkt, model, w=INTERIM_W)=>expit((1-w)*logit(clamp(mkt,0.003,0.995))+w*logit(clamp(model,0.003,0.995)));
 // one TD market for one game: Map(player key -> {p: blended, mkt: market fair, model})
 function anchorTD(players, mktMap, mk){
   const out=new Map(); if(!mktMap) return out;
   const rows=[]; let sm=0, si=0;
   for(const p of players){ if(p._status==='OUT') continue; const m=mktMap[mk+'|'+p._key]; if(!m||!(m.ip>0)||!(p[mk]>0)) continue; rows.push([p,m]); sm+=p[mk]; si+=m.ip; }
   if(rows.length<4 || !(si>0)) return out;   // too few prices to read the market's shape -> model only
-  const k=sm/si;
-  for(const [p,m] of rows){ const fair=ANCHOR.cal ? expit(ANCHOR.cal.a+ANCHOR.cal.b*logit(clamp(m.ip,0.003,0.995))) : clamp(m.ip*k,0.002,0.97);
-    out.set(p._key,{p:blendP(fair,p[mk]), mkt:fair, model:p[mk]}); }
+  const k=sm/si, A=anchorFor(mk);
+  for(const [p,m] of rows){ const fair=A.cal ? expit(A.cal.a+A.cal.b*logit(clamp(m.ip,0.003,0.995))) : clamp(m.ip*k,0.002,0.97);
+    out.set(p._key,{p:blendP(fair,p[mk],A.w), mkt:fair, model:p[mk]}); }
   return out;
 }
 function lastAnchors(){ const pl=LAST.awayR.concat(LAST.homeR), a={}; for(const m of ['anytime','first','last','two']) a[m]=anchorTD(pl, LAST.mktMap, m); return a; }

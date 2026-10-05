@@ -106,13 +106,14 @@ See README.md for what the model does and how it was validated.
   test showed identical fair odds for all players before/after. teamExpectations/confFor take an optional wx/badWx so
   off-screen games use their own forecast. The user gets overwhelmed by options: the slate gives ONLY the best N picks +
   one parlay; keep it that short.
-- MARKET ANCHOR (2026-10-05, user picked it after the model kept "finding" edges on backups): pulls use `regions=us`
-  (same credits, all books). `consensusFrom()` = median of the OTHER books (TD implied prob; props de-vigged P(over)),
-  FanDuel's price is what's judged. `anchorTD()`: fair = consensus × Σmodel/Σconsensus over players both price (needs ≥4),
-  then `blendP` = expit((1−w)·logit(fair) + w·logit(model)), interim w=0.35 (NOT fitted). Candidates carry
-  `mp` (blended), `model`, `mkt`; LAST.mktMap is saved in BOARDS. DST isn't anchored. `S.marketAnchor` (from
-  market_anchor.json via the build) overrides w and adds cal {a,b}: fair = expit(a + b·logit(consensus ip)).
-  `market-backtest.mjs` needs a PAID Odds API plan (historical endpoints; ~5,460 credits for 2025 close+early) — the user
-  must buy it; ask before spending. Flow: `DUMP_BT=1` build (writes bt_rows_<season>.json; restore the shipped files
-  with git checkout) → `--go` → `analyze` → rebuild. Raw prices (market_hist/, market_td_*.json) stay gitignored.
+- MARKET ANCHOR + REAL-PRICE TEST (2026-10-05). Pulls use `regions=us` (same credits, all books). `consensusFrom()` =
+  median of the OTHER books (TD implied prob; props de-vigged P(over)); FanDuel's price is what's judged.
+  `market-backtest.mjs` (paid key in .odds-key, gitignored; 5,569 credits for 2025 close+6h) scored 6,002 active priced
+  anytime player-games: calibrated consensus beat the model on BOTH halves (Brier .1393/.1254 vs .1440/.1299); best model
+  share w = 0 / 0.1; model far too flat vs books (books 65% -> actual 59%, model 47%). ROI (EV>3%, flat): every FD price
+  -8.7%; model +3.4% [-21,+30] while claiming +45% EV; consensus -2%; blends + only via a few +4000 hits in wks 1-9.
+  => App: ANYTIME uses `anchorFor('anytime')` = S.marketAnchor {w:0, cal:{a:-0.198,b:1.006}}; 1st/last/2+ TD and props
+  use INTERIM_W=0.35 (untested; TD = consensus shape rescaled to the model's game total). Don't raise the model's
+  anytime share without a new test that beats the market on both halves. Flow to refit: `DUMP_BT=1` build (restore
+  shipped files with git checkout) -> `--go` -> `analyze` -> build. Raw prices (market_hist/, market_td_*.json) stay local.
 - Commits end with the Co-Authored-By line from the session's instructions.

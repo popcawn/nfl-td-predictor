@@ -113,12 +113,21 @@ function fitLogit(xs, ys) {   // y ~ a + b*x by Newton steps (tiny, no deps)
   }
   return { a, b };
 }
+// 95% bootstrap range of a mean (seeded, so reruns print the same numbers)
+function boot(xs) { if (xs.length < 5) return [null, null]; let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647, rs = [];
+  for (let i = 0; i < 2000; i++) { let t = 0; for (let j = 0; j < xs.length; j++) t += xs[Math.floor(rnd() * xs.length)]; rs.push(t / xs.length); }
+  rs.sort((a, b) => a - b); return [rs[50], rs[1949]]; }
 function analyze() {
   const bt = JSON.parse(fs.readFileSync(path.join(DIR, `bt_rows_${SEASON}.json`), 'utf8'));
   const mk = JSON.parse(fs.readFileSync(path.join(DIR, `market_td_${SEASON}.json`), 'utf8'));
   const gidOf = new Map(Object.entries(bt.games).map(([gid, g]) => [g.away + '@' + g.home, gid]));
-  const nameIdx = new Map(); for (const [pid, n] of Object.entries(bt.names)) nameIdx.set(norm(n), pid);
-  const rowOf = new Map(bt.rows.map(r => [r.g + '|' + r.pid, r]));
+  // names matched within each game's own rows: full name first, then last name + first initial ("Gabe"/"Gabriel Davis")
+  const lastKey = n => { const t = String(n).replace(/\b(Jr|Sr|II|III|IV|V)\b\.?/g, '').trim().split(/\s+/); return norm(t[t.length - 1]) + '|' + norm(t[0]).slice(0, 1); };
+  const gameIdx = new Map();
+  for (const r of bt.rows) { const n = bt.names[r.pid]; if (!n) continue;
+    const gi = gameIdx.get(r.g) || gameIdx.set(r.g, { full: new Map(), last: new Map() }).get(r.g);
+    gi.full.set(norm(n), r); const lk = lastKey(n); gi.last.set(lk, gi.last.has(lk) ? null : r); }   // null = ambiguous
+  const rowFor = (gid, n) => { const gi = gameIdx.get(gid); return gi && (gi.full.get(norm(n)) || gi.last.get(lastKey(n)) || null); };
   const W = [0, 0.1, 0.2, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
   const report = { season: SEASON, snaps: {} };
   let ship = null;
@@ -133,7 +142,7 @@ function analyze() {
         const fd = S.prices.fanduel && S.prices.fanduel[n], oth = Object.entries(S.prices).filter(([k]) => k !== 'fanduel').map(([, b]) => b[n]).filter(v => v != null).map(ip);
         const ipc = oth.length >= 2 ? median(oth) : median(oth.concat(fd != null ? [ip(fd)] : [])); if (ipc == null) continue;
         priced++;
-        const pid = nameIdx.get(norm(n)), r = pid && rowOf.get(gid + '|' + pid);
+        const r = rowFor(gid, n);
         if (!r) { noModel++; continue; }
         if (!r.active) continue;   // didn't play: a void bet, not a loss
         rows.push({ gid, wk: r.wk, p: r.p, y: r.y, fd, ipc });
@@ -148,22 +157,26 @@ function analyze() {
     // market calibration cross-fit: learned on one half, scored on the other
     const cal = { 1: fitLogit(H(2).map(r => logit(cl(r.ipc))), H(2).map(r => r.y)), 2: fitLogit(H(1).map(r => logit(cl(r.ipc))), H(1).map(r => r.y)) };
     const best = { 1: null, 2: null };
+    // flat 1u at FanDuel's price whenever a probability says EV > 3%; 'every' = bet all of FanDuel's prices (the house edge)
+    const roiOn = (R, f) => { const pl = []; for (const r of R) { if (r.fd == null) continue; const d = dec(r.fd); if (f(r) * d - 1 <= 0.03) continue; pl.push(r.y ? d - 1 : -1); }
+      const [lo, hi] = boot(pl); return { bets: pl.length, roi: pl.length ? pl.reduce((a, b) => a + b, 0) / pl.length : null, lo, hi }; };
+    const mcalH = r => { const c = cal[r.wk <= 9 ? 1 : 2]; return cl(expit(c.a + c.b * logit(cl(r.ipc)))); };   // cross-fit calibration per row
+    const strategies = { every: () => 1, model: r => r.p, market: mcalH, interim035: r => expit(0.65 * logit(r.interim) + 0.35 * logit(cl(r.p))),
+      'blend0.2': r => expit(0.8 * logit(mcalH(r)) + 0.2 * logit(cl(r.p))), 'blend0.35': r => expit(0.65 * logit(mcalH(r)) + 0.35 * logit(cl(r.p))) };
     for (const h of [1, 2]) {
       const R = H(h), c = cal[h], mcal = r => cl(expit(c.a + c.b * logit(cl(r.ipc))));
       const out = { n: R.length, base: R.reduce((a, r) => a + r.y, 0) / R.length,
         model: brier(R, r => r.p), marketRaw: brier(R, r => cl(r.ipc)), marketCal: brier(R, mcal),
         interim035: brier(R, r => expit(0.65 * logit(r.interim) + 0.35 * logit(cl(r.p)))), blend: {} };
       for (const w of W) out.blend[w] = brier(R, r => expit((1 - w) * logit(mcal(r)) + w * logit(cl(r.p))));
-      // flat 1u bets at FanDuel's price when the probability says EV > 3%
-      const roi = f => { let n = 0, pl = 0; for (const r of R) { if (r.fd == null) continue; const p = f(r), d = dec(r.fd); if (p * d - 1 <= 0.03) continue; n++; pl += r.y ? d - 1 : -1; } return { bets: n, roi: n ? pl / n : null }; };
-      out.bets = { model: roi(r => r.p), marketCal: roi(mcal), interim035: roi(r => expit(0.65 * logit(r.interim) + 0.35 * logit(cl(r.p)))) };
-      for (const w of [0.2, 0.35, 0.5]) out.bets['blend' + w] = roi(r => expit((1 - w) * logit(mcal(r)) + w * logit(cl(r.p))));
+      out.bets = Object.fromEntries(Object.entries(strategies).map(([k, f]) => [k, roiOn(R, f)]));
       best[h] = W.reduce((b, w) => out.blend[w] < out.blend[b] ? w : b, 0);
       res.halves[h] = out;
     }
     // ship from the closing snapshot: w chosen on one half must hold on the other
     const wFull = W.reduce((b, w) => (res.halves[1].blend[w] + res.halves[2].blend[w]) < (res.halves[1].blend[b] + res.halves[2].blend[b]) ? w : b, 0);
     res.wBest = { h1: best[1], h2: best[2], both: wFull };
+    res.betsPooled = Object.fromEntries(Object.entries(strategies).map(([k, f]) => [k, roiOn(J, f)]));
     report.snaps[sn] = res;
     if (sn === 'close' || !ship) { const cf = fitLogit(J.map(r => logit(cl(r.ipc))), J.map(r => r.y)); ship = { w: wFull, cal: { a: +cf.a.toFixed(4), b: +cf.b.toFixed(4) }, fitted: true, season: SEASON, n: J.length, snap: sn }; }
     // print
@@ -173,7 +186,12 @@ function analyze() {
       console.log(`  ${h === 1 ? 'wks 1-9 ' : 'wks 10+ '} n=${o.n} base ${pc(o.base)} | Brier model ${f5(o.model)}  market raw ${f5(o.marketRaw)}  market calibrated ${f5(o.marketCal)}  interim app blend ${f5(o.interim035)}`);
       console.log(`           blends (model share w): ` + W.map(w => `${w}:${f5(o.blend[w])}`).join(' '));
       console.log(`           ROI at FanDuel, EV>3% flat 1u: ` + Object.entries(o.bets).map(([k, v]) => `${k} ${v.bets} bets ${pc(v.roi)}`).join(' | ')); }
+    console.log('  ROI both halves, 95% range:  ' + Object.entries(res.betsPooled).map(([k, v]) => `${k} ${v.bets} bets ${pc(v.roi)} [${pc(v.lo)}..${pc(v.hi)}]`).join('\n                              '));
     console.log(`  best model share: H1 ${best[1]}, H2 ${best[2]}, both halves ${wFull}`);
+    // where model and market disagree: bucket by the books' implied chance (vig in), compare the model's average
+    res.buckets = [[0, .1], [.1, .2], [.2, .3], [.3, .45], [.45, .6], [.6, 1]].map(([lo, hi]) => { const R = J.filter(r => r.ipc >= lo && r.ipc < hi), m = f => R.reduce((a, r) => a + f(r), 0) / (R.length || 1);
+      return { lo, hi, n: R.length, books: m(r => r.ipc), model: m(r => r.p), actual: m(r => r.y) }; });
+    console.log('  by the books\' implied chance:  ' + res.buckets.map(b => `${pc(b.lo)}-${pc(b.hi)} n=${b.n} books ${pc(b.books)} model ${pc(b.model)} actual ${pc(b.actual)}`).join('\n                                 '));
   }
   const outFile = path.join(DIR, 'market_anchor.json');
   fs.writeFileSync(outFile, JSON.stringify({ builtAt: new Date().toISOString(), report, app: ship }, null, 1));

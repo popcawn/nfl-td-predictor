@@ -212,29 +212,50 @@ Restricted to exactly the players the book priced: **Brier 0.1490** on 1,065 pla
 book listed **94% of actual scorers**. ESPN exposes the line, **not the price**, so this is a calibration and
 coverage check — not a beat-the-odds result. A price comparison needs a paid odds feed.
 
-### Market anchor (bet chance = other books + the model)
-Side by side with six books (ATL@NO, 2026 wk 5), the model was much **flatter** than the market: Bijan 55% vs the
-books' 70%, Drake London 28% vs 47% — so its "edges" piled onto backups and second tight ends. It gets the game's TD
-count right (that part is Vegas-anchored and backtested) but spreads the TDs too evenly. So when a pull has other books,
-the chance used for EV, the card, the slate and parlays is a log-odds blend:
-`logit(chance) = 0.65 × logit(other books) + 0.35 × logit(model)`. TD prices are one-sided (no "No" price to remove
-the books' cut), so for now "other books" keeps the market's **shape** (who scores) at the model's **level** (how many):
-each player's consensus price is scaled so the game's total matches the model. Props are two-sided, so each book's
-over/under is de-vigged directly. Hover a price box for "other books X blended with the model's Y"; logged bets keep
-both numbers. Pasted boards (no other books) use the model alone.
+### Real prices: the books vs the model (anytime TD, every 2025 game)
+`market-backtest.mjs` pulled every US book's anytime-TD prices for all of 2025 from The Odds API's historical feed
+(8 books incl. FanDuel; 10 minutes and 6 hours before kickoff) and scored them against the model's leak-free
+predictions — 6,002 priced player-games of players who played.
 
-**The 0.35 is a starting value, not a fitted one.** `market-backtest.mjs` fits it (and a calibration of the books'
-prices) against real 2025 closing and early-week prices from The Odds API's historical feed — paid plans only:
+| Closing prices | Brier wk 1–9 | Brier wk 10–18 |
+|---|---|---|
+| Model | 0.1440 | 0.1299 |
+| Other books' median (raw) | 0.1397 | 0.1266 |
+| Other books, calibrated | **0.1393** | **0.1254** |
+| Books + 35% model (the interim app rule) | 0.1420 | 0.1283 |
+
+**The books are more accurate than the model, on both halves, and mixing the model in doesn't help** (best model share
+0 in weeks 1–9, 0.1 in 10–18). The reason is the shape: grouped by the books' implied chance —
+
+| Books imply | Books | Model | Actually scored |
+|---|---|---|---|
+| 0–10% | 6% | 5% | 5% |
+| 20–30% | 24% | 16% | 21% |
+| 30–45% | 37% | 25% | 35% |
+| 45–60% | 52% | 35% | 42% |
+| 60%+ | 65% | 47% | 59% |
+
+The model gets each game's TD count right but spreads it too flat: it underrates every featured scorer, so its
+"edges" were backups and second tight ends. **Betting returns** (flat 1u at FanDuel's price whenever a probability said
+EV > 3%, both halves, 95% range): every FanDuel price **−8.7%** [−16, −1] — that's the house edge; the model's picks
++3.4% [−21, +30] on 1,019 bets although it claimed +45% EV; the books' consensus (line shopping) −2.0% [−43, +48];
+blends +30–40% but only from a few +4000 long shots in weeks 1–9 (weeks 10–18 lost). **Nothing showed a proven edge.**
+
+**What the app does with it.** For **anytime TD**, the bet chance is now the other books' consensus, calibrated
+(`logit p = −0.198 + 1.006·logit(median implied)`, which removes their cut) — the model's number is still shown
+on hover. So anytime bets appear only when FanDuel's price is clearly longer than every other book's. 1st / last / 2+ TD
+and props were **not** tested; they keep the interim rule (chance = 65% other books + 35% model in log-odds; TD
+consensus rescaled to the model's game total, props de-vigged per book). Pasted boards with no other books use the model.
+
 ```bash
 DUMP_BT=1 node build-nfl-td-snapshot.mjs     # writes bt_rows_2025.json (leak-free model predictions); then git checkout the shipped files
 node market-backtest.mjs                     # dry run: estimated credits (~5,500 for 2025)
-node market-backtest.mjs --go                # fetch (cached in market_hist/, gitignored)
-node market-backtest.mjs analyze             # Brier per half: model / market / blends, ROI at FanDuel → market_anchor.json
+node market-backtest.mjs --go                # fetch (cached in market_hist/, gitignored) — needs a paid Odds API key in .odds-key
+node market-backtest.mjs analyze             # → market_anchor.json, which the next build ships into the app
 ```
-The next build ships `market_anchor.json`'s fitted weight and calibration into the app. Raw paid price data never goes
-in the repo.
+Raw paid price data stays local (gitignored); only the summary (`market_anchor.json`) is committed.
 
-**Where the edge is (and isn't).** The model tracks the market about as well as the market prices itself —
+**Where the edge is (and isn't).** On anytime TD the market beats the model (above) —
 it's a lead generator, not a line-beater. Edge, when it exists, lives in speed (repricing after injury news
 before the book moves), line shopping, and promos/boosts. The log's CLV column is how you find out.
 
