@@ -50,6 +50,12 @@ silently to the baked snapshot when not.
   stakes, plus one cross-game parlay. Same picking rule as Your card; the whole day (parlay included, parlay ≤ 1%) is
   capped at 15% of bankroll. One click logs the picks or the parlay, or sends the parlay to the slip; click a pick to
   open its game.
+- **🎉 Fun picks** (under My TD picks) — for TD bets you'll make anyway: anytime TDs priced **+100 to +400**, one per
+  game, a flat 0.5u each, plus a 2-leg fun parlay (the two likeliest, 0.2u). On 2025's real FanDuel prices that range lost
+  about 5% of the money bet (wks 1–9 −1%, 10–18 −9%) while +400 to +1500 lost about 20% in both halves and heavy
+  favourites about 11%. Ordering inside the range (the other books, the model, shortest price) never reliably helped, so
+  the range is the rule. Logged fun bets are tagged 🎉, kept out of Your card and the log's plan, and get their own running
+  total. **Not an edge** — they lose a little over time, by design.
 - **⚡ Pull FanDuel odds** — with a [The Odds API](https://the-odds-api.com) key saved under *odds settings*, one click (or
   automatically when you open a game) fills FanDuel's current prices for that game: TD scorer markets (4 credits per game)
   and/or player props (5 credits). Auto-pulls stop below a credit reserve so other apps on the same key keep working;

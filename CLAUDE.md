@@ -122,4 +122,11 @@ See README.md for what the model does and how it was validated.
   on the card. Don't raise either share without a new real-price test that wins both halves. Refit: `DUMP_BT=1` build
   (restore shipped files with git checkout) -> `--go` / `--props --go` -> `analyze` / `analyze-props` -> build.
   Raw prices (market_hist/, market_td_*.json, market_props_*.json) and bt_*.json stay local.
+- 🎉 FUN PICKS (2026-10-05, user wants TD action despite no edge): `buildSlate` also collects every FanDuel anytime price in
+  FUN_BAND [+100,+400) (not OUT/DBT, not already a real pick), sorted by the sim's EV only as a tiebreak, 1 per game (2nd
+  pass: other team), flat FUN_STAKE 0.5u; fun parlay = the 2 likeliest (mp) from different games, 0.2u. Evidence (2025
+  market_td + bt_rows, active players): +100..+400 -1%/-9% by half, +400..+1500 -18..-24% both halves, <+100 ~-11%;
+  "best price vs other books" and model-EV ordering inside the band did NOT reliably help (model-EV thirds -10/+2/+2%,
+  then -7/-8/-8%). Logged fun bets carry `fun:true`: pendingFor() skips them (card + plan + Trim), the log shows 🎉 and a
+  separate running total. Keep the honesty copy ("not an edge").
 - Commits end with the Co-Authored-By line from the session's instructions.
