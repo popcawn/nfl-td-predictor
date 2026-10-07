@@ -135,5 +135,8 @@ See README.md for what the model does and how it was validated.
   propMktKey). Slip legs snapshot `fd` in addLeg; slate picks/fun picks carry fd. `fdButton(legs,label)` builds ONE link —
   several legs use indexed pairs marketId[i]/selectionId[i] (the common tool format; NOT documented by The Odds API, and
   the built-in browser blocks sportsbook sites, so it was never opened here — if the user reports only one leg landing,
-  fall back to the per-leg FD↗ links). Pasted-only legs show "+N to add by hand".
+  fall back to the per-leg FD↗ links). Legs without ids (pasted, or pulled BEFORE links existed — the user hit this
+  on day one: "i dont see it") get real buttons, not grey text: slip = `linkSlipLegs()` "🔗 Get FanDuel links for N legs ·
+  ~C credits" (pulls only the needed markets per game, matches by name / side+line / DST team); card = `.fdpull` (delegated
+  click -> pullOdds); slate = "Build my TD picks again".
 - Commits end with the Co-Authored-By line from the session's instructions.

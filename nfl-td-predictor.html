@@ -1532,12 +1532,40 @@ const legSel=l=>l.fd||fdSelFor(l.game, l.market, l.key);
 function fdLink(sels){
   if(sels.length===1) return `${FD_SLIP}?marketId=${encodeURIComponent(sels[0].m)}&selectionId=${encodeURIComponent(sels[0].s)}`;
   return FD_SLIP+'?'+sels.map((x,i)=>`marketId[${i}]=${encodeURIComponent(x.m)}&selectionId[${i}]=${encodeURIComponent(x.s)}`).join('&'); }
-function fdButton(legs, label){
+function fdButton(legs, label, mode){
   const ok=[], miss=[]; for(const l of legs) (legSel(l)?ok:miss).push(l); if(typeof label==='function') label=label(ok.length);   // label can count the legs it really opens
-  const why='these prices were pasted, not pulled — ⚡ Pull odds for that game to get FanDuel\'s links';
-  if(!ok.length) return legs.length?`<span class="muted" style="font-size:12px" title="${esc(why)}">no FanDuel link (pasted prices)</span>`:'';
+  const why='not linked yet — these prices were pasted, or pulled before FanDuel links existed';
+  if(!ok.length){ if(!legs.length) return '';
+    return mode==='slip' ? '' :   // the slip shows its own "Get FanDuel links" button
+      mode==='rebuild' ? `<span class="muted" style="font-size:12px">🔗 hit <b>Build my TD picks</b> again for FanDuel links</span>` :
+      `<button class="statussel fdpull" style="padding:3px 11px" title="${esc(why)} — pulls this game's FanDuel prices again (about 9 credits)">🔗 Get FanDuel link${legs.length>1?'s':''}</button>`; }
   return `<a class="statussel fdbtn" href="${esc(fdLink(ok.map(legSel)))}" target="_blank" rel="noopener" title="opens FanDuel with ${ok.length===1?'this leg':'these '+ok.length+' legs'} in the bet slip — check the price there before you bet">📲 ${label}</a>`+
-    (miss.length?` <span class="muted" style="font-size:12px" title="${esc(why+': '+miss.map(l=>l.name||l.label).join(', '))}">+ ${miss.length} to add by hand</span>`:''); }
+    (miss.length?` <span class="muted" style="font-size:12px" title="${esc(why+': '+miss.map(l=>l.name||l.label).join(', '))}">+ ${miss.length} not linked</span>`:''); }
+// slip legs with no FanDuel ids (pasted, or added before links existed): pull just the markets they need, once, and
+// attach the ids — 1 credit per market per game, never for games that have kicked off
+const marketOA=m=>isPropMkt(m) ? Object.keys(OA_PROP).find(x=>OA_PROP[x]===m.split('|')[1]) : Object.keys(OA_TD).find(x=>OA_TD[x]===m);
+const slipUnlinked=()=>slip.filter(l=>l.game && l.market!=='custom' && !legSel(l) && !(l.kickoff && Date.now()>new Date(l.kickoff).getTime()) && marketOA(l.market));
+function slipLinkPlan(){ const by=new Map(); for(const l of slipUnlinked()){ const g=by.get(l.game)||by.set(l.game,{legs:[], mk:new Set()}).get(l.game); g.legs.push(l); g.mk.add(marketOA(l.market)); } return by; }
+let SLIP_LINK_NOTE='';
+async function linkSlipLegs(){
+  if(!oddsKey()){ SLIP_LINK_NOTE=oddsWhy({status:'nokey'}); renderSlip(); return; }
+  let linked=0, tried=0; const notes=[];
+  for(const [game,{legs,mk}] of slipLinkPlan()){
+    const [away,home]=game.split('@'); tried+=legs.length;
+    let d; try{ d=await fetchGameOdds(away, home, [...mk], true); }catch(e){ notes.push(fmtGame(game)+': '+oddsWhy(e)); continue; }
+    const B=BOARDS[game]||(BOARDS[game]={t:Date.now(), book:{}, prop:{}, mkt:{}}); B.mkt=B.mkt||{};
+    for(const l of legs){ let o=null;
+      if(isPropMkt(l.market)){ const [,st,side,line]=l.market.split('|'); o=(d.props[st]||[]).find(x=>x.side===side && x.line===+line && sameName(x.name,l.name)); }
+      else if(String(l.key).startsWith('DST|')){ const t=l.key.split('|')[1], tn=[S.teams[t].short, S.teams[t].name].map(normName); o=(d.td[l.market]||[]).find(x=>tn.some(n=>normName(x.name).includes(n))); }
+      else o=(d.td[l.market]||[]).find(x=>sameName(x.name,l.name));
+      if(o&&o.fd){ l.fd=o.fd; B.mkt['FD#'+l.market+'#'+l.key]=o.fd; if(LAST&&curGameId()===game){ LAST.mktMap=LAST.mktMap||{}; LAST.mktMap['FD#'+l.market+'#'+l.key]=o.fd; } linked++; }
+      else notes.push(`${l.name} ${mktLabel(l.market)}: not on FanDuel's board now${isPropMkt(l.market)?' (the line may have moved)':''}`); }
+  }
+  try{ localStorage.setItem(BOARD_KEY, JSON.stringify(BOARDS)); }catch(e){}
+  if(linked) saveSlip();
+  SLIP_LINK_NOTE=`🔗 linked ${linked} of ${tried} leg${tried===1?'':'s'}`+(notes.length?' · '+notes.map(esc).join(' · '):'');
+  renderSlip(); oddsStatus();
+}
 const fdLegLink=l=>{ const x=legSel(l); return x?` <a href="${esc(fdLink([x]))}" target="_blank" rel="noopener" title="open just this leg in FanDuel's bet slip" style="font-size:12px;text-decoration:none">FD↗</a>`:''; };
 function slipHas(game,key,market){ return slip.some(l=>l.game===game&&l.key===key&&l.market===market); }
 // the game context a leg was priced in (shown on the slip — it already shaped the probability)
@@ -1622,7 +1650,10 @@ function renderSlip(){
     (v.bad?'':`<span class="muted" style="font-size:12px">model ${pct(v.l.mp)} · EV ${v.ev>=0?'+':''}${(v.ev*100).toFixed(1)}% → <b class="${v.evAdj>0?'ev-pos':'ev-neg'}">${v.evAdj>=0?'+':''}${(v.evAdj*100).toFixed(1)}%</b> after confidence${v.l.ctx?' · '+v.l.ctx:''}${v.started?' · <b>started</b>':''}</span>`)+`</div>`; });
   html+='</div>';
   const live=V.filter(v=>!v.started).map(v=>v.l);
-  if(live.length) html+=`<div style="margin:-2px 0 10px">${fdButton(live, n=>n===1?'Open it on FanDuel':`Open all ${n} legs on FanDuel`)}</div>`;
+  if(live.length){ const plan=slipLinkPlan(), nUn=[...plan.values()].reduce((a,g)=>a+g.legs.length,0), cr=[...plan.values()].reduce((a,g)=>a+g.mk.size,0);
+    html+=`<div style="margin:-2px 0 10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fdButton(live, n=>n===1?'Open it on FanDuel':`Open all ${n} legs on FanDuel`, 'slip')}`+
+      (nUn?`<button class="statussel" id="slipLink" style="padding:4px 11px" title="these legs have no FanDuel link yet (prices pasted, or pulled before links existed) — pulls just their markets once">🔗 Get FanDuel links for ${nUn} leg${nUn>1?'s':''} · ~${cr} credit${cr>1?'s':''}</button>`:'')+
+      (SLIP_LINK_NOTE?`<span class="muted" style="font-size:12px">${SLIP_LINK_NOTE}</span>`:'')+`</div>`; }
 
   const {best, bigger, pool, drop}=bestParlay(V);
   const pBlock=(r,title)=>{ const stake=0.25*kellyFrac(r.P,r.D)*bank, evModel=r.legs.reduce((a,v)=>a*v.l.mp*v.dec,1)-1;
@@ -1630,7 +1661,7 @@ function renderSlip(){
       `<div style="font-weight:800;margin-bottom:5px">${title}</div>`+
       r.legs.map(v=>`<div style="font-size:13px;margin:2px 0"><span class="muted" style="display:inline-block;min-width:100px">${fmtGame(v.l.game)}</span>${legLine(v)}</div>`).join('')+
       `<div style="margin-top:6px;font-size:13px">hits <b>${pct(r.P)}</b> · fair <span class="odds">${probToAmerican(r.P)}</span> · pays <span class="odds">${amStr(decToAmerican(r.D))}</span> · EV <b class="ev-pos">+${((r.P*r.D-1)*100).toFixed(1)}%</b> <span class="muted">(model alone says +${(evModel*100).toFixed(1)}%)</span> · <span class="vbadge vb-take" style="font-size:12px">bet ${u(stake)}</span> <span class="muted" style="font-size:12px">¼ Kelly</span></div>`+
-      `<div style="margin-top:7px">${fdButton(r.legs.map(v=>v.l), 'Put this parlay on FanDuel')}</div></div>`; };
+      `<div style="margin-top:7px">${fdButton(r.legs.map(v=>v.l), 'Put this parlay on FanDuel', 'slip')}</div></div>`; };
   if(best){
     html+=pBlock(best, `🧠 Best parlay from your slip — ${best.legs.length} legs`);
     if(bigger) html+=pBlock(bigger, `💰 Bigger payout option — ${bigger.legs.length} legs (grows a bankroll ${(best.g/bigger.g).toFixed(1)}× slower, bet it smaller)`);
@@ -1639,7 +1670,7 @@ function renderSlip(){
       pool.map(v=>`${esc(v.l.name)} ${u(0.25*kellyFrac(v.pAdj,v.dec)*bank)}`).join(' · ')+
       `. A parlay trades growth for a bigger payout, so keep it small next to the singles.</div>`;
   } else if(pool.length===1){
-    const v=pool[0]; html+=`<div style="margin-top:8px;font-size:13px"><b>Only one leg has an edge after confidence</b> (${legLine(v)}) — bet it as a single: <span class="vbadge vb-take" style="font-size:12px">bet ${u(0.25*kellyFrac(v.pAdj,v.dec)*bank)}</span> ${fdButton([v.l], 'Open on FanDuel')} — a parlay needs two +EV legs from different games.</div>`;
+    const v=pool[0]; html+=`<div style="margin-top:8px;font-size:13px"><b>Only one leg has an edge after confidence</b> (${legLine(v)}) — bet it as a single: <span class="vbadge vb-take" style="font-size:12px">bet ${u(0.25*kellyFrac(v.pAdj,v.dec)*bank)}</span> ${fdButton([v.l], 'Open on FanDuel', 'slip')} — a parlay needs two +EV legs from different games.</div>`;
   } else {
     html+=`<div style="margin-top:8px;font-size:13px"><b>No parlay worth building yet</b> — it needs at least two legs from different games that still have an edge after confidence.</div>`;
   }
@@ -1649,6 +1680,7 @@ function renderSlip(){
         .map(([v,why])=>`${esc(v.l.name)} ${mktLabel(v.l.market)} — ${why}`).join(' · ')+`</div>`; }
   html+=`<div class="muted" style="margin-top:9px;font-size:12px;line-height:1.5">How it chooses: each leg's edge is scaled by its <b>confidence</b> (role reliability from the backtest, history, injury status, market type, and how far it sits from the book — total, spread and weather already shaped the probability, so they aren't counted twice). Then it keeps the best leg per game and picks the combination that <b>grows a bankroll fastest</b> — not the highest EV%, which always favours piling on legs that almost never all hit.</div>`;
   body.innerHTML=html;
+  const sl=$('slipLink'); if(sl) sl.onclick=async()=>{ sl.disabled=true; sl.textContent='getting FanDuel links…'; await linkSlipLegs(); };
 }
 
 // ---------- bet log & CLV: the honest scoreboard. Log any bet (the sim's TD props OR your own
@@ -2098,7 +2130,7 @@ function renderSlate(){
     else if(SLATE.picks.length>1) html+=`<div class="muted" style="font-size:12px;margin-top:8px">${new Set(SLATE.picks.map(c=>c.game)).size<2 ? 'No parlay — it needs picks from at least two different games.' : 'No parlay today — combining these doesn\'t beat betting them as singles.'}</div>`;
     html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px"><button class="statussel" id="slateLog" style="padding:4px 11px">📓 log the picks</button>`+
       (P?`<button class="statussel" id="slateLogParlay" style="padding:4px 11px">📓 log the parlay</button><button class="statussel" id="slateSlip" style="padding:4px 11px">➕ parlay to slip</button>`:'')+`</div>`+
-      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(SLATE.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd})), 'Open the picks on FanDuel')}${P?fdButton(P.legs, 'Put the parlay on FanDuel'):''}</div>`;
+      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(SLATE.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd})), 'Open the picks on FanDuel', 'rebuild')}${P?fdButton(P.legs, 'Put the parlay on FanDuel', 'rebuild'):''}</div>`;
   }
   // 🎉 fun picks: TD bets for fun, from the price range that lost least on 2025's real prices
   const F=SLATE.fun;
@@ -2116,7 +2148,7 @@ function renderSlate(){
       `pays <span class="odds">${amStr(decToAmerican(FP.D))}</span> · hits ~${pct(FP.P)} · <span class="vbadge" style="font-size:12px">bet ${u(FUN_PARLAY_STAKE)}</span> <span class="muted" style="font-size:12px">— a parlay multiplies the house's cut (≈ −${cut(FP.legs.length)}% over time)</span></div>`;
     html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="statussel" id="funLog" style="padding:4px 11px">📓 log fun picks</button>`+
       (FP?`<button class="statussel" id="funLogParlay" style="padding:4px 11px">📓 log fun parlay</button>`:'')+`</div>`+
-      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(F.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd})), 'Open fun picks on FanDuel')}${FP?fdButton(FP.legs, 'Put fun parlay on FanDuel'):''}</div>`+
+      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(F.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd})), 'Open fun picks on FanDuel', 'rebuild')}${FP?fdButton(FP.legs, 'Put fun parlay on FanDuel', 'rebuild'):''}</div>`+
       (FP?'':'<div class="muted" style="font-size:12px;margin-top:6px">No fun parlay — it needs picks from two different games'+(SLATE.checked<2?' (only one game on this slate)':'')+'.</div>')+`</div>`;
   }
   out.innerHTML=html+notes;
@@ -2622,6 +2654,7 @@ $('closePull').onclick=pullCloses;
 $('slateBtn').onclick=buildSlate;
 renderSlate();   // last picks you built (marked stale after 45 min)
 $('pullOdds').onclick=()=>pullOdds(false);
+document.addEventListener('click', e=>{ const b=e.target.closest&&e.target.closest('.fdpull'); if(!b) return; b.disabled=true; b.textContent='pulling…'; if(LAST) PULLED[curGameId()]=0; pullOdds(false); });
 $('oddsTD').checked=!!ODDSCFG.td; $('oddsProps').checked=!!ODDSCFG.props; $('oddsAuto').checked=!!ODDSCFG.auto; $('oddsReserve').value=ODDSCFG.reserve;
 const saveOddsCfg=()=>{ ODDSCFG={td:$('oddsTD').checked, props:$('oddsProps').checked, auto:$('oddsAuto').checked, reserve:Math.max(0,+$('oddsReserve').value||0)}; lsW('nfltd_oddscfg', ODDSCFG); };
 ['oddsTD','oddsProps','oddsAuto','oddsReserve'].forEach(id=>$(id).addEventListener('change', saveOddsCfg));
