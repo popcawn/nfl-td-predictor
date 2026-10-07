@@ -62,6 +62,10 @@ silently to the baked snapshot when not.
   the free plan has 500 credits a month. In the bet log, **⚡ Pull closing prices** fills Close on every open bet before
   kickoff (moved prop lines are estimated, ≈). The key stays in your browser. A pull returns **every US book** for the
   same credits; FanDuel's price is what you bet, and the other books set the starting chance (see *Market anchor*).
+- **📲 Open on FanDuel** — pulled prices carry FanDuel's own selection ids, so the slip (all legs, or each suggested
+  parlay), Your card and My TD picks have buttons that open those bets straight in FanDuel's bet slip (the FanDuel app on a
+  phone), plus a small FD↗ link per slip leg. Legs whose prices were pasted rather than pulled have no ids — they're listed
+  as "to add by hand". Always check the price in FanDuel before betting; it may have moved.
 - **Price this game** — ONE paste box for every market: TD boards (stacked Anytime / 1st / Last, or one price per name
   for the market picked under the box) and player-prop boards (Over / Under lines, detected automatically). Paste one
   market at a time; chips show what's priced (× clears one market). Prices are kept **per game** — switch games and

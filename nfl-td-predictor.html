@@ -1288,7 +1288,8 @@ function computeTopPlays(){
     html+=`<div class="muted" style="margin-top:8px;font-size:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">`+
       `<span>Total <b>${u(tot)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll) · ${Object.entries(teams).map(([t,v])=>`${S.teams[t].short} ${u(v)}`).join(' · ')}</span>`+
       (unlogged.length?`<button class="statussel" id="logCard" style="padding:3px 11px">📓 log ${unlogged.length===picks.length?'these':'the '+unlogged.length+' not logged yet'}</button>`:`<span>✓ all in your log</span>`)+
-      `<button class="statussel" id="cardToSlip" style="padding:3px 11px" title="send these picks to the cross-game slip — do this for each game, then let the slip pick the parlay">➕ add to slip</button></div>`;
+      `<button class="statussel" id="cardToSlip" style="padding:3px 11px" title="send these picks to the cross-game slip — do this for each game, then let the slip pick the parlay">➕ add to slip</button>`+
+      fdButton(picks.map(c=>({game:curGameId(), market:c.market, key:c.key, label:c.label})), `Open ${picks.length>1?'these':'it'} on FanDuel`)+`</div>`;
   } else {
     html+=`<div style="margin-top:4px"><b>No bets on this card.</b> Nothing you've priced clears the bar after calibration and sizing — the normal case, since the market is efficient on most props. (If everything's a pass, sanity-check the total/spread up top.)</div>`;
   }
@@ -1519,6 +1520,25 @@ function priceableLegs(market){
   }
   return out.sort((a,b)=>(b.take-a.take)||(b.rank-a.rank));   // real edges first: a ⚠ / 🎲 price never leads "Best pick"
 }
+// ---------- FanDuel bet-slip links ----------
+// Pulled prices carry FanDuel's own market + selection ids, so any set of legs can open straight in FanDuel's bet slip
+// (the app on a phone). One leg: addToBetslip?marketId=..&selectionId=..; several: indexed pairs marketId[i]/selectionId[i].
+// Legs whose prices were pasted (never pulled) have no ids and are named instead.
+const FD_SLIP='https://sportsbook.fanduel.com/addToBetslip';
+function fdSelFor(game, market, key){ const k='FD#'+market+'#'+key;
+  if(LAST && curGameId()===game && LAST.mktMap && LAST.mktMap[k]) return LAST.mktMap[k];
+  const b=BOARDS[game]; return (b&&b.mkt&&b.mkt[k])||null; }
+const legSel=l=>l.fd||fdSelFor(l.game, l.market, l.key);
+function fdLink(sels){
+  if(sels.length===1) return `${FD_SLIP}?marketId=${encodeURIComponent(sels[0].m)}&selectionId=${encodeURIComponent(sels[0].s)}`;
+  return FD_SLIP+'?'+sels.map((x,i)=>`marketId[${i}]=${encodeURIComponent(x.m)}&selectionId[${i}]=${encodeURIComponent(x.s)}`).join('&'); }
+function fdButton(legs, label){
+  const ok=[], miss=[]; for(const l of legs) (legSel(l)?ok:miss).push(l); if(typeof label==='function') label=label(ok.length);   // label can count the legs it really opens
+  const why='these prices were pasted, not pulled — ⚡ Pull odds for that game to get FanDuel\'s links';
+  if(!ok.length) return legs.length?`<span class="muted" style="font-size:12px" title="${esc(why)}">no FanDuel link (pasted prices)</span>`:'';
+  return `<a class="statussel fdbtn" href="${esc(fdLink(ok.map(legSel)))}" target="_blank" rel="noopener" title="opens FanDuel with ${ok.length===1?'this leg':'these '+ok.length+' legs'} in the bet slip — check the price there before you bet">📲 ${label}</a>`+
+    (miss.length?` <span class="muted" style="font-size:12px" title="${esc(why+': '+miss.map(l=>l.name||l.label).join(', '))}">+ ${miss.length} to add by hand</span>`:''); }
+const fdLegLink=l=>{ const x=legSel(l); return x?` <a href="${esc(fdLink([x]))}" target="_blank" rel="noopener" title="open just this leg in FanDuel's bet slip" style="font-size:12px;text-decoration:none">FD↗</a>`:''; };
 function slipHas(game,key,market){ return slip.some(l=>l.game===game&&l.key===key&&l.market===market); }
 // the game context a leg was priced in (shown on the slip — it already shaped the probability)
 function slipCtx(abbr){
@@ -1533,8 +1553,9 @@ function addLeg(leg,market){
   if(slipHas(game,leg.key,market)) return false;
   const r=evalBet(leg.mp, leg.odds); if(!r) return false;
   const g=(S.schedule||[]).find(x=>x.away===LAST.away&&x.home===LAST.home);
+  const fd=fdSelFor(game, market, leg.key);
   slip.push({game, key:leg.key, name:leg.name, abbr:leg.abbr, market, mp:+leg.mp.toFixed(4), odds:leg.odds,
-    conf:leg.conf||confFor(leg.ref,market,r), ctx:slipCtx(leg.abbr), kickoff:g?g.kickoff:null});
+    conf:leg.conf||confFor(leg.ref,market,r), ctx:slipCtx(leg.abbr), kickoff:g?g.kickoff:null, ...(fd?{fd}:{})});
   saveSlip(); renderSlip(); return true;
 }
 function refreshSlipAdder(){
@@ -1597,16 +1618,19 @@ function renderSlip(){
   let html='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">';
   V.forEach((v,i)=>{ html+=`<div style="display:flex;gap:8px;align-items:center;font-size:13px;flex-wrap:wrap${v.started?';opacity:.5':''}">`+
     `<button class="statussel slipdel" data-i="${i}" style="padding:0 8px;color:var(--warn);font-weight:700" title="remove leg">✕</button>`+
-    `<span class="muted" style="min-width:100px">${fmtGame(v.l.game)}</span>${legLine(v)}`+
+    `<span class="muted" style="min-width:100px">${fmtGame(v.l.game)}</span>${legLine(v)}${v.started?'':fdLegLink(v.l)}`+
     (v.bad?'':`<span class="muted" style="font-size:12px">model ${pct(v.l.mp)} · EV ${v.ev>=0?'+':''}${(v.ev*100).toFixed(1)}% → <b class="${v.evAdj>0?'ev-pos':'ev-neg'}">${v.evAdj>=0?'+':''}${(v.evAdj*100).toFixed(1)}%</b> after confidence${v.l.ctx?' · '+v.l.ctx:''}${v.started?' · <b>started</b>':''}</span>`)+`</div>`; });
   html+='</div>';
+  const live=V.filter(v=>!v.started).map(v=>v.l);
+  if(live.length) html+=`<div style="margin:-2px 0 10px">${fdButton(live, n=>n===1?'Open it on FanDuel':`Open all ${n} legs on FanDuel`)}</div>`;
 
   const {best, bigger, pool, drop}=bestParlay(V);
   const pBlock=(r,title)=>{ const stake=0.25*kellyFrac(r.P,r.D)*bank, evModel=r.legs.reduce((a,v)=>a*v.l.mp*v.dec,1)-1;
     return `<div style="margin-top:8px;padding:10px 12px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px">`+
       `<div style="font-weight:800;margin-bottom:5px">${title}</div>`+
       r.legs.map(v=>`<div style="font-size:13px;margin:2px 0"><span class="muted" style="display:inline-block;min-width:100px">${fmtGame(v.l.game)}</span>${legLine(v)}</div>`).join('')+
-      `<div style="margin-top:6px;font-size:13px">hits <b>${pct(r.P)}</b> · fair <span class="odds">${probToAmerican(r.P)}</span> · pays <span class="odds">${amStr(decToAmerican(r.D))}</span> · EV <b class="ev-pos">+${((r.P*r.D-1)*100).toFixed(1)}%</b> <span class="muted">(model alone says +${(evModel*100).toFixed(1)}%)</span> · <span class="vbadge vb-take" style="font-size:12px">bet ${u(stake)}</span> <span class="muted" style="font-size:12px">¼ Kelly</span></div></div>`; };
+      `<div style="margin-top:6px;font-size:13px">hits <b>${pct(r.P)}</b> · fair <span class="odds">${probToAmerican(r.P)}</span> · pays <span class="odds">${amStr(decToAmerican(r.D))}</span> · EV <b class="ev-pos">+${((r.P*r.D-1)*100).toFixed(1)}%</b> <span class="muted">(model alone says +${(evModel*100).toFixed(1)}%)</span> · <span class="vbadge vb-take" style="font-size:12px">bet ${u(stake)}</span> <span class="muted" style="font-size:12px">¼ Kelly</span></div>`+
+      `<div style="margin-top:7px">${fdButton(r.legs.map(v=>v.l), 'Put this parlay on FanDuel')}</div></div>`; };
   if(best){
     html+=pBlock(best, `🧠 Best parlay from your slip — ${best.legs.length} legs`);
     if(bigger) html+=pBlock(bigger, `💰 Bigger payout option — ${bigger.legs.length} legs (grows a bankroll ${(best.g/bigger.g).toFixed(1)}× slower, bet it smaller)`);
@@ -1615,7 +1639,7 @@ function renderSlip(){
       pool.map(v=>`${esc(v.l.name)} ${u(0.25*kellyFrac(v.pAdj,v.dec)*bank)}`).join(' · ')+
       `. A parlay trades growth for a bigger payout, so keep it small next to the singles.</div>`;
   } else if(pool.length===1){
-    const v=pool[0]; html+=`<div style="margin-top:8px;font-size:13px"><b>Only one leg has an edge after confidence</b> (${legLine(v)}) — bet it as a single: <span class="vbadge vb-take" style="font-size:12px">bet ${u(0.25*kellyFrac(v.pAdj,v.dec)*bank)}</span> — a parlay needs two +EV legs from different games.</div>`;
+    const v=pool[0]; html+=`<div style="margin-top:8px;font-size:13px"><b>Only one leg has an edge after confidence</b> (${legLine(v)}) — bet it as a single: <span class="vbadge vb-take" style="font-size:12px">bet ${u(0.25*kellyFrac(v.pAdj,v.dec)*bank)}</span> ${fdButton([v.l], 'Open on FanDuel')} — a parlay needs two +EV legs from different games.</div>`;
   } else {
     html+=`<div style="margin-top:8px;font-size:13px"><b>No parlay worth building yet</b> — it needs at least two legs from different games that still have an edge after confidence.</div>`;
   }
@@ -1812,23 +1836,27 @@ async function oddsEventsList(key){
 }
 const abbrByTeamName=name=>{ const n=String(name||'').toLowerCase(), nick=n.split(' ').pop();
   return S.teamList.find(a=>String(S.teams[a].name).toLowerCase()===n) || S.teamList.find(a=>String(S.teams[a].name).toLowerCase().split(' ').pop()===nick) || null; };
+// FanDuel's {market id, selection id} for one outcome, from The Odds API's includeLinks/includeSids
+// (link = https://sportsbook.fanduel.com/addToBetslip?marketId=42.6137&selectionId=3710)
+const fdSelOf=o=>{ const m=o&&o.link&&/marketId[^=]*=([^&]+)/.exec(o.link), sel=o&&(o.sid||((/selectionId[^=]*=([^&]+)/.exec(o.link||'')||[])[1]));
+  return m&&sel ? {m:decodeURIComponent(m[1]), s:String(sel)} : null; };
 // FanDuel's prices for one game, normalised: {td:{anytime:[{name,price}],...}, props:{recyd:[{name,side,line,price}],...}}
 async function fetchGameOdds(away, home, markets, mustBeUpcoming){
   const key=oddsKey(); if(!key) throw oddsFail('nokey');
   const ev=(await oddsEventsList(key)).find(e=>abbrByTeamName(e.away_team)===away && abbrByTeamName(e.home_team)===home);
   if(!ev) throw oddsFail('noevent');
   if(mustBeUpcoming && new Date(ev.commence_time).getTime()<=Date.now()) throw oddsFail('started');
-  const r=await fetch(`${ODDS_API}/events/${ev.id}/odds?apiKey=${encodeURIComponent(key)}&regions=us&markets=${markets.join(',')}&oddsFormat=american`);   // all US books: same credits, gives the consensus
+  const r=await fetch(`${ODDS_API}/events/${ev.id}/odds?apiKey=${encodeURIComponent(key)}&regions=us&markets=${markets.join(',')}&oddsFormat=american&includeLinks=true&includeSids=true`);   // all US books: same credits, gives the consensus; links/sids = FanDuel's own bet-slip ids (free)
   const rem=r.headers.get('x-requests-remaining'); if(rem!=null){ oddsRemaining=+rem; lsW('nfltd_oddsleft', oddsRemaining); }
   if(!r.ok) throw oddsFail(r.status);
   const j=await r.json(), bk=(j.bookmakers||[]).find(b=>b.key==='fanduel'), out={td:{}, props:{}, cons:consensusFrom(j.bookmakers||[]), books:(j.bookmakers||[]).map(b=>b.key)};
   for(const m of (bk?bk.markets:[])){
     if(OA_TD[m.key]){ const mk=OA_TD[m.key];
       for(const o of m.outcomes){ if(m.key==='player_tds_over' ? (o.name!=='Over'||+o.point!==1.5) : o.name!=='Yes') continue;   // 2+ TD = "over 1.5"
-        (out.td[mk]=out.td[mk]||[]).push({name:o.description, price:o.price}); } }
+        (out.td[mk]=out.td[mk]||[]).push({name:o.description, price:o.price, fd:fdSelOf(o)}); } }
     else if(OA_PROP[m.key]){ const s=OA_PROP[m.key];
       for(const o of m.outcomes){ if(o.point==null||(o.name!=='Over'&&o.name!=='Under')) continue;
-        (out.props[s]=out.props[s]||[]).push({name:o.description, side:o.name==='Over'?'O':'U', line:+o.point, price:o.price}); } }
+        (out.props[s]=out.props[s]||[]).push({name:o.description, side:o.name==='Over'?'O':'U', line:+o.point, price:o.price, fd:fdSelOf(o)}); } }
   }
   return out;
 }
@@ -1891,14 +1919,14 @@ function fillGameFromOdds(d){
   const freshP={}; for(const [st,o] of Object.entries(C2.props)) for(const c of Object.values(o)){ const p=matchPlayer(cleanName(c.name), idx); if(p) (freshP['P|'+st+'|'+p._key]=freshP['P|'+st+'|'+p._key]||{})[c.line]=c.fairOver; }
   Object.assign(LAST.mktMap, freshP);
   for(const [mk,arr] of Object.entries(d.td)) for(const o of arr){
-    const p=matchPlayer(cleanName(o.name), idx); if(p){ LAST.bookMap[mk+'|'+p._key]=fmtAm(o.price); n++; continue; }
-    const t=dstOf(o.name); if(t){ if(mk!=='two'){ LAST.bookMap[mk+'|DST|'+t]=fmtAm(o.price); n++; } continue; }   // defenses have no 2+ market here
+    const p=matchPlayer(cleanName(o.name), idx); if(p){ LAST.bookMap[mk+'|'+p._key]=fmtAm(o.price); if(o.fd) LAST.mktMap['FD#'+mk+'#'+p._key]=o.fd; n++; continue; }
+    const t=dstOf(o.name); if(t){ if(mk!=='two'){ LAST.bookMap[mk+'|DST|'+t]=fmtAm(o.price); if(o.fd) LAST.mktMap['FD#'+mk+'#DST|'+t]=o.fd; n++; } continue; }   // defenses have no 2+ market here
     miss.add(o.name); }
   for(const [s,arr] of Object.entries(d.props)) for(const o of arr){
     const p=matchPlayer(cleanName(o.name), idx); if(!p){ miss.add(o.name); continue; }
     const k=s+'|'+p._key, cur=LAST.propMap[k]||(LAST.propMap[k]={line:null, over:'', under:'', alts:[]});
     if(cur.line!==o.line){ cur.line=o.line; cur.over=''; cur.under=''; }
-    cur[o.side==='O'?'over':'under']=fmtAm(o.price); n++; }
+    cur[o.side==='O'?'over':'under']=fmtAm(o.price); if(o.fd) LAST.mktMap['FD#'+propMktKey(s,o.side,o.line)+'#'+p._key]=o.fd; n++; }
   renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder(); boardChanged();
   return {n, miss:[...miss]};
 }
@@ -2009,16 +2037,16 @@ async function buildSlate(){
       for(const [name,c] of Object.entries(cons||{})){ const p=matchPlayer(cleanName(name), idx); if(p) mm['anytime|'+p._key]={ip:c.ip, n:c.n}; }
       const SA=anchorTD(players, mm, 'anytime');
       for(const o of prices){ const p=matchPlayer(cleanName(o.name), idx); if(!p) continue;
-        const odds=fmtAm(o.price); book['anytime|'+p._key]=odds; if(p._status==='OUT') continue;
+        const odds=fmtAm(o.price); book['anytime|'+p._key]=odds; if(o.fd) mm['FD#anytime#'+p._key]=o.fd; if(p._status==='OUT') continue;
         const A=SA.get(p._key), mp=A?A.p:p.anytime, r=evalBet(mp, odds); if(!r) continue;
         const conf=confFor(p,'anytime',r,badWx), tier=tierOf(mp,r.edge,r.ev,!p.matched); if(tier!=='take') continue;
         const k=r.edge>0?conf.score*r.edge/(1-r.bimp):0;
-        cands.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds, mp, model:p.anytime, mkt:A?A.mkt:null, ev:r.ev, edge:r.edge, bimp:r.bimp, conf, kelly:k, rk:k, game:gid, kickoff:g.kickoff}); }
+        cands.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds, mp, model:p.anytime, mkt:A?A.mkt:null, ev:r.ev, edge:r.edge, bimp:r.bimp, conf, kelly:k, rk:k, game:gid, kickoff:g.kickoff, fd:o.fd||null}); }
       for(const o of prices){ if(!(o.price>=FUN_BAND[0] && o.price<FUN_BAND[1])) continue;
         const p=matchPlayer(cleanName(o.name), idx); if(!p || p._status==='OUT' || p._status==='DBT') continue;
         const A=SA.get(p._key);
         fun.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds:fmtAm(o.price), mp:A?A.p:p.anytime, model:p.anytime, mkt:A?A.mkt:null,
-          bimp:americanToProb(o.price), sim:p.anytime*americanToDec(o.price), game:gid, kickoff:g.kickoff, fun:true}); }
+          bimp:americanToProb(o.price), sim:p.anytime*americanToDec(o.price), game:gid, kickoff:g.kickoff, fun:true, fd:o.fd||null}); }
       const B=BOARDS[gid]||(BOARDS[gid]={t:Date.now(), book:{}, prop:{}, mkt:{}}); Object.assign(B.book, book); B.mkt=Object.assign(B.mkt||{}, mm); B.t=Date.now();   // open the game later: prices are there
       all.push(...pickPlays(cands).picks);   // per game: same rule as Your card
     }
@@ -2026,7 +2054,7 @@ async function buildSlate(){
     lsW('nfltd_slatepx', SLATEPX);
     all.sort((a,b)=>b.rk-a.rk);
     const picks=all.slice(0,nPick), bank=getBankroll();
-    const legs=picks.map(c=>({game:c.game, key:c.key, name:c.label, abbr:c.abbr, market:'anytime', mp:+c.mp.toFixed(4), odds:c.odds, conf:c.conf, ctx:'', kickoff:c.kickoff}));
+    const legs=picks.map(c=>({game:c.game, key:c.key, name:c.label, abbr:c.abbr, market:'anytime', mp:+c.mp.toFixed(4), odds:c.odds, conf:c.conf, ctx:'', kickoff:c.kickoff, ...(c.fd?{fd:c.fd}:{})}));
     const {best}=bestParlay(legs.map(legView));
     const room=SLATE_CAP*bank-(best?slateParlayStake(best,bank):0), tot=picks.reduce((a,c)=>a+c.stake,0);
     if(tot>room) picks.forEach(c=>{ c.stake=Math.floor(c.stake*room/tot*10)/10; });   // floor: the whole day never tops the cap
@@ -2038,11 +2066,11 @@ async function buildSlate(){
     funPicks.forEach(c=>{ c.stake=FUN_STAKE; });
     const fpl=[], fpg=new Set(); for(const c of funPicks.slice().sort((a,b)=>b.mp-a.mp)){   // the parlay takes the likeliest legs: a fun parlay should cash now and then
       if(fpl.length>=FUN_PARLAY_LEGS) break; if(fpg.has(c.game)) continue; fpg.add(c.game); fpl.push(c); }
-    const funParlay=fpl.length>=2 ? {legs:fpl.map(c=>({game:c.game, key:c.key, name:c.label, abbr:c.abbr, market:'anytime', odds:c.odds})),
+    const funParlay=fpl.length>=2 ? {legs:fpl.map(c=>({game:c.game, key:c.key, name:c.label, abbr:c.abbr, market:'anytime', odds:c.odds, ...(c.fd?{fd:c.fd}:{})})),
       D:fpl.reduce((a,c)=>a*americanToDec(c.odds),1), P:fpl.reduce((a,c)=>a*c.mp,1)} : null;
     SLATE={at:Date.now(), day:games[0].kickoff, checked:games.length, notes,
-      fun:{picks:funPicks.map(({key,label,abbr,market,odds,mp,model,mkt,bimp,stake,game,kickoff})=>({key,label,abbr,market,odds,mp,model,mkt,bimp,stake,game,kickoff,fun:true})), parlay:funParlay},
-      picks:picks.map(({key,label,abbr,market,odds,mp,model,mkt,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev})=>({key,label,abbr,market,odds,mp,model,mkt,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev})),
+      fun:{picks:funPicks.map(({key,label,abbr,market,odds,mp,model,mkt,bimp,stake,game,kickoff,fd})=>({key,label,abbr,market,odds,mp,model,mkt,bimp,stake,game,kickoff,fd,fun:true})), parlay:funParlay},
+      picks:picks.map(({key,label,abbr,market,odds,mp,model,mkt,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev,fd})=>({key,label,abbr,market,odds,mp,model,mkt,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev,fd})),
       parlay:best?{legs:best.legs.map(v=>v.l), P:best.P, D:best.D}:null};
     lsW('nfltd_slate', SLATE); renderSlate();
   }finally{ btn.disabled=false; oddsStatus(); }
@@ -2069,7 +2097,8 @@ function renderSlate(){
         `<div style="font-size:13px;margin-top:3px">pays <span class="odds">${amStr(decToAmerican(P.D))}</span> · hits ~${pct(P.P)} · <span class="vbadge vb-take" style="font-size:12px">bet ${u(stake)}</span></div></div>`; }
     else if(SLATE.picks.length>1) html+=`<div class="muted" style="font-size:12px;margin-top:8px">${new Set(SLATE.picks.map(c=>c.game)).size<2 ? 'No parlay — it needs picks from at least two different games.' : 'No parlay today — combining these doesn\'t beat betting them as singles.'}</div>`;
     html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px"><button class="statussel" id="slateLog" style="padding:4px 11px">📓 log the picks</button>`+
-      (P?`<button class="statussel" id="slateLogParlay" style="padding:4px 11px">📓 log the parlay</button><button class="statussel" id="slateSlip" style="padding:4px 11px">➕ parlay to slip</button>`:'')+`</div>`;
+      (P?`<button class="statussel" id="slateLogParlay" style="padding:4px 11px">📓 log the parlay</button><button class="statussel" id="slateSlip" style="padding:4px 11px">➕ parlay to slip</button>`:'')+`</div>`+
+      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(SLATE.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd})), 'Open the picks on FanDuel')}${P?fdButton(P.legs, 'Put the parlay on FanDuel'):''}</div>`;
   }
   // 🎉 fun picks: TD bets for fun, from the price range that lost least on 2025's real prices
   const F=SLATE.fun;
@@ -2087,6 +2116,7 @@ function renderSlate(){
       `pays <span class="odds">${amStr(decToAmerican(FP.D))}</span> · hits ~${pct(FP.P)} · <span class="vbadge" style="font-size:12px">bet ${u(FUN_PARLAY_STAKE)}</span> <span class="muted" style="font-size:12px">— a parlay multiplies the house's cut (≈ −${cut(FP.legs.length)}% over time)</span></div>`;
     html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="statussel" id="funLog" style="padding:4px 11px">📓 log fun picks</button>`+
       (FP?`<button class="statussel" id="funLogParlay" style="padding:4px 11px">📓 log fun parlay</button>`:'')+`</div>`+
+      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(F.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd})), 'Open fun picks on FanDuel')}${FP?fdButton(FP.legs, 'Put fun parlay on FanDuel'):''}</div>`+
       (FP?'':'<div class="muted" style="font-size:12px;margin-top:6px">No fun parlay — it needs picks from two different games'+(SLATE.checked<2?' (only one game on this slate)':'')+'.</div>')+`</div>`;
   }
   out.innerHTML=html+notes;

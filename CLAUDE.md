@@ -129,4 +129,11 @@ See README.md for what the model does and how it was validated.
   "best price vs other books" and model-EV ordering inside the band did NOT reliably help (model-EV thirds -10/+2/+2%,
   then -7/-8/-8%). Logged fun bets carry `fun:true`: pendingFor() skips them (card + plan + Trim), the log shows 🎉 and a
   separate running total. Keep the honesty copy ("not an edge").
+- FANDUEL BET-SLIP LINKS (2026-10-07): pulls add `includeLinks=true&includeSids=true` (no extra credits — checked: 2 markets
+  = 2 credits). Each FD outcome has link `https://sportsbook.fanduel.com/addToBetslip?marketId=42.x&selectionId=y` + sid;
+  `fdSelOf()` keeps {m,s}; filed in LAST.mktMap as `FD#<market>#<key>` (saved with the board; props market =
+  propMktKey). Slip legs snapshot `fd` in addLeg; slate picks/fun picks carry fd. `fdButton(legs,label)` builds ONE link —
+  several legs use indexed pairs marketId[i]/selectionId[i] (the common tool format; NOT documented by The Odds API, and
+  the built-in browser blocks sportsbook sites, so it was never opened here — if the user reports only one leg landing,
+  fall back to the per-leg FD↗ links). Pasted-only legs show "+N to add by hand".
 - Commits end with the Co-Authored-By line from the session's instructions.
