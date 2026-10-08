@@ -139,4 +139,14 @@ See README.md for what the model does and how it was validated.
   on day one: "i dont see it") get real buttons, not grey text: slip = `linkSlipLegs()` "🔗 Get FanDuel links for N legs ·
   ~C credits" (pulls only the needed markets per game, matches by name / side+line / DST team); card = `.fdpull` (delegated
   click -> pullOdds); slate = "Build my TD picks again".
+- 🤖 AUTO-SETTLE + CLOSES (2026-10-08): `autoSettle()` (5 s after load, then every 5 min, ESPN at most every 10 min; manual
+  "Settle now"). ESPN REFUSES scoreboard date RANGES (400) — `espnEventsFor` queries ?seasontype&week for the active week
+  and back to the oldest open bet (max 4). Per final event: summary box score (td = rush+rec+KR+PR TD + max(INT,def) TD;
+  rec/recyd/ryd/pyd), scoringPlays touchdowns in order (scorer = text before "N Yd"; def = interception|fumble return;
+  blocked -> by hand), core API competitor roster `didNotPlay` -> push (FanDuel void). Bet key TEAM|espnId matches ESPN
+  athlete ids directly. Only result==="pending" is touched; a manual change deletes b.auto. Slate parlays now store
+  `legs`. Closes: `autoLiveCloses` (<15 min to kickoff, live, 1/market) and `autoHistCloses` (after kickoff, historical
+  events 1 + event odds 10/market, bookmakers=fanduel, snapshot kickoff-5min; free plan -> nfltd_histoff pause 3 days);
+  each game once (nfltd_closed). Tested on IND@WAS 2026-10-04: 13/13 bets settled right; history close matched FD.
+  `parseOdds()` and `applyClose()` are shared by live pulls, manual Pull closing prices and history.
 - Commits end with the Co-Authored-By line from the session's instructions.

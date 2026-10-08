@@ -110,6 +110,13 @@ silently to the baked snapshot when not.
   lines decide the market (or pick it under the paste box). Each row shows the
   **model line** (its 50/50 number), season average, P(over), fair odds, the better side's EV and a confidence score;
   priced props join **Your card**, the slip and the log. Passing props only list tonight's starting QB.
+- **🤖 Auto-settle + closing lines** (bet log) — once a game is final, ESPN's box score settles every pending bet on it:
+  anytime / 1st / last / 2+ TD, defense TDs, the five yardage props, and parlays logged from My TD picks (a void leg is
+  left for you, since FanDuel reprices it). A player ESPN lists as "did not play" is a void (push). Free, no key; a result
+  you set by hand is never changed (🤖 marks auto results, ✋ ones it couldn't decide). **Close** fills itself: FanDuel's
+  live price if the app is open in the 15 min before kickoff (1 credit per market), otherwise FanDuel's price 5 min before
+  kickoff from The Odds API's history after the game starts (paid plans; 1 + 10 credits per market per game). Both are
+  checkboxes in the log; **🤖 Settle now** runs it on demand.
 - **Bet log by game** — each game has its own section (open games first). For open games the log applies the
   same rule as the card: the best bets read **★ BET** with a suggested stake, the rest **cut**, and **✂ Trim** removes
   the cuts and sets the stakes in one click.
