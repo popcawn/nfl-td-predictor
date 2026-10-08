@@ -133,6 +133,10 @@ See README.md for what the model does and how it was validated.
   players with an open bet (log, parlay legs incl.) or in the slip: fun picks skip them; slate rows show "✓ already bet"
   instead of a stake; both parlays say they reuse the same players. renderSlate now runs after loadBets/loadSlip and on
   every saveBets/saveSlip (guarded: SLATE is declared later in the script).
+  FIX of that fix (same day, user asked "smarter or dumber?"): skipping logged players made every rebuild REFILL fun picks
+  with 5 new names = unlimited -EV betting. Now fun bets already logged for the slate's games keep their slots (✓) and
+  count toward N; only empty slots fill; a logged fun parlay stays the fun parlay (parlayLogged hides the log buttons).
+  betOnSet() is a Map log|slip: slip shows "✓ in your slip" (a plan, not a bet).
 - FANDUEL BET-SLIP LINKS (2026-10-07): pulls add `includeLinks=true&includeSids=true` (no extra credits — checked: 2 markets
   = 2 credits). Each FD outcome has link `https://sportsbook.fanduel.com/addToBetslip?marketId=42.x&selectionId=y` + sid;
   `fdSelOf()` keeps {m,s}; filed in LAST.mktMap as `FD#<market>#<key>` (saved with the board; props market =
