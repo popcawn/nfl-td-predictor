@@ -1508,7 +1508,7 @@ function parlayNote(){ return `<div class="muted" style="margin-top:9px;font-siz
 // localStorage so the slip survives reloads. ----
 let slip=[]; let slipLegCache=[];
 function loadSlip(){ try{ const s=localStorage.getItem('nfltd_slip'); if(s) slip=JSON.parse(s)||[]; }catch(e){ slip=[]; } if(!Array.isArray(slip)) slip=[]; }
-function saveSlip(){ stampChanges(slip, slipSnap, legKey, TOMB.slip); slipSnap=snapOf(slip, legKey); saveTomb(); try{ localStorage.setItem('nfltd_slip', JSON.stringify(slip)); }catch(e){} syncSoon(); }
+function saveSlip(){ stampChanges(slip, slipSnap, legKey, TOMB.slip); slipSnap=snapOf(slip, legKey); saveTomb(); try{ localStorage.setItem('nfltd_slip', JSON.stringify(slip)); }catch(e){} syncSoon(); try{ if(SLATE) renderSlate(); }catch(e){} }
 function curGameId(){ return LAST ? LAST.away+'@'+LAST.home : null; }
 function fmtGame(g){ const [a,h]=String(g).split('@'); const sh=x=>S.teams[x]?(S.teams[x].short||x):x; return sh(a)+' @ '+sh(h); }
 // current game's priced legs for one market, best confidence-adjusted Kelly first (players + defenses)
@@ -1696,7 +1696,7 @@ let bets=[]; let betOptCache=[];
 let PLANS=new Map();          // game -> {picks, skipped}: the log's ★ BET / cut plan per open game
 const LOGOPEN=new Map();      // which game sections you opened/closed (kept across re-renders)
 function loadBets(){ try{ const s=localStorage.getItem('nfltd_bets'); if(s) bets=JSON.parse(s)||[]; }catch(e){ bets=[]; } if(!Array.isArray(bets)) bets=[]; }
-function saveBets(){ stampChanges(bets, betSnap, betKey, TOMB.bets); betSnap=snapOf(bets, betKey); saveTomb(); try{ localStorage.setItem('nfltd_bets', JSON.stringify(bets)); }catch(e){} syncSoon(); if(LAST) computeTopPlays(); }
+function saveBets(){ stampChanges(bets, betSnap, betKey, TOMB.bets); betSnap=snapOf(bets, betKey); saveTomb(); try{ localStorage.setItem('nfltd_bets', JSON.stringify(bets)); }catch(e){} syncSoon(); if(LAST) computeTopPlays(); try{ if(SLATE) renderSlate(); }catch(e){} }
 
 // ---------- cloud sync: one bet log / slip / bankroll across PCs, via a private GitHub gist ----------
 // Browser storage is per machine and per address, so PCs drift apart. With a GitHub token (gist scope only) saved
@@ -2196,6 +2196,12 @@ const slateParlayStake=(P,bank)=>Math.max(0.1, Math.round(Math.min(0.25*kellyFra
 // order is only a tiebreak. EV < 0, so flat small stakes instead of Kelly.
 const FUN_BAND=[100,400], FUN_EDGE=0.05, FUN_STAKE=0.5, FUN_PARLAY_STAKE=0.2, FUN_PARLAY_LEGS=2;
 let SLATE=lsJ('nfltd_slate', null), SLATEPX=lsJ('nfltd_slatepx', {});
+// players you already have money on — open bets in the log (parlay legs included) and the slip. Fun picks skip them and
+// the list marks them, because every rebuild can re-suggest a player and the user ended up betting one 2-3 times.
+function betOnSet(){ const on=new Set();
+  for(const b of bets) if(b.result==='pending'){ if(b.legs) b.legs.forEach(l=>on.add(l.game+'|'+l.key)); else if(b.game&&b.key) on.add(b.game+'|'+b.key); }
+  for(const l of slip) if(l.game&&l.key) on.add(l.game+'|'+l.key);
+  return on; }
 async function gameWeather(g){
   const st=g.neutral?null:((S.stadiums&&S.stadiums[g.home])||null), indoor=g.neutral?!!g.indoor:!!((st&&st.dome)||g.indoor);
   const calm={outdoor:!indoor, wind:0, wx:{precip:'none', pp:0}};
@@ -2259,7 +2265,7 @@ async function buildSlate(){
     const {best}=bestParlay(legs.map(legView));
     const room=SLATE_CAP*bank-(best?slateParlayStake(best,bank):0), tot=picks.reduce((a,c)=>a+c.stake,0);
     if(tot>room) picks.forEach(c=>{ c.stake=Math.floor(c.stake*room/tot*10)/10; });   // floor: the whole day never tops the cap
-    const taken=new Set(picks.map(c=>c.game+'|'+c.key)), funPicks=[], perGame=new Map(), teams=new Set();
+    const taken=new Set([...picks.map(c=>c.game+'|'+c.key), ...betOnSet()]), funPicks=[], perGame=new Map(), teams=new Set();
     fun.sort((a,b)=>b.sim-a.sim);
     for(const pass of [1,2]) for(const c of fun){ if(funPicks.length>=nPick) break;
       if(taken.has(c.game+'|'+c.key) || funPicks.includes(c) || teams.has(c.game+'|'+c.abbr) || (perGame.get(c.game)||0)>=pass) continue;
@@ -2282,19 +2288,21 @@ function renderSlate(){
   const age=Math.round((Date.now()-SLATE.at)/60e3), when=new Date(SLATE.at).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
   const notes=SLATE.notes.length?`<div class="muted" style="font-size:12px;margin-top:6px">Skipped: ${SLATE.notes.map(esc).join(' · ')}</div>`:'';
   const stale=age>45?` <span style="color:var(--warn)">— ${age} min old, rebuild for fresh prices</span>`:'';
-  const P=SLATE.parlay;
+  const P=SLATE.parlay, on=betOnSet();
+  const stakeBadge=(c,cls)=>on.has(c.game+'|'+c.key) ? `<span class="muted" style="margin-left:auto;font-size:12px" title="you already have a bet on him (bet log or slip) — another one only doubles up">✓ already bet</span>`
+    : `<span class="vbadge${cls}" style="margin-left:auto;font-size:12px">bet ${u(c.stake)}</span>`;
   let html='';
   if(!SLATE.picks.length) html+=`<div><b>No TD bets worth making</b> across the ${SLATE.checked} game${SLATE.checked>1?'s':''} checked — FanDuel's prices are at or below what the other books say they're worth. Sitting it out is a win too.${stale}</div>`;
   else {
     html+=`<div style="font-size:13px;margin-bottom:4px"><b>Your ${SLATE.picks.length} TD bet${SLATE.picks.length>1?'s':''} for ${dayName}</b> <span class="muted">— the best of ${SLATE.checked} game${SLATE.checked>1?'s':''}, FanDuel prices from ${when}</span>${stale}</div>`;
     SLATE.picks.forEach((c,i)=>{ html+=`<div class="cpick spick" data-g="${esc(c.game)}" title="open this game"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
-      `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="muted" style="font-size:12px">${fmtGame(c.game)}</span><span class="vbadge vb-take" style="margin-left:auto;font-size:12px">bet ${u(c.stake)}</span></div>`+
+      `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="muted" style="font-size:12px">${fmtGame(c.game)}</span>${stakeBadge(c,' vb-take')}</div>`+
       `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span> ${confBadge(c.conf)} <span class="muted" style="font-size:12px">${c.mkt!=null?'mkt '+pct(c.mkt)+' · model '+pct(c.model)+' → ':'<span style="color:var(--warn)">model only</span> · '}${pct(c.mp)} vs ${pct(c.bimp)}</span></div></div>`; });
     const tot=SLATE.picks.reduce((a,c)=>a+c.stake,0)+(P?slateParlayStake(P,bank):0);
     html+=`<div class="muted" style="font-size:12px;margin-top:5px">Whole day <b>${u(tot)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll, parlay included — capped at ${SLATE_CAP*100}%)</div>`;
     if(P){ const stake=slateParlayStake(P,bank);
       html+=`<div style="margin-top:9px;padding:9px 11px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px">`+
-        `<b>🎰 Parlay of the day</b> <span class="muted" style="font-size:12px">— ${P.legs.length} legs, different games</span><div style="margin-top:3px">${P.legs.map(l=>`<b style="color:${teamText(l.abbr)}">${esc(l.name)}</b>`).join(' + ')}</div>`+
+        `<b>🎰 Parlay of the day</b> <span class="muted" style="font-size:12px">— ${P.legs.length} legs, different games · <b>the same players as the bets above</b> (it adds to them, it isn't new players)</span><div style="margin-top:3px">${P.legs.map(l=>`<b style="color:${teamText(l.abbr)}">${esc(l.name)}</b>`).join(' + ')}</div>`+
         `<div style="font-size:13px;margin-top:3px">pays <span class="odds">${amStr(decToAmerican(P.D))}</span> · hits ~${pct(P.P)} · <span class="vbadge vb-take" style="font-size:12px">bet ${u(stake)}</span></div></div>`; }
     else if(SLATE.picks.length>1) html+=`<div class="muted" style="font-size:12px;margin-top:8px">${new Set(SLATE.picks.map(c=>c.game)).size<2 ? 'No parlay — it needs picks from at least two different games.' : 'No parlay today — combining these doesn\'t beat betting them as singles.'}</div>`;
     html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px"><button class="statussel" id="slateLog" style="padding:4px 11px">📓 log the picks</button>`+
@@ -2309,11 +2317,11 @@ function renderSlate(){
     const FP=F.parlay, cut=n=>Math.round((1-Math.pow(1-FUN_EDGE,n))*100);
     html+=`<div style="margin-top:12px;padding:10px 12px;border:1px dashed var(--line2);border-radius:10px">`+
       `<div><b>🎉 Fun picks</b> <span class="muted" style="font-size:12px">— betting TDs anyway? These lose the least</span></div>`+
-      `<div class="muted" style="font-size:12px;line-height:1.5;margin:3px 0 7px">Anytime TDs priced <b>+${FUN_BAND[0]} to +${FUN_BAND[1]}</b> lost about ${Math.round(FUN_EDGE*100)}% of the money bet on them over 2025's real FanDuel prices; +400 to +1500 lost about 20%, and heavy favourites about 11%. This is <b>not an edge</b> — over time you lose a little. Same small stake on each; the sim's favourites in the range go first (that order isn't proven). Your real picks are left out, so you never double up on a player.</div>`;
+      `<div class="muted" style="font-size:12px;line-height:1.5;margin:3px 0 7px">Anytime TDs priced <b>+${FUN_BAND[0]} to +${FUN_BAND[1]}</b> lost about ${Math.round(FUN_EDGE*100)}% of the money bet on them over 2025's real FanDuel prices; +400 to +1500 lost about 20%, and heavy favourites about 11%. This is <b>not an edge</b> — over time you lose a little. Same small stake on each; the sim's favourites in the range go first (that order isn't proven). Anyone in your real picks, your bet log or your slip is left out, so fun picks never double up on a player you've already bet (the app only knows bets you've logged or slipped).</div>`;
     F.picks.forEach(c=>{ html+=`<div class="cpick spick" data-g="${esc(c.game)}" title="open this game"><div class="cp1"><span class="muted" style="min-width:18px">🎉</span>`+
-      `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="muted" style="font-size:12px">${fmtGame(c.game)}</span><span class="vbadge" style="margin-left:auto;font-size:12px">bet ${u(c.stake)}</span></div>`+
+      `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="muted" style="font-size:12px">${fmtGame(c.game)}</span>${stakeBadge(c,'')}</div>`+
       `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span> <span class="muted" style="font-size:12px">${c.mkt!=null?'~'+pct(c.mp)+' to score (other books)':'~'+pct(c.mp)+' to score (<span style="color:var(--warn)">model only</span>)'}</span></div></div>`; });
-    if(FP) html+=`<div style="margin-top:8px;font-size:13px"><b>🎰 Fun parlay</b> ${FP.legs.map(l=>`<b style="color:${teamText(l.abbr)}">${esc(l.name)}</b>`).join(' + ')}<br>`+
+    if(FP) html+=`<div style="margin-top:8px;font-size:13px"><b>🎰 Fun parlay</b> ${FP.legs.map(l=>`<b style="color:${teamText(l.abbr)}">${esc(l.name)}</b>`).join(' + ')} <span class="muted" style="font-size:12px">— two of the fun picks above, not new players</span><br>`+
       `pays <span class="odds">${amStr(decToAmerican(FP.D))}</span> · hits ~${pct(FP.P)} · <span class="vbadge" style="font-size:12px">bet ${u(FUN_PARLAY_STAKE)}</span> <span class="muted" style="font-size:12px">— a parlay multiplies the house's cut (≈ −${cut(FP.legs.length)}% over time)</span></div>`;
     html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="statussel" id="funLog" style="padding:4px 11px">📓 log fun picks</button>`+
       (FP?`<button class="statussel" id="funLogParlay" style="padding:4px 11px">📓 log fun parlay</button>`:'')+`</div>`+
@@ -2822,7 +2830,6 @@ $('betExport').onclick=exportData;
 $('closeApply').onclick=applyClosingPaste;
 $('closePull').onclick=pullCloses;
 $('slateBtn').onclick=buildSlate;
-renderSlate();   // last picks you built (marked stale after 45 min)
 $('pullOdds').onclick=()=>pullOdds(false);
 document.addEventListener('click', e=>{ const b=e.target.closest&&e.target.closest('.fdpull'); if(!b) return; b.disabled=true; b.textContent='pulling…'; if(LAST) PULLED[curGameId()]=0; pullOdds(false); });
 $('oddsTD').checked=!!ODDSCFG.td; $('oddsProps').checked=!!ODDSCFG.props; $('oddsAuto').checked=!!ODDSCFG.auto; $('oddsReserve').value=ODDSCFG.reserve;
@@ -2860,6 +2867,7 @@ $('simBtn').onclick=run;
 [['total','change'],['spread','change'],['favSel','change'],['outdoor','change'],['wind','change']].forEach(([id,ev])=> $(id).addEventListener(ev,maybeSim));
 loadSlip(); renderSlip();       // restore the cross-game slip from a previous visit
 loadBets(); renderBets();       // restore the bet log + CLV history
+renderSlate();   // last picks you built (marked stale after 45 min) — after the log + slip load, so it can mark players already bet
 $('autoSettleChk').checked=AUTO.settle; $('autoCloseChk').checked=AUTO.close;
 $('autoSettleChk').onchange=e=>{ AUTO.settle=e.target.checked; lsW('nfltd_auto', AUTO); };
 $('autoCloseChk').onchange=e=>{ AUTO.close=e.target.checked; lsW('nfltd_auto', AUTO); };

@@ -129,6 +129,10 @@ See README.md for what the model does and how it was validated.
   "best price vs other books" and model-EV ordering inside the band did NOT reliably help (model-EV thirds -10/+2/+2%,
   then -7/-8/-8%). Logged fun bets carry `fun:true`: pendingFor() skips them (card + plan + Trim), the log shows 🎉 and a
   separate running total. Keep the honesty copy ("not an edge").
+  2026-10-08: the user bet the same player 2-3 times (rebuilds re-suggest players; parlays reuse the picks). `betOnSet()` =
+  players with an open bet (log, parlay legs incl.) or in the slip: fun picks skip them; slate rows show "✓ already bet"
+  instead of a stake; both parlays say they reuse the same players. renderSlate now runs after loadBets/loadSlip and on
+  every saveBets/saveSlip (guarded: SLATE is declared later in the script).
 - FANDUEL BET-SLIP LINKS (2026-10-07): pulls add `includeLinks=true&includeSids=true` (no extra credits — checked: 2 markets
   = 2 credits). Each FD outcome has link `https://sportsbook.fanduel.com/addToBetslip?marketId=42.x&selectionId=y` + sid;
   `fdSelOf()` keeps {m,s}; filed in LAST.mktMap as `FD#<market>#<key>` (saved with the board; props market =
