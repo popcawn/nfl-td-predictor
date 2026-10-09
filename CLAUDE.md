@@ -119,7 +119,13 @@ See README.md for what the model does and how it was validated.
   books' nearest line within max(2.5,12%), moved by the model's distribution) beat the model both halves -> `propCons()`.
   => App: TD_W = S.marketAnchor.w (0) for ALL TD markets (anytime adds cal; 1st/last/2+ use the model-level rescale,
   untested); PROP_W = S.marketAnchor.props.w (0.1) for all props (rec/rryd/pyd by analogy). No consensus = "model only"
-  on the card. Don't raise either share without a new real-price test that wins both halves. Refit: `DUMP_BT=1` build
+  on the card ONLY when FanDuel has no two-way price either (2026-10-09: a lone FanDuel price is now the anchor — props
+  = FD's own over/under de-vigged + 10% model; TD = FD's implied through the anytime cal / model-level rescale; checked on
+  ALL 2025 FD main lines: FD-own+10% beat the model alone both halves for rec+rush yds (model alone flagged ~3,200 "edges"
+  at -0.7/-0.8%); FD-own TD Brier = other books'. Candidates carry `mktSrc` 'books'|'fd'; labels say "FD" vs "mkt").
+  OFF-BOARD: every pull checks this game's open logged bets — prop gone or line moved / TD player missing -> `b.offBoard`;
+  the card drops them into Left off (it used to keep their logged rank and say "bet"), planFor ignores them, the log row
+  shows ⚠ off FanDuel. A later pull that finds them again clears it. Don't raise either share without a new real-price test that wins both halves. Refit: `DUMP_BT=1` build
   (restore shipped files with git checkout) -> `--go` / `--props --go` -> `analyze` / `analyze-props` -> build.
   Raw prices (market_hist/, market_td_*.json, market_props_*.json) and bt_*.json stay local.
 - 🎉 FUN PICKS (2026-10-05, user wants TD action despite no edge): `buildSlate` also collects every FanDuel anytime price in

@@ -1111,7 +1111,7 @@ function decorateMarkets(){
     const pick=cardK.get(c.key+'|'+c.market), cls=pick?'bet':c.tier==='take'?'edge':(c.tier==='flag'||c.tier==='dart')?c.tier:'';
     if(cls) cell.classList.add(cls);
     sub.innerHTML = pick ? `★ ${pick.stake.toFixed(1)}u` : `${pctS(c.mp)} <span class="${c.ev>0&&c.tier==='take'?'ev-pos':c.ev>0?'ev-dart':''}" style="font-weight:700">${c.ev>=0?'+':''}${(c.ev*100).toFixed(0)}%</span>`;
-    cell.title=`${c.label} — ${mktLabel(c.market)} ${c.odds}\n${c.mkt!=null?`chance ${pct(c.mp)} from other books ${pct(c.mkt)} (their cut removed) · model alone ${pct(c.model)}`:`model only ${pct(c.mp)} — no other-book prices (the model alone lost to the books in testing; ⚡ Pull to check)`} · fair ${probToAmerican(c.mp)} vs book ${pct(c.bimp)} · EV ${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}% · confidence ${Math.round(c.conf.score*100)}\n`+
+    cell.title=`${c.label} — ${mktLabel(c.market)} ${c.odds}\n${c.mkt!=null?`chance ${pct(c.mp)} from ${c.mktSrc==='fd'?'FanDuel\'s own price (no other book priced it)':'other books'} ${pct(c.mkt)} (cut removed) · model alone ${pct(c.model)}`:`model only ${pct(c.mp)} — no other-book prices (the model alone lost to the books in testing; ⚡ Pull to check)`} · fair ${probToAmerican(c.mp)} vs book ${pct(c.bimp)} · EV ${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}% · confidence ${Math.round(c.conf.score*100)}\n`+
       (pick?'★ On Your card — bet this.':c.tier==='take'?'Edge, but not on the card: '+(SKIPWHY.get(c.key+'|'+c.market)||'the card keeps only the best bets per game')+'.':c.tier==='flag'?'⚠ Edge too big to trust — likely injury/role news; verify first.':c.tier==='dart'?'🎲 Lottery price — too rare or uncertain to price.':'No edge at this price.'); };
   grid.querySelectorAll('.mcell[data-mkt]').forEach(cell=>paint(cell, byK.get(cell.dataset.key+'|'+cell.dataset.mkt), cell.dataset.base, cell.dataset.tip));
   grid.querySelectorAll('.mcell[data-side]').forEach(cell=>{ const s=cell.dataset.s, key=cell.dataset.key, side=cell.dataset.side, mu=+cell.dataset.mu, nm=side==='O'?'over':'under';
@@ -1217,7 +1217,7 @@ function pickPlays(cands){
 function pendingFor(game){ return bets.filter(b=>b.game===game && b.result==='pending' && b.key && b.market!=='custom' && b.modelProb!=null && !b.fun); }   // fun bets sit outside the card and the plan
 // a logged bet's rank was saved when it was logged; older entries fall back to Kelly from the price x 0.7
 function betRank(b){ if(typeof b.rk==='number') return b.rk; const d=oddsDec(b.odds), p=b.modelProb; if(!d||p==null) return 0; return 0.7*Math.max(0,(p*d-1)/(d-1)); }
-function planFor(game){ const L=pendingFor(game); if(!L.length) return null;
+function planFor(game){ const L=pendingFor(game).filter(b=>!b.offBoard); if(!L.length) return null;
   return pickPlays(L.map(b=>({key:b.key, label:b.player, abbr:teamOfKey(b.key), market:b.market, odds:b.odds, mp:b.modelProb, rk:betRank(b), bet:b}))); }
 function sugStake(c){ return Math.max(0.1, Math.round(KELLY_FRAC*(c.kelly||c.rk||0)*getBankroll()*10)/10); }
 // the one place a priced bet is written into the log (keeps its rank so the log can pick the best later)
@@ -1247,7 +1247,7 @@ function computeTopPlays(){
   for(const p of LAST.awayR.concat(LAST.homeR)){ if(p._status==='OUT') continue;
     for(const m of ['anytime','first','last','two']){ const odds=LAST.bookMap[m+'|'+p._key]; if(!odds) continue;
       const f=m==='two'?(p._cal||1)**2:(p._cal||1), A=ANC[m].get(p._key);
-      add({key:p._key, label:p.name, abbr:p._abbr, market:m, odds, mp:A?A.p:p[m], model:p[m], mkt:A?A.mkt:null, mpRaw:p[m]/f, prior:!p.matched, role:roleLabel(p), cal:f, ref:p}); } }
+      add({key:p._key, label:p.name, abbr:p._abbr, market:m, odds, mp:A?A.p:p[m], model:p[m], mkt:A?A.mkt:null, mktSrc:A?A.src:null, mpRaw:p[m]/f, prior:!p.matched, role:roleLabel(p), cal:f, ref:p}); } }
   for(const [abbr,d] of [[LAST.away,LAST.dst.dstAway],[LAST.home,LAST.dst.dstHome]])
     for(const m of ['anytime','first','last']){ const odds=LAST.bookMap[m+'|DST|'+abbr]; if(!odds) continue;
       add({key:'DST|'+abbr, label:S.teams[abbr].short+' Defense', abbr, market:m, odds, mp:d[m], mpRaw:d[m], prior:false, role:'defense (pick-6 / fumble return)', cal:1, ref:{dst:true}}); }
@@ -1258,13 +1258,16 @@ function computeTopPlays(){
   // then picks the best, so logging as you go and pasting everything first end in the same answer
   const game=curGameId(), logged=pendingFor(game), now=new Map(cand.map(c=>[c.key+'|'+c.market,c]));
   const opts=cand.filter(c=>c.tier==='take').map(c=>Object.assign({}, c, {rk:c.kelly, bet:logged.find(b=>b.key===c.key&&b.market===c.market)||null}));
+  const offBoard=[];
   for(const b of logged){
     if(opts.some(o=>o.key===b.key&&o.market===b.market)) continue;
     const c=now.get(b.key+'|'+b.market);   // priced now but not a take any more (price moved, or flagged) -> no edge
+    if(!c && b.offBoard){ offBoard.push({c:{key:b.key, label:b.player, abbr:teamOfKey(b.key), market:b.market, odds:b.odds}, why:`not on FanDuel now (${b.offBoard}) — if you didn't place it, delete it from your log`}); continue; }
     opts.push(Object.assign({}, c||{key:b.key, label:b.player, abbr:teamOfKey(b.key), market:b.market, odds:b.odds, mp:b.modelProb,
       conf:{score:b.cf||0.7, label:(b.cf||0.7)>=0.7?'High':'Medium', parts:[]}, role:'from your log'}, {rk:c?0:betRank(b), bet:b}));
   }
   const {picks, skipped}=pickPlays(opts);
+  skipped.push(...offBoard);
   CARD=picks;
   // worth-explaining non-picks (hover text on "edge" badges): too-good flags, lottery darts, calibration
   for(const c of cand){ if(opts.some(o=>o.key===c.key&&o.market===c.market)) continue;
@@ -1287,7 +1290,7 @@ function computeTopPlays(){
       const why=`model ${pct(c.mp)} vs book ${pct(bimp)} · edge ${edge>=0?'+':''}${(edge*100).toFixed(1)} pts${c.role?' · '+c.role:''}${c.cal&&c.cal<1?' · calibrated ×'+c.cal.toFixed(2):''}${c.capped?' · scaled to the team cap':''}`;
       html+=`<div class="cpick" title="${esc(why)}"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
       `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="vbadge vb-take" style="font-size:12px;margin-left:auto">bet ${u(c.stake)}</span></div>`+
-      `<div class="cp2">${mktLabel(c.market)} <span class="odds">${esc(c.odds)}</span> ${confBadge(c.conf)}${inLog} <span class="muted" style="font-size:12px" title="${c.mkt!=null?esc('model '+pct(c.model)+' · other books (fair) '+pct(c.mkt)+' → blended '+pct(c.mp)):'No other-book prices for this bet — the model alone lost to the books in the 2025 real-price test. ⚡ Pull odds to check it against the market.'}">${c.mkt!=null?'mkt '+pct(c.mkt)+' · model '+pct(c.model)+' → ':'<span style="color:var(--warn)">model only</span> · '}${pct(c.mp)} vs ${pct(bimp)} (${edge>=0?'+':''}${(edge*100).toFixed(1)})</span></div></div>`; });
+      `<div class="cp2">${mktLabel(c.market)} <span class="odds">${esc(c.odds)}</span> ${confBadge(c.conf)}${inLog} <span class="muted" style="font-size:12px" title="${c.mkt!=null?esc('model '+pct(c.model)+' · '+(c.mktSrc==='fd'?'FanDuel\'s own price, cut removed (no other book priced it) ':'other books (fair) ')+pct(c.mkt)+' → blended '+pct(c.mp)):'No other-book prices for this bet — the model alone lost to the books in the 2025 real-price test. ⚡ Pull odds to check it against the market.'}">${c.mkt!=null?(c.mktSrc==='fd'?'FD ':'mkt ')+pct(c.mkt)+' · model '+pct(c.model)+' → ':'<span style="color:var(--warn)">model only</span> · '}${pct(c.mp)} vs ${pct(bimp)} (${edge>=0?'+':''}${(edge*100).toFixed(1)})</span></div></div>`; });
     html+='</div>';
     const teams={}; picks.forEach(c=>{ teams[c.abbr]=(teams[c.abbr]||0)+c.stake; });
     const tot=picks.reduce((a,c)=>a+c.stake,0);
@@ -1919,17 +1922,22 @@ const anchorFor=mk=>({w:TD_W, cal:mk==='anytime'&&MA.fitted&&MA.cal ? MA.cal : n
 const logit=p=>Math.log(p/(1-p)), expit=x=>1/(1+Math.exp(-x));
 const blendP=(mkt, model, w)=>expit((1-w)*logit(clamp(mkt,0.003,0.995))+w*logit(clamp(model,0.003,0.995)));
 // one TD market for one game: Map(player key -> {p: blended, mkt: market fair, model})
-function anchorTD(players, mktMap, mk){
-  const out=new Map(); if(!mktMap) return out;
+// book (optional) = FanDuel's own prices: a player no other book prices is anchored to FanDuel's price instead of the
+// model alone — on 2025's real prices FanDuel's own (calibrated) number was exactly as accurate as the other books'
+// (Brier .1399/.1262 vs .1399/.1263) and the model alone worse (.1451/.1304). So a lone FanDuel price never shows an edge.
+function anchorTD(players, mktMap, mk, book){
+  const out=new Map(); if(!mktMap && !book) return out;
   const rows=[]; let sm=0, si=0;
-  for(const p of players){ if(p._status==='OUT') continue; const m=mktMap[mk+'|'+p._key]; if(!m||!(m.ip>0)||!(p[mk]>0)) continue; rows.push([p,m]); sm+=p[mk]; si+=m.ip; }
+  for(const p of players){ if(p._status==='OUT') continue;
+    let m=mktMap&&mktMap[mk+'|'+p._key]; if(!(m&&m.ip>0) && book && book[mk+'|'+p._key]){ const ip=americanToProb(book[mk+'|'+p._key]); if(ip>0) m={ip, fd:true}; }
+    if(!m||!(m.ip>0)||!(p[mk]>0)) continue; rows.push([p,m]); sm+=p[mk]; si+=m.ip; }
   if(rows.length<4 || !(si>0)) return out;   // too few prices to read the market's shape -> model only
   const k=sm/si, A=anchorFor(mk);
   for(const [p,m] of rows){ const fair=A.cal ? expit(A.cal.a+A.cal.b*logit(clamp(m.ip,0.003,0.995))) : clamp(m.ip*k,0.002,0.97);
-    out.set(p._key,{p:blendP(fair,p[mk],A.w), mkt:fair, model:p[mk]}); }
+    out.set(p._key,{p:blendP(fair,p[mk],A.w), mkt:fair, model:p[mk], src:m.fd?'fd':'books'}); }
   return out;
 }
-function lastAnchors(){ const pl=LAST.awayR.concat(LAST.homeR), a={}; for(const m of ['anytime','first','last','two']) a[m]=anchorTD(pl, LAST.mktMap, m); return a; }
+function lastAnchors(){ const pl=LAST.awayR.concat(LAST.homeR), a={}; for(const m of ['anytime','first','last','two']) a[m]=anchorTD(pl, LAST.mktMap, m, LAST.bookMap); return a; }
 // book consensus from a multi-book pull: TD = median implied prob of the OTHER books (FanDuel's own price is what we judge);
 // props = median de-vigged P(over) of the other books at FanDuel's line
 const ipOf=a=>a>0?100/(a+100):-a/(-a+100);
@@ -1969,7 +1977,19 @@ function fillGameFromOdds(d){
     const k=s+'|'+p._key, cur=LAST.propMap[k]||(LAST.propMap[k]={line:null, over:'', under:'', alts:[]});
     if(cur.line!==o.line){ cur.line=o.line; cur.over=''; cur.under=''; }
     cur[o.side==='O'?'over':'under']=fmtAm(o.price); if(o.fd) LAST.mktMap['FD#'+propMktKey(s,o.side,o.line)+'#'+p._key]=o.fd; n++; }
+  // your open bets on this game that FanDuel no longer offers (prop pulled, or the line moved): flag them so the card stops
+  // recommending them (it kept their old edge — the user saw three "bet" props that were gone from FanDuel)
+  const gNow=curGameId(); let ch=false;
+  for(const b of bets){ if(b.result!=='pending'||b.game!==gNow||!b.key||b.market==='custom'||String(b.key).startsWith('DST|')) continue;
+    let gone=null;
+    if(isPropMkt(b.market)){ const [,st,side,line]=b.market.split('|'), arr=d.props[st]; if(!arr) continue;   // that market wasn't in this pull
+      const mine=arr.filter(x=>sameName(x.name,b.player));
+      if(!mine.length) gone='FanDuel no longer offers it';
+      else if(!mine.some(x=>x.side===side && x.line===+line)) gone='line moved to '+[...new Set(mine.map(x=>x.line))].sort((x,y)=>x-y).join(' / '); }
+    else { const arr=d.td[b.market]; if(!arr) continue; if(!arr.some(x=>sameName(x.name,b.player))) gone='FanDuel no longer offers it'; }
+    if(gone){ if(b.offBoard!==gone){ b.offBoard=gone; ch=true; } } else if(b.offBoard){ delete b.offBoard; ch=true; } }
   renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder(); boardChanged();
+  if(ch){ saveBets(); renderBets(); }
   return {n, miss:[...miss]};
 }
 const pickedMarkets=()=>[...(ODDSCFG.td?Object.keys(OA_TD):[]), ...(ODDSCFG.props?Object.keys(OA_PROP):[])];
@@ -2244,17 +2264,18 @@ async function buildSlate(){
       const sim=simGame({away:g.away, home:g.home, total:g.total||44.5, spreadPts:Math.abs(g.spread||0), fav:g.fav||g.home, outdoor:W.outdoor, wind:W.wind, wx:W.wx, statusMap});
       const players=sim.awayR.concat(sim.homeR), idx=buildPlayerIndex(players), book={}, cands=[], mm={};
       for(const [name,c] of Object.entries(cons||{})){ const p=matchPlayer(cleanName(name), idx); if(p) mm['anytime|'+p._key]={ip:c.ip, n:c.n}; }
-      const SA=anchorTD(players, mm, 'anytime');
+      for(const o of prices){ const p=matchPlayer(cleanName(o.name), idx); if(p) book['anytime|'+p._key]=fmtAm(o.price); }
+      const SA=anchorTD(players, mm, 'anytime', book);
       for(const o of prices){ const p=matchPlayer(cleanName(o.name), idx); if(!p) continue;
         const odds=fmtAm(o.price); book['anytime|'+p._key]=odds; if(o.fd) mm['FD#anytime#'+p._key]=o.fd; if(p._status==='OUT') continue;
         const A=SA.get(p._key), mp=A?A.p:p.anytime, r=evalBet(mp, odds); if(!r) continue;
         const conf=confFor(p,'anytime',r,badWx), tier=tierOf(mp,r.edge,r.ev,!p.matched); if(tier!=='take') continue;
         const k=r.edge>0?conf.score*r.edge/(1-r.bimp):0;
-        cands.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds, mp, model:p.anytime, mkt:A?A.mkt:null, ev:r.ev, edge:r.edge, bimp:r.bimp, conf, kelly:k, rk:k, game:gid, kickoff:g.kickoff, fd:o.fd||null}); }
+        cands.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds, mp, model:p.anytime, mkt:A?A.mkt:null, mktSrc:A?A.src:null, ev:r.ev, edge:r.edge, bimp:r.bimp, conf, kelly:k, rk:k, game:gid, kickoff:g.kickoff, fd:o.fd||null}); }
       for(const o of prices){ if(!(o.price>=FUN_BAND[0] && o.price<FUN_BAND[1])) continue;
         const p=matchPlayer(cleanName(o.name), idx); if(!p || p._status==='OUT' || p._status==='DBT') continue;
         const A=SA.get(p._key);
-        fun.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds:fmtAm(o.price), mp:A?A.p:p.anytime, model:p.anytime, mkt:A?A.mkt:null,
+        fun.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds:fmtAm(o.price), mp:A?A.p:p.anytime, model:p.anytime, mkt:A?A.mkt:null, mktSrc:A?A.src:null,
           bimp:americanToProb(o.price), sim:p.anytime*americanToDec(o.price), game:gid, kickoff:g.kickoff, fun:true, fd:o.fd||null}); }
       const B=BOARDS[gid]||(BOARDS[gid]={t:Date.now(), book:{}, prop:{}, mkt:{}}); Object.assign(B.book, book); B.mkt=Object.assign(B.mkt||{}, mm); B.t=Date.now();   // open the game later: prices are there
       all.push(...pickPlays(cands).picks);   // per game: same rule as Your card
@@ -2285,8 +2306,8 @@ async function buildSlate(){
       : fpl.length>=2 ? {legs:fpl.map(c=>({game:c.game, key:c.key, name:c.label, abbr:c.abbr, market:'anytime', odds:c.odds, ...(c.fd?{fd:c.fd}:{})})),
       D:fpl.reduce((a,c)=>a*americanToDec(c.odds),1), P:fpl.reduce((a,c)=>a*c.mp,1)} : null;
     SLATE={at:Date.now(), day:games[0].kickoff, checked:games.length, notes,
-      fun:{picks:funPicks.map(({key,label,abbr,market,odds,mp,model,mkt,bimp,stake,game,kickoff,fd})=>({key,label,abbr,market,odds,mp,model,mkt,bimp,stake,game,kickoff,fd,fun:true})), parlay:funParlay, max:nPick},
-      picks:picks.map(({key,label,abbr,market,odds,mp,model,mkt,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev,fd})=>({key,label,abbr,market,odds,mp,model,mkt,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev,fd})),
+      fun:{picks:funPicks.map(({key,label,abbr,market,odds,mp,model,mkt,mktSrc,bimp,stake,game,kickoff,fd})=>({key,label,abbr,market,odds,mp,model,mkt,mktSrc,bimp,stake,game,kickoff,fd,fun:true})), parlay:funParlay, max:nPick},
+      picks:picks.map(({key,label,abbr,market,odds,mp,model,mkt,mktSrc,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev,fd})=>({key,label,abbr,market,odds,mp,model,mkt,mktSrc,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev,fd})),
       parlay:best?{legs:best.legs.map(v=>v.l), P:best.P, D:best.D}:null};
     lsW('nfltd_slate', SLATE); renderSlate();
   }finally{ btn.disabled=false; oddsStatus(); }
@@ -2309,7 +2330,7 @@ function renderSlate(){
     html+=`<div style="font-size:13px;margin-bottom:4px"><b>Your ${SLATE.picks.length} TD bet${SLATE.picks.length>1?'s':''} for ${dayName}</b> <span class="muted">— the best of ${SLATE.checked} game${SLATE.checked>1?'s':''}, FanDuel prices from ${when}</span>${stale}</div>`;
     SLATE.picks.forEach((c,i)=>{ html+=`<div class="cpick spick" data-g="${esc(c.game)}" title="open this game"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
       `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="muted" style="font-size:12px">${fmtGame(c.game)}</span>${stakeBadge(c,' vb-take')}</div>`+
-      `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span> ${confBadge(c.conf)} <span class="muted" style="font-size:12px">${c.mkt!=null?'mkt '+pct(c.mkt)+' · model '+pct(c.model)+' → ':'<span style="color:var(--warn)">model only</span> · '}${pct(c.mp)} vs ${pct(c.bimp)}</span></div></div>`; });
+      `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span> ${confBadge(c.conf)} <span class="muted" style="font-size:12px">${c.mkt!=null?(c.mktSrc==='fd'?'FD ':'mkt ')+pct(c.mkt)+' · model '+pct(c.model)+' → ':'<span style="color:var(--warn)">model only</span> · '}${pct(c.mp)} vs ${pct(c.bimp)}</span></div></div>`; });
     const tot=SLATE.picks.reduce((a,c)=>a+c.stake,0)+(P?slateParlayStake(P,bank):0);
     html+=`<div class="muted" style="font-size:12px;margin-top:5px">Whole day <b>${u(tot)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll, parlay included — capped at ${SLATE_CAP*100}%)</div>`;
     if(P){ const stake=slateParlayStake(P,bank);
@@ -2332,7 +2353,7 @@ function renderSlate(){
       `<div class="muted" style="font-size:12px;line-height:1.5;margin:3px 0 7px">Anytime TDs priced <b>+${FUN_BAND[0]} to +${FUN_BAND[1]}</b> lost about ${Math.round(FUN_EDGE*100)}% of the money bet on them over 2025's real FanDuel prices; +400 to +1500 lost about 20%, and heavy favourites about 11%. This is <b>not an edge</b> — over time you lose a little. Same small stake on each; the sim's favourites in the range go first (that order isn't proven). Fun picks you've already logged stay on this list (✓) and count toward the number shown, so rebuilding never hands you a fresh batch; anyone else in your real picks, bet log or slip is left out, so you never double up (the app only knows bets you've logged or slipped).</div>`;
     F.picks.forEach(c=>{ html+=`<div class="cpick spick" data-g="${esc(c.game)}" title="open this game"><div class="cp1"><span class="muted" style="min-width:18px">🎉</span>`+
       `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="muted" style="font-size:12px">${fmtGame(c.game)}</span>${stakeBadge(c,'')}</div>`+
-      `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span> <span class="muted" style="font-size:12px">${c.mkt!=null?'~'+pct(c.mp)+' to score (other books)':'~'+pct(c.mp)+' to score (<span style="color:var(--warn)">model only</span>)'}</span></div></div>`; });
+      `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span> <span class="muted" style="font-size:12px">${c.mkt!=null?'~'+pct(c.mp)+' to score ('+(c.mktSrc==='fd'?'FanDuel\'s price':'other books')+')':'~'+pct(c.mp)+' to score (<span style="color:var(--warn)">model only</span>)'}</span></div></div>`; });
     if(FP) html+=`<div style="margin-top:8px;font-size:13px"><b>🎰 Fun parlay</b> ${FP.legs.map(l=>`<b style="color:${teamText(l.abbr)}">${esc(l.name)}</b>`).join(' + ')} <span class="muted" style="font-size:12px">— two of the fun picks above, not new players</span><br>`+
       `pays <span class="odds">${amStr(decToAmerican(FP.D))}</span> · hits ~${pct(FP.P)} · ${parlayBadge(FP, FUN_PARLAY_STAKE, true, '')} <span class="muted" style="font-size:12px">— a parlay multiplies the house's cut (≈ −${cut(FP.legs.length)}% over time)</span></div>`;
     html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="statussel" id="funLog" style="padding:4px 11px">📓 log fun picks</button>`+
@@ -2437,7 +2458,7 @@ function renderBets(){
       const planCell = b.result!=='pending' ? (b.fun?'<span class="muted" title="a fun pick">🎉</span>':'') : b.fun ? '<span class="vbadge" title="a fun pick — outside the card and the plan">🎉 fun</span>' : !P ? '<span class="muted" title="no model price, so it isn\'t part of the plan">—</span>'
         : P.keep ? `<span class="vbadge vb-take" title="bet this${Math.abs((+b.stake||0)-P.stake)>0.05?' — suggested stake '+P.stake.toFixed(1)+'u':''}">★ BET ${P.stake.toFixed(1)}u</span>`
         : `<span class="vbadge vb-edge" title="${esc(P.why)}">cut</span>`;
-      html+=`<tr${P&&P.keep?' class="rowtake"':''}><td class="l"><b>${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)}</span></td><td class="l">${planCell}</td>`+
+      html+=`<tr${P&&P.keep?' class="rowtake"':''}><td class="l"><b>${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)}</span>${b.offBoard&&b.result==='pending'?` <span style="color:var(--warn);font-size:12px" title="${esc('not on FanDuel now: '+b.offBoard+' — if you didn\'t place it, delete it (✕)')}">⚠ off FanDuel</span>`:''}</td><td class="l">${planCell}</td>`+
         `<td class="odds">${esc(b.odds)}</td>`+
         `<td>${b.modelProb!=null?pct(b.modelProb):'—'}</td>`+
         `<td style="white-space:nowrap"><input class="bookin betclose" data-id="${b.id}" value="${(b.closeOdds||'').replace(/"/g,'&quot;')}" placeholder="close" style="width:70px">${b.closeEst?`<span class="muted" title="the line moved — closed ${esc(b.closeEst)}; this is the equivalent price at your line (model-based estimate)"> ≈</span>`:''}</td>`+
@@ -2543,8 +2564,10 @@ function propCandidates(){
     const i=k.indexOf('|'), s=k.slice(0,i), p=byKey.get(k.slice(i+1)); if(!p||p._status==='OUT'||!PSTAT.includes(s)) continue;
     const mu=propMu(p,s); if(mu==null) continue; const med=propMedian(mu,s);
     const side=(sd,line,odds,alt)=>{ if(!odds||line==null) return; const pr=propSides(mu,s,line); if(!pr) return;
-      const model=sd==='O'?pr.over:pr.under, mo=propCons(s,p._key,line,mu), mkt=mo!=null?(sd==='O'?mo:1-mo):null;
-      out.push({key:p._key, label:p.name, abbr:p._abbr, market:propMktKey(s,sd,line), odds, mp:mkt!=null?blendP(mkt,model,PROP_W):model, model, mkt, ref:p, prop:{s,side:sd,line,mu,med,alt}}); };
+      const model=sd==='O'?pr.over:pr.under; let mo=propCons(s,p._key,line,mu), src=mo!=null?'books':null;
+      if(mo==null && !alt && line===pm.line){ const io=americanToProb(pm.over), iu=americanToProb(pm.under); if(io>0&&iu>0){ mo=io/(io+iu); src='fd'; } }   // FanDuel's own two-way price
+      const mkt=mo!=null?(sd==='O'?mo:1-mo):null;
+      out.push({key:p._key, label:p.name, abbr:p._abbr, market:propMktKey(s,sd,line), odds, mp:mkt!=null?blendP(mkt,model,PROP_W):model, model, mkt, mktSrc:src, ref:p, prop:{s,side:sd,line,mu,med,alt}}); };
     if(pm.line!=null){ side('O',pm.line,pm.over); side('U',pm.line,pm.under); }
     for(const a of (pm.alts||[])) side('O',a.line,a.odds,true);
   }

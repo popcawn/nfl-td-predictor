@@ -288,7 +288,12 @@ distribution still beat the model on both halves — the app uses that fallback.
   these prices are one-sided), no model share.
 - **Props:** the books' de-vigged consensus + 10% model. Receptions, rush + rec and passing yards weren't tested; they
   use the same 10% by analogy.
-- **No other-book prices** (a pasted board, or nothing pulled): the model alone, flagged **model only** on the card.
+- **No other-book price** for a line: FanDuel's own price (its cut removed) is the market instead — on every 2025 FanDuel
+  main line that plus 10% model beat the model alone in both halves, and FanDuel's own TD prices were exactly as accurate
+  as the other books'. So a line only FanDuel prices rarely shows an edge. **model only** now appears only when FanDuel's
+  own two-way price isn't known either (e.g. one side pasted).
+- **Off FanDuel:** each pull checks your open bets on that game; if FanDuel dropped the prop or moved the line, Your card
+  stops recommending it ("not on FanDuel now — line moved to 57.5") and the log marks it ⚠ — delete it if you never placed it.
 
 ```bash
 DUMP_BT=1 node build-nfl-td-snapshot.mjs     # writes bt_rows_2025.json (leak-free model predictions); then git checkout the shipped files
