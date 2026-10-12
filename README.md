@@ -117,6 +117,12 @@ silently to the baked snapshot when not.
   live price if the app is open in the 15 min before kickoff (1 credit per market), otherwise FanDuel's price 5 min before
   kickoff from The Odds API's history after the game starts (paid plans; 1 + 10 credits per market per game). Both are
   checkboxes in the log; **🤖 Settle now** runs it on demand.
+- **Bet log** — one summary line (record · P/L · ROI · CLV), then **weeks → games → bets**: the current week is open, older
+  weeks collapse to a single line each. Seven columns (Bet, Odds, Close · CLV, Stake, Result, P/L, ✕); everything else —
+  insights, adding a bet by hand, closing lines by hand, the automatic switches, backup — sits under **⚙ More**.
+  Each bet shows **⏱ how long before kickoff** it was logged, and *More → Insights → When you bet* compares early-week
+  with close-to-kickoff bets (record, ROI, CLV) for props, TDs or everything. The **Parlay picker** is collapsed until you
+  open it (it then stays open).
 - **Bet log by game** — each game has its own section (open games first). For open games the log applies the
   same rule as the card: the best bets read **★ BET** with a suggested stake, the rest **cut**, and **✂ Trim** removes
   the cuts and sets the stakes in one click.
@@ -292,8 +298,9 @@ distribution still beat the model on both halves — the app uses that fallback.
   main line that plus 10% model beat the model alone in both halves, and FanDuel's own TD prices were exactly as accurate
   as the other books'. So a line only FanDuel prices rarely shows an edge. **model only** now appears only when FanDuel's
   own two-way price isn't known either (e.g. one side pasted).
-- **Off FanDuel:** each pull checks your open bets on that game; if FanDuel dropped the prop or moved the line, Your card
-  stops recommending it ("not on FanDuel now — line moved to 57.5") and the log marks it ⚠ — delete it if you never placed it.
+- **Line moves vs off FanDuel:** each pull checks your open bets on that game. If FanDuel **moved a prop's line**, that is
+  a line move, not a missing bet: the log shows ▼/▲ and the new line with a live CLV read at *your* line (≈, final once
+  the close is in). Only a prop FanDuel **dropped entirely** is ⚠ off FanDuel and leaves Your card.
 
 ```bash
 DUMP_BT=1 node build-nfl-td-snapshot.mjs     # writes bt_rows_2025.json (leak-free model predictions); then git checkout the shipped files

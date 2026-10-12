@@ -123,9 +123,11 @@ See README.md for what the model does and how it was validated.
   = FD's own over/under de-vigged + 10% model; TD = FD's implied through the anytime cal / model-level rescale; checked on
   ALL 2025 FD main lines: FD-own+10% beat the model alone both halves for rec+rush yds (model alone flagged ~3,200 "edges"
   at -0.7/-0.8%); FD-own TD Brier = other books'. Candidates carry `mktSrc` 'books'|'fd'; labels say "FD" vs "mkt").
-  OFF-BOARD: every pull checks this game's open logged bets — prop gone or line moved / TD player missing -> `b.offBoard`;
-  the card drops them into Left off (it used to keep their logged rank and say "bet"), planFor ignores them, the log row
-  shows ⚠ off FanDuel. A later pull that finds them again clears it. Don't raise either share without a new real-price test that wins both halves. Refit: `DUMP_BT=1` build
+  PULL vs OPEN BETS (rewritten 2026-10-12, user: "props that go down are considered off FanDuel instead of prop lowered
+  for CLV"): `closeView(b,d)` = FanDuel's price for a logged bet AT ITS OWN LINE (exact, or the nearest line translated with
+  the model's distribution; null = not offered). Still offered -> `b.cur={q,l,o,t}` (live CLV in the log: "▼64.5 ≈+10.8%");
+  only a prop FanDuel dropped entirely -> `b.offBoard` (card drops it, planFor ignores it, log shows ⚠). A MOVED LINE IS
+  NEVER off-board. applyClose() = closeView + write closeOdds/closeEst. Don't raise either share without a new real-price test that wins both halves. Refit: `DUMP_BT=1` build
   (restore shipped files with git checkout) -> `--go` / `--props --go` -> `analyze` / `analyze-props` -> build.
   Raw prices (market_hist/, market_td_*.json, market_props_*.json) and bt_*.json stay local.
 - 🎉 FUN PICKS (2026-10-05, user wants TD action despite no edge): `buildSlate` also collects every FanDuel anytime price in
@@ -163,4 +165,12 @@ See README.md for what the model does and how it was validated.
   events 1 + event odds 10/market, bookmakers=fanduel, snapshot kickoff-5min; free plan -> nfltd_histoff pause 3 days);
   each game once (nfltd_closed). Tested on IND@WAS 2026-10-04: 13/13 bets settled right; history close matched FD.
   `parseOdds()` and `applyClose()` are shared by live pulls, manual Pull closing prices and history.
+- BET LOG LAYOUT (2026-10-12, user: "a lot going on, simplify it" + "condense by week"): renderBets() = .logsum summary +
+  details.weekgrp (Tue->Mon local weeks by b.ko||b.ts; newest/any-open week open; label "Week N" from b.wk) -> details.gamegrp
+  (LOGOPEN keys: 'W'+weekStart, game+'#'+weekStart; trim button keeps data-g=game) -> 7-column rows with inline tags
+  (🎉, ★ stake / cut, ⚠ off FanDuel, ⏱ lead). Everything else is static HTML under details#logMore (#betInsights is filled by
+  renderBets: scoreboard + "When you bet" table by lead time, TIMING_KIND prop|td|all). Bets carry `ko` (kickoff) and `wk`:
+  koStamp(game) at log time (SCHED + CUR_WK), back-filled by autoSettle from ESPN events for older bets (koX = not found).
+  Parlay picker = details#parlaySec, collapsed by default; computeParlays() returns early while closed and runs on open;
+  open state in nfltd_parlayopen; #jumpNav links open a <details> target.
 - Commits end with the Co-Authored-By line from the session's instructions.

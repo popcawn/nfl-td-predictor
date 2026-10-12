@@ -127,6 +127,11 @@
   details.gamegrp>summary{cursor:pointer;padding:9px 12px;font-size:14px}
   details.gamegrp[open]>summary{border-bottom:1px solid var(--line2)}
   .grpbody{padding:6px 10px 10px}
+  .logsum{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin-bottom:10px;padding:9px 12px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;font-size:13px}
+  details.weekgrp{margin:0 0 6px}
+  details.weekgrp>summary{cursor:pointer;padding:8px 2px;font-size:14px;border-bottom:1px solid var(--line2)}
+  details.weekgrp[open]>summary{margin-bottom:10px}
+  .logsub{margin-top:14px}
   /* sportsbook-style markets panel */
   .mtabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:9px;border-bottom:1px solid var(--line2);margin-bottom:10px}
   .mtabs::-webkit-scrollbar{display:none}
@@ -347,19 +352,21 @@
       <div class="legend" id="tottNote" style="margin-top:8px"></div>
     </details>
 
-    <!-- PARLAY PICKER -->
-    <h2 id="parlaySec">Parlay picker</h2>
-    <div class="panel" id="parlayPanel" style="padding:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
-        <div style="font-weight:700;font-size:13px">🎰 Same-game parlays from your priced legs — 🏈 TD scorers and 📈 player props — ranked by conservative EV</div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <label class="muted" style="font-size:12px">Legs <select id="parlayMix" class="statussel"><option value="anchor" selected>at least one TD (+ props)</option><option value="both">TD + prop mix</option><option value="td">TD only</option><option value="any">any</option></select></label>
-          <label class="muted" style="font-size:12px">Max legs <select id="parlayLegs" class="statussel"><option>2</option><option selected>3</option><option>4</option></select></label>
-          <button class="btn" id="findParlays" style="padding:7px 16px;font-size:13px">Find parlays</button>
+    <!-- PARLAY PICKER (collapsed until used, like Team profiles) -->
+    <details id="parlaySec" class="panel" style="margin-top:14px;padding:12px 16px">
+      <summary style="cursor:pointer;font-size:13px;text-transform:uppercase;letter-spacing:.14em;color:var(--ink2);font-weight:800">Parlay picker <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400;font-size:13px">— same-game parlays from your priced legs</span></summary>
+      <div id="parlayPanel" style="margin-top:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+          <div style="font-weight:700;font-size:13px">🎰 🏈 TD scorers and 📈 player props from this game — ranked by conservative EV</div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <label class="muted" style="font-size:12px">Legs <select id="parlayMix" class="statussel"><option value="anchor" selected>at least one TD (+ props)</option><option value="both">TD + prop mix</option><option value="td">TD only</option><option value="any">any</option></select></label>
+            <label class="muted" style="font-size:12px">Max legs <select id="parlayLegs" class="statussel"><option>2</option><option selected>3</option><option>4</option></select></label>
+            <button class="btn" id="findParlays" style="padding:7px 16px;font-size:13px">Find parlays</button>
+          </div>
         </div>
+        <div id="parlayBody" class="legend" style="margin-top:8px"></div>
       </div>
-      <div id="parlayBody" class="legend" style="margin-top:8px"></div>
-    </div>
+    </details>
 
     <!-- CROSS-GAME SLIP -->
     <h2 id="slipSec">Cross-game parlay slip</h2>
@@ -376,24 +383,14 @@
       <div id="slipBody" class="legend"></div>
     </div>
 
-    <!-- BET LOG & CLV -->
-    <h2 id="logSec">Bet log &amp; CLV</h2>
+    <!-- BET LOG: summary + weeks up top, everything else under "More" -->
+    <h2 id="logSec">Bet log</h2>
     <div class="panel" id="betPanel" style="padding:14px">
-      <div style="font-weight:700;font-size:13px;margin-bottom:6px">📓 Log every bet — the sim's TD props <b>or your own player props</b> (yards, receptions, anything) — and track <b>CLV</b> (did you beat the closing line?) and <b>ROI</b>. This is the only honest read on whether the sim actually makes money — aim for 50–100 bets before trusting it.</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-        <select id="betPlayer" class="statussel" style="max-width:210px"></select>
-        <select id="betMarket" class="statussel"><option value="anytime">Anytime</option><option value="two">2+ TD</option><option value="first">1st TD</option><option value="last">Last TD</option><option value="custom">Custom prop…</option></select>
-        <input id="betCustom" type="text" placeholder="e.g. Bijan rush yds O 49.5" style="width:200px;display:none">
-        <input id="betOdds" type="text" placeholder="odds +150" style="width:110px">
-        <input id="betStake" type="number" step="0.5" placeholder="stake 1" style="width:95px">
-        <button class="btn" id="betAdd" style="padding:6px 14px;font-size:13px">Log bet</button>
-        <span id="betMsg" class="muted" style="font-size:12px"></span>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <span id="autoMsg" class="muted" style="font-size:12px"></span>
         <span style="margin-left:auto;display:flex;gap:6px">
-          <button class="statussel" id="syncBtn" style="padding:6px 10px;font-size:12px" title="keep this log, slip and bankroll identical on every PC">☁ Sync: off</button>
-          <button class="statussel" id="betExport" style="padding:6px 10px;font-size:12px" title="Save your bet log, cross-game slip and bankroll to a file — import it on another PC or browser">⬇ Export</button>
-          <button class="statussel" id="betImport" style="padding:6px 10px;font-size:12px" title="Load an exported file; merges with what's here (no duplicates)">⬆ Import</button>
-          <input type="file" id="betImportFile" accept=".json,application/json" style="display:none">
-          <button class="statussel" id="betClear" style="padding:6px 10px;font-size:12px">Clear log</button>
+          <button class="statussel" id="autoNow" style="padding:4px 10px;font-size:12px" title="settle finished games from ESPN's box scores and fill missing closing lines now">🤖 Settle now</button>
+          <button class="statussel" id="syncBtn" style="padding:4px 10px;font-size:12px" title="keep this log, slip and bankroll identical on every PC">☁ Sync: off</button>
         </span>
       </div>
       <div id="syncBox" class="note info" style="display:none;margin:2px 0 10px;font-size:13px;line-height:1.55">
@@ -411,24 +408,48 @@
         </div>
         <div class="muted" style="font-size:12px;margin-top:6px">The token is saved in this browser only — never in the site's code — and can't do anything but read/write your gists. Syncs a few seconds after every change, whenever you come back to the tab, and every 90 s. Deleting a bet (or Clear log) deletes it on every synced PC.</div>
       </div>
-      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:2px 0 10px;font-size:12px">
-        <label class="muted" title="once a game is final, ESPN's box score settles every pending bet on it (win / loss / void if he didn't play) — free; results you set by hand are never changed"><input type="checkbox" id="autoSettleChk"> 🤖 auto-settle from box scores</label>
-        <label class="muted" title="Close is filled from FanDuel: live if the app is open in the 15 min before kickoff (1 credit per market), otherwise from The Odds API's history after kickoff — FanDuel 5 min before kickoff (paid plan, 10 credits per market)"><input type="checkbox" id="autoCloseChk"> ⚡ auto closing lines</label>
-        <button class="statussel" id="autoNow" style="padding:2px 10px">🤖 Settle now</button>
-        <span id="autoMsg" class="muted"></span>
-      </div>
-      <details id="closeBox" style="margin:2px 0 10px">
-        <summary style="cursor:pointer;font-size:13px;font-weight:700">📋 Paste closing lines <span class="muted" style="font-weight:400">— right before kickoff, copy the board again and paste it here; it fills <b>Close</b> on your bets so CLV works</span></summary>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap">
-          <select id="closeMarket" class="statussel"><option value="anytime">one price per name = Anytime</option><option value="two">one price per name = 2+ TD</option><option value="first">one price per name = 1st TD</option><option value="last">one price per name = Last TD</option></select>
-          <button class="btn" id="closeApply" style="padding:6px 14px;font-size:13px">Fill closes</button>
-          <button class="btn sec" id="closePull" style="padding:6px 12px;font-size:13px" title="fill Close on every open bet from FanDuel's current price (before kickoff) — no pasting">⚡ Pull closing prices</button>
-          <span id="closeMsg" class="muted" style="font-size:12px"></span>
-        </div>
-        <textarea id="closePaste" rows="3" spellcheck="false" placeholder="Same format as the odds paste — stacked Anytime / 1st / Last blocks, or one price per name for the market chosen above. Player-prop boards (Over / Under lines) work too: they fill props whose line did not move."
-          style="width:100%;margin-top:7px;background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:10px;padding:9px;font-family:var(--mono);font-size:13px;resize:vertical"></textarea>
-      </details>
       <div id="betBody" class="legend"></div>
+      <details id="logMore" style="margin-top:12px">
+        <summary style="cursor:pointer;font-size:13px;font-weight:700">⚙ More <span class="muted" style="font-weight:400">— insights · add a bet by hand · closing lines · backup</span></summary>
+        <div class="logsub"><b>📊 Insights</b><div id="betInsights" style="margin-top:6px"></div></div>
+        <div class="logsub"><b>Add a bet by hand</b>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+            <select id="betPlayer" class="statussel" style="max-width:210px"></select>
+            <select id="betMarket" class="statussel"><option value="anytime">Anytime</option><option value="two">2+ TD</option><option value="first">1st TD</option><option value="last">Last TD</option><option value="custom">Custom prop…</option></select>
+            <input id="betCustom" type="text" placeholder="e.g. Bijan rush yds O 49.5" style="width:200px;display:none">
+            <input id="betOdds" type="text" placeholder="odds +150" style="width:110px">
+            <input id="betStake" type="number" step="0.5" placeholder="stake 1" style="width:95px">
+            <button class="btn" id="betAdd" style="padding:6px 14px;font-size:13px">Log bet</button>
+            <span id="betMsg" class="muted" style="font-size:12px"></span>
+          </div>
+        </div>
+        <div class="logsub"><b>Automatic</b>
+          <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:12px">
+            <label class="muted" title="once a game is final, ESPN's box score settles every pending bet on it (win / loss / void if he didn't play) — free; results you set by hand are never changed"><input type="checkbox" id="autoSettleChk"> 🤖 settle from box scores</label>
+            <label class="muted" title="Close is filled from FanDuel: live if the app is open in the 15 min before kickoff (1 credit per market), otherwise from The Odds API's history after kickoff — FanDuel 5 min before kickoff (paid plan, 10 credits per market)"><input type="checkbox" id="autoCloseChk"> ⚡ fill closing lines <span class="muted">(after kickoff: 10 credits per bet type per game)</span></label>
+          </div>
+        </div>
+        <div class="logsub" id="closeBox"><b>Closing lines by hand</b> <span class="muted" style="font-size:12px">— only if the automatic fill missed one</span>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+            <button class="btn sec" id="closePull" style="padding:6px 12px;font-size:13px" title="fill Close on every open bet from FanDuel's current price (before kickoff)">⚡ Pull closing prices now</button>
+            <span class="muted" style="font-size:12px">or paste the board:</span>
+            <select id="closeMarket" class="statussel"><option value="anytime">one price per name = Anytime</option><option value="two">one price per name = 2+ TD</option><option value="first">one price per name = 1st TD</option><option value="last">one price per name = Last TD</option></select>
+            <button class="btn" id="closeApply" style="padding:6px 14px;font-size:13px">Fill closes</button>
+            <span id="closeMsg" class="muted" style="font-size:12px"></span>
+          </div>
+          <textarea id="closePaste" rows="2" spellcheck="false" placeholder="Same format as the odds paste. Player-prop boards (Over / Under lines) work too."
+            style="width:100%;margin-top:7px;background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:10px;padding:9px;font-family:var(--mono);font-size:13px;resize:vertical"></textarea>
+        </div>
+        <div class="logsub"><b>Backup</b>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px">
+            <button class="statussel" id="betExport" style="padding:6px 10px;font-size:12px" title="Save your bet log, cross-game slip and bankroll to a file — import it on another PC or browser">⬇ Export</button>
+            <button class="statussel" id="betImport" style="padding:6px 10px;font-size:12px" title="Load an exported file; merges with what's here (no duplicates)">⬆ Import</button>
+            <input type="file" id="betImportFile" accept=".json,application/json" style="display:none">
+            <button class="statussel" id="betClear" style="padding:6px 10px;font-size:12px">Clear log</button>
+          </div>
+        </div>
+        <div class="logsub muted" style="font-size:12px;line-height:1.55"><b>How to read it.</b> <b>CLV</b> = how much better your price was than FanDuel's closing price; beat the close over many bets and profit follows, long before ROI shows it. A grey <b>≈</b> CLV is a live read (FanDuel's price right now), not final. <b>▼ / ▲</b> = FanDuel moved a prop's line since you bet; the CLV is worked out at your line. <b>★</b> / <b>cut</b> = the same rule as Your card picked which open bets to keep in that game (✂ Trim removes the cuts). <b>⏱</b> = how long before kickoff you logged it. <b>🤖</b> = settled automatically from ESPN (hover for why); <b>✋</b> = settle that one yourself.</div>
+      </details>
     </div>
 
     <div class="note" id="corrNote"><b>Same-game correlation:</b> two scorers on the same team are <b>positively correlated</b> (when an offense scores a lot, several of its players cash together). Treat multiple "TAKE"s on one team as a same-game parlay leg set, not as independent edges. A model edge much larger than the market's usually means a missed inactive or role change — verify before betting.</div>
@@ -565,7 +586,9 @@ const teamList=S.teamList.slice().sort((a,b)=> S.teams[a].name.localeCompare(S.t
 function opt(sel,arr,val){ sel.innerHTML=arr.map(a=>`<option value="${a}">${S.teams[a].name}</option>`).join(''); sel.value=(val&&arr.includes(val))?val:arr[0]; }
 // this week's games (kickoff order); the app opens on the next game to kick off, not a fixed matchup.
 // The baked slate is replaced live on every visit (refreshSlate), so it never goes stale between builds.
-let SCHED=[], userPicked=false;
+let SCHED=[], userPicked=false, CUR_WK=null;   // CUR_WK: the active regular-season week number (from ESPN)
+const koOf=game=>{ const g=SCHED.find(x=>x.away+'@'+x.home===game); return g?g.kickoff:null; };
+const koStamp=game=>{ const k=koOf(game); return k ? {ko:k, ...(CUR_WK?{wk:CUR_WK}:{})} : {}; };
 function setSchedule(list){
   S.schedule=list;
   SCHED=list.filter(g=>S.teamList.includes(g.home)&&S.teamList.includes(g.away)).sort((a,b)=>new Date(a.kickoff)-new Date(b.kickoff));
@@ -688,7 +711,8 @@ function schedFromESPN(sb){
 }
 async function refreshSlate(){
   try{
-    const list=schedFromESPN(await activeWeek()); if(!list.length) return;
+    const sb=await activeWeek(), list=schedFromESPN(sb); if(!list.length) return;
+    CUR_WK=sb.season&&sb.season.type===2&&sb.week ? sb.week.number : null;
     const sig=l=>l.map(g=>g.away+'@'+g.home+'@'+g.kickoff).sort().join(',');
     const newWeek=sig(list)!==sig(S.schedule||[]);
     setSchedule(list);   // same games too: refreshes the dropdown's lines
@@ -1224,7 +1248,7 @@ function sugStake(c){ return Math.max(0.1, Math.round(KELLY_FRAC*(c.kelly||c.rk|
 function logBetFrom(c, stake, gameIn){
   const game=gameIn||curGameId();
   if(bets.some(b=>b.game===game && b.key===c.key && b.market===c.market && b.result==='pending')) return false;
-  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), game, key:c.key, player:c.label, market:c.market, odds:c.odds,
+  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), ...koStamp(game), game, key:c.key, player:c.label, market:c.market, odds:c.odds,
     modelProb:+(+c.mp).toFixed(4), ...(c.fun?{fun:true}:{}), ...(c.model!=null?{rawP:+(+c.model).toFixed(4)}:{}), ...(c.mkt!=null?{mktP:+(+c.mkt).toFixed(4)}:{}), rk:+(c.kelly!=null?c.kelly:(c.rk||0)).toFixed(5), cf:c.conf?c.conf.score:null, ...(c.prop?{pmu:+c.prop.mu.toFixed(3)}:{}),
     stake:+(+stake).toFixed(1), closeOdds:'', result:'pending'});
   return true;
@@ -1286,7 +1310,7 @@ function computeTopPlays(){
     html+=`<div style="font-size:13px;margin:0 0 2px"><b>Bet ${picks.length===1?'this one':'these '+picks.length}</b> <span class="muted">— best ${picks.length} of ${nEdge} edge${nEdge===1?'':'s'} (max ${maxG}/game, ${MAX_PER_TEAM}/team, 1/player). Outlined boxes = skip.</span></div>`;
     html+='<div>';
     picks.forEach((c,i)=>{ const bimp=c.bimp!=null?c.bimp:1/(oddsDec(c.odds)||2), edge=c.mp-bimp;
-      const inLog=c.bet?` <span class="muted" style="font-size:12px" title="already in your bet log">✓ in log${Math.abs((+c.bet.stake||0)-c.stake)>0.05?` at ${c.bet.stake}u`:''}</span>`:'';
+      const inLog=c.bet?` <span class="muted" style="font-size:12px" title="already in your bet log">✓ in log${Math.abs((+c.bet.stake||0)-c.stake)>0.05?` at ${c.bet.stake}u`:''}${isPropMkt(c.bet.market)&&c.bet.cur&&c.bet.cur.l!=null&&c.bet.cur.l!==+c.bet.market.split('|')[3]?` · line now ${c.bet.cur.l}`:''}</span>`:'';
       const why=`model ${pct(c.mp)} vs book ${pct(bimp)} · edge ${edge>=0?'+':''}${(edge*100).toFixed(1)} pts${c.role?' · '+c.role:''}${c.cal&&c.cal<1?' · calibrated ×'+c.cal.toFixed(2):''}${c.capped?' · scaled to the team cap':''}`;
       html+=`<div class="cpick" title="${esc(why)}"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
       `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="vbadge vb-take" style="font-size:12px;margin-left:auto">bet ${u(c.stake)}</span></div>`+
@@ -1420,6 +1444,7 @@ function parlayCandidates(){
 }
 function computeParlays(){
   const body=$('parlayBody'); if(!LAST||!LAST.dst||!LAST.dst.joint||!body) return;
+  if(!$('parlaySec').open) return;   // collapsed: nothing to draw (it computes when you open it)
   const J=LAST.dst.joint, pool=parlayCandidates(), maxLegs=+(($('parlayLegs')&&$('parlayLegs').value)||3);
   if(pool.length<2){ body.innerHTML=`Price at least <b>2</b> reliable legs — TD scorers (model <b>anytime ≥12%</b>, a real role &amp; a snap last week, no 🎲/⚠) and/or player props — and I'll rank the best same-game parlays here.`+parlayNote(); return; }
   // a player can carry one TD leg AND one prop leg (the classic "scores + goes over"), never two of the same kind
@@ -1811,7 +1836,7 @@ function addBet(){
   else { player=o.name; key=o.key; market=mkt; mp = o.p ? o.p[mkt] : (o.dst ? o.dst[mkt] : null); }
   let rk=null, cf=null;   // rank for the log's plan (confidence-adjusted Kelly), like bets logged from the card
   if(mp!=null){ const r=evalBet(mp, odds); if(r){ const cn=confFor(o.p||{dst:true}, market, r); cf=cn.score; rk=r.edge>0?+(cn.score*r.edge/(1-r.bimp)).toFixed(5):0; } }
-  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*9999), ts:new Date().toISOString(), game, key, player, market, odds, modelProb:(mp!=null?+mp.toFixed(4):null), rk, cf, stake, closeOdds:'', result:'pending'});
+  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*9999), ts:new Date().toISOString(), ...koStamp(game), game, key, player, market, odds, modelProb:(mp!=null?+mp.toFixed(4):null), rk, cf, stake, closeOdds:'', result:'pending'});
   saveBets(); $('betOdds').value=''; $('betCustom').value=''; renderBets(); betFlash('logged ✓');
 }
 // Fill Close from a pasted board: matches your OPEN bets (pending, or logged in the last 2 days without a
@@ -1977,17 +2002,17 @@ function fillGameFromOdds(d){
     const k=s+'|'+p._key, cur=LAST.propMap[k]||(LAST.propMap[k]={line:null, over:'', under:'', alts:[]});
     if(cur.line!==o.line){ cur.line=o.line; cur.over=''; cur.under=''; }
     cur[o.side==='O'?'over':'under']=fmtAm(o.price); if(o.fd) LAST.mktMap['FD#'+propMktKey(s,o.side,o.line)+'#'+p._key]=o.fd; n++; }
-  // your open bets on this game that FanDuel no longer offers (prop pulled, or the line moved): flag them so the card stops
-  // recommending them (it kept their old edge — the user saw three "bet" props that were gone from FanDuel)
+  // your open bets on this game vs FanDuel's fresh board. Still offered (same line, or the line MOVED): remember the
+  // current price as b.cur = {q: price at your line, l: FanDuel's line now, o: its price there} — the log shows it as a
+  // live CLV read (a lowered line on your under is good CLV, not a missing bet). Not offered at all -> b.offBoard, and the
+  // card stops recommending it.
   const gNow=curGameId(); let ch=false;
-  for(const b of bets){ if(b.result!=='pending'||b.game!==gNow||!b.key||b.market==='custom'||String(b.key).startsWith('DST|')) continue;
-    let gone=null;
-    if(isPropMkt(b.market)){ const [,st,side,line]=b.market.split('|'), arr=d.props[st]; if(!arr) continue;   // that market wasn't in this pull
-      const mine=arr.filter(x=>sameName(x.name,b.player));
-      if(!mine.length) gone='FanDuel no longer offers it';
-      else if(!mine.some(x=>x.side===side && x.line===+line)) gone='line moved to '+[...new Set(mine.map(x=>x.line))].sort((x,y)=>x-y).join(' / '); }
-    else { const arr=d.td[b.market]; if(!arr) continue; if(!arr.some(x=>sameName(x.name,b.player))) gone='FanDuel no longer offers it'; }
-    if(gone){ if(b.offBoard!==gone){ b.offBoard=gone; ch=true; } } else if(b.offBoard){ delete b.offBoard; ch=true; } }
+  for(const b of bets){ if(b.result!=='pending'||b.game!==gNow||!b.key||b.market==='custom') continue;
+    const isP=isPropMkt(b.market); if(!(isP ? d.props[b.market.split('|')[1]] : d.td[b.market])) continue;   // that market wasn't in this pull
+    const v=closeView(b,d);
+    if(v){ const was=b.cur||{}; if(was.q!==v.odds || was.l!==v.line){ b.cur={q:v.odds, l:v.line, o:v.raw, t:Date.now()}; ch=true; }
+      if(b.offBoard){ delete b.offBoard; ch=true; } }
+    else if(!String(b.key).startsWith('DST|') && b.offBoard!=='FanDuel no longer offers it'){ b.offBoard='FanDuel no longer offers it'; delete b.cur; ch=true; } }
   renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder(); boardChanged();
   if(ch){ saveBets(); renderBets(); }
   return {n, miss:[...miss]};
@@ -2019,18 +2044,25 @@ function sameName(a,b){ const x=normName(cleanName(a)), y=normName(b); if(x===y)
   return la===lb && (ta[0]||'')[0]===(tb[0]||'')[0]; }
 // one bet's Close from a game's odds: 'filled' | 'est' (the prop line moved — translated to your line) | 'missing'
 function applyClose(b, d){
-  if(isPropMkt(b.market)){ const [,s,side,l]=b.market.split('|'), o=(d.props[s]||[]).find(x=>x.side===side && sameName(x.name,b.player));
-    if(!o) return 'missing';
-    if(+l===o.line){ b.closeOdds=fmtAm(o.price); delete b.closeEst; return 'filled'; }
-    // the line moved: translate the close to your line with the model's own distribution (same as the paste)
-    const q=b.pmu>0&&PM&&PM.tables[s]?[propSides(b.pmu,s,+l),propSides(b.pmu,s,o.line)]:null;
-    if(q&&q[0]&&q[1]){ const at=x=>side==='O'?x.over:x.under; b.closeOdds=probToAmerican(clamp(americanToProb(o.price)+at(q[0])-at(q[1]),0.02,0.98)); b.closeEst=`${side} ${o.line} ${fmtAm(o.price)}`; return 'est'; }
-    return 'missing'; }
+  const v=closeView(b,d); if(!v||v.odds==null) return 'missing';
+  b.closeOdds=v.odds;
+  if(v.est){ b.closeEst=`${b.market.split('|')[2]} ${v.line} ${v.raw}`; return 'est'; }
+  delete b.closeEst; return 'filled';
+}
+// FanDuel's price for one logged bet inside a game's odds: {odds: the price AT YOUR LINE, est, line, raw}; null = FanDuel
+// doesn't offer it at all. When a prop's line moved, the nearest line's price is translated to your line with the model's
+// own distribution (odds null if the bet has no projection to translate with).
+function closeView(b, d){
+  if(isPropMkt(b.market)){ const [,s,side,l]=b.market.split('|'), mine=(d.props[s]||[]).filter(x=>x.side===side && sameName(x.name,b.player));
+    if(!mine.length) return null;
+    const o=mine.slice().sort((x,y)=>Math.abs(x.line-l)-Math.abs(y.line-l))[0], raw=fmtAm(o.price);
+    if(o.line===+l) return {odds:raw, est:false, line:o.line, raw};
+    const q=b.pmu>0&&PM&&PM.tables[s]?[propSides(b.pmu,s,+l),propSides(b.pmu,s,o.line)]:null, at=x=>side==='O'?x.over:x.under;
+    return {odds:q&&q[0]&&q[1] ? probToAmerican(clamp(americanToProb(o.price)+at(q[0])-at(q[1]),0.02,0.98)) : null, est:true, line:o.line, raw}; }
   let o;
   if(String(b.key||'').startsWith('DST|')){ const t=b.key.split('|')[1], tn=[S.teams[t].short, S.teams[t].name].map(normName); o=(d.td[b.market]||[]).find(x=>tn.some(n=>normName(x.name).includes(n))); }
   else o=(d.td[b.market]||[]).find(x=>sameName(x.name,b.player));
-  if(o){ b.closeOdds=fmtAm(o.price); delete b.closeEst; return 'filled'; }
-  return 'missing';
+  return o ? {odds:fmtAm(o.price), est:false, line:null, raw:fmtAm(o.price)} : null;
 }
 async function pullCloses(){
   const msg=$('closeMsg'); if(!oddsKey()){ msg.innerHTML=oddsWhy({status:'nokey'})+' (in the Price this game panel)'; return; }
@@ -2070,11 +2102,11 @@ async function espnEventsFor(bs){
   const cur=await activeWeek(), type=(cur.season&&cur.season.type)||2, wk=(cur.week&&cur.week.number)||1;
   const back=Math.min(4, Math.ceil((Date.now()-oldest)/(7*86400e3))+1), all=new Map();
   for(let i=0;i<=back;i++){ let w=wk-i, t=type; if(w<1){ if(t!==3) break; t=2; w+=18; }
-    try{ const j=await (await fetch(`${SB_URL}?seasontype=${t}&week=${w}`,{cache:'no-store'})).json(); for(const e of (j.events||[])) all.set(String(e.id), e); }catch(e){} }
+    try{ const j=await (await fetch(`${SB_URL}?seasontype=${t}&week=${w}`,{cache:'no-store'})).json(); for(const e of (j.events||[])){ e._wk=t===2?w:null; all.set(String(e.id), e); } }catch(e){} }
   const out=[];
   for(const e of all.values()){ const c=e.competitions&&e.competitions[0]; if(!c) continue; const side={};
     for(const x of (c.competitors||[])){ const ab=espnIdToAbbr[String(x.team&&x.team.id)]; if(ab) side[x.homeAway]={ab, tid:String(x.team.id)}; }
-    if(side.home&&side.away) out.push({id:String(e.id), game:side.away.ab+'@'+side.home.ab, kickoff:e.date, final:!!(e.status&&e.status.type&&e.status.type.completed), tids:[side.away.tid, side.home.tid]}); }
+    if(side.home&&side.away) out.push({id:String(e.id), game:side.away.ab+'@'+side.home.ab, kickoff:e.date, final:!!(e.status&&e.status.type&&e.status.type.completed), tids:[side.away.tid, side.home.tid], week:e._wk||null}); }
   return out;
 }
 // the game a bet is on: same matchup, the first kickoff after it was logged (a day's slack)
@@ -2127,11 +2159,15 @@ async function autoSettle(manual){
   if(!manual && Date.now()-autoLast<10*60e3) return;
   const pend=AUTO.settle||manual ? bets.filter(b=>b.result==='pending' && ((b.game && b.key && b.market!=='custom') || (b.legs&&b.legs.length))) : [];
   const noClose=AUTO.close ? bets.filter(b=>b.game && b.key && b.market!=='custom' && !b.closeOdds && Date.now()-(Date.parse(b.ts)||0)<14*86400e3) : [];
-  if(!pend.length && !noClose.length){ if(manual){ AUTO_NOTE='🤖 no open bets to settle'; renderAutoNote(); } return; }
+  const noKo=bets.filter(b=>!b.ko && !b.koX && (b.game || (b.legs&&b.legs.length)) && Date.now()-(Date.parse(b.ts)||0)<28*86400e3);   // logged before bets carried a kickoff
+  if(!pend.length && !noClose.length && !noKo.length){ if(manual){ AUTO_NOTE='🤖 no open bets to settle'; renderAutoNote(); } return; }
   autoBusy=true; autoLast=Date.now(); if(manual){ AUTO_NOTE='🤖 checking ESPN…'; renderAutoNote(); }
   try{
-    const evs=await espnEventsFor(pend.concat(noClose));
+    const evs=await espnEventsFor(pend.concat(noClose, noKo));
     let settled=0, byHand=0, changed=false;
+    for(const b of noKo){ const es=(b.legs&&b.legs.length?b.legs:[b]).map(l=>eventFor(evs,{game:l.game, ts:b.ts})).filter(Boolean).sort((x,y)=>Date.parse(x.kickoff)-Date.parse(y.kickoff));
+      if(es.length){ b.ko=es[0].kickoff; if(es[0].week) b.wk=es[0].week; } else b.koX=1;   // koX: not found, don't look again
+      changed=true; }
     for(const b of pend){
       const legs=b.legs&&b.legs.length ? b.legs : [{game:b.game, key:b.key, market:b.market, name:b.player}];
       const res=[]; let ready=true;
@@ -2363,7 +2399,8 @@ function renderSlate(){
   }
   out.innerHTML=html+notes;
   const lp=$('slateLog'); if(lp) lp.onclick=()=>{ let n=0; for(const c of SLATE.picks) if(logBetFrom(Object.assign({market:'anytime'},c), c.stake, c.game)) n++; if(n){ saveBets(); renderBets(); } lp.textContent=n?`✓ logged ${n}`:'already logged'; };
-  const logParlay=(PP, stake, label, extra)=>{ bets.unshift(Object.assign({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), game:'', key:null, player:label+PP.legs.map(l=>l.name).join(' + '), market:'custom', odds:amStr(decToAmerican(PP.D)), modelProb:+PP.P.toFixed(4), stake, closeOdds:'', result:'pending',
+  const logParlay=(PP, stake, label, extra)=>{ const first=PP.legs.map(l=>l.game).filter(koOf).sort((x,y)=>Date.parse(koOf(x))-Date.parse(koOf(y)))[0];
+    bets.unshift(Object.assign({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), ...(first?koStamp(first):{}), game:'', key:null, player:label+PP.legs.map(l=>l.name).join(' + '), market:'custom', odds:amStr(decToAmerican(PP.D)), modelProb:+PP.P.toFixed(4), stake, closeOdds:'', result:'pending',
     legs:PP.legs.map(l=>({game:l.game, key:l.key, market:l.market||'anytime', name:l.name}))}, extra||{})); saveBets(); renderBets(); };
   const lpp=$('slateLogParlay'); if(lpp) lpp.onclick=()=>{ logParlay(P, slateParlayStake(P,bank), 'Parlay: '); lpp.textContent='✓ logged'; };
   const ls=$('slateSlip'); if(ls) ls.onclick=()=>{ let n=0; for(const l of P.legs) if(!slipHas(l.game,l.key,l.market)){ slip.push(Object.assign({},l)); n++; } if(n){ saveSlip(); renderSlip(); } ls.textContent=n?`✓ added ${n}`:'already in slip'; };
@@ -2398,80 +2435,102 @@ function importData(file){
     }catch(e){ betFlash('that file isn\'t an export from this app'); } };
   rd.readAsText(file);
 }
+// ---------- bet log: one summary line, then weeks -> games -> bets; everything else lives under "More" ----------
+// NFL weeks run Tuesday -> Monday (local time). A bet belongs to the week of its kickoff (b.ko: stamped when logged, or
+// back-filled from ESPN by autoSettle), else the day it was logged.
+const weekStart=t=>{ const d=new Date(t); d.setHours(0,0,0,0); d.setDate(d.getDate()-((d.getDay()+5)%7)); return d.getTime(); };
+const betWhen=b=>Date.parse(b.ko)||Date.parse(b.ts)||0;
+// how long before kickoff a bet was logged (hours) — the "when you bet" insight buckets it
+const leadH=b=>{ const k=Date.parse(b.ko), t=Date.parse(b.ts); return k&&t ? (k-t)/3.6e6 : null; };
+const leadTxt=h=>h<0?'after kickoff':h>=48?Math.round(h/24)+'d out':h>=1?Math.round(h)+'h out':Math.max(1,Math.round(h*60))+'m out';
+const LEAD_B=[['3+ days out',72,Infinity],['1–3 days out',24,72],['3–24 hours out',3,24],['last 3 hours',0,3]];
+let TIMING_KIND='prop';
 function renderBets(){
-  const body=$('betBody'); if(!body) return;
-  if(!bets.length){ body.innerHTML='<div class="muted">No bets logged yet. Log a few (real or paper), fill in the closing line after kickoff, and your CLV + ROI build up here. Positive CLV over ~50–100 bets = a real edge; flat/negative = the market already had it priced.</div>'; return; }
-  let staked=0, net=0, w=0, l=0, pu=0, clvSum=0, clvN=0, clvPos=0;
-  const drows = bets.map(b=>{ const dec=oddsDec(b.odds), cd=oddsDec(b.closeOdds); let clv=null;
-    if(dec&&cd){ clv=dec/cd-1; clvSum+=clv; clvN++; if(clv>0)clvPos++; }
-    let pl=null; if(b.result==='win'){ w++; staked+=b.stake; pl=b.stake*((dec||1)-1); net+=pl; }
-    else if(b.result==='loss'){ l++; staked+=b.stake; pl=-b.stake; net+=pl; }
-    else if(b.result==='push'){ pu++; pl=0; }
-    return {b,dec,clv,pl}; });
-  const roi = staked? net/staked : null, avgClv = clvN? clvSum/clvN : null;
-  // live calibration: on settled bets the sim priced, how many hits did it expect vs how many landed?
-  const cal=bets.filter(b=>b.modelProb!=null&&(b.result==='win'||b.result==='loss'));
-  const calExp=cal.reduce((a,b)=>a+b.modelProb,0), calHit=cal.filter(b=>b.result==='win').length;
-  const g=v=>v>0?'ev-pos':(v<0?'ev-neg':''); const sgn=v=>(v>=0?'+':'')+v;
-  let html=`<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:baseline;margin-bottom:9px;padding:9px 11px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;font-size:13px">`+
-    `<span><b>${bets.length}</b> logged</span>`+
-    `<span>settled <b>${w}-${l}${pu?'-'+pu:''}</b></span>`+
-    `<span>staked <b>${staked.toFixed(1)}u</b></span>`+
-    `<span>net <b class="${g(net)}">${sgn(net.toFixed(2))}u</b></span>`+
-    `<span>ROI <b class="${g(roi)}">${roi==null?'—':sgn((roi*100).toFixed(1))+'%'}</b></span>`+
-    `<span>avg CLV <b class="${g(avgClv)}">${avgClv==null?'—':sgn((avgClv*100).toFixed(1))+'%'}</b>${clvN?` <span class="muted">(${Math.round(clvPos/clvN*100)}% beat close)</span>`:''}</span>`+
-    `</div>`;
-  // scoreboard: the book's prices need a certain number of hits to break even; the model claims more.
-  // Results only become meaningful once the gap is bigger than luck — this says how far along you are.
-  if(cal.length){
-    const decs=cal.map(b=>oddsDec(b.odds)||2), be=decs.reduce((a,d)=>a+1/d,0);
-    const sd=Math.sqrt(cal.reduce((a,b)=>a+b.modelProb*(1-b.modelProb),0));
-    const lo=Math.max(0,Math.round(calExp-1.28*sd)), hi=Math.round(calExp+1.28*sd);
-    const gap=(calExp-be)/cal.length, need=gap>0?Math.round((2*sd/Math.sqrt(cal.length)/gap)**2):null;
-    const verdict = calHit<lo ? '<b style="color:var(--bad)">below the normal range — worth a look</b>' : calHit>hi ? '<b class="ev-pos">above the normal range</b>' : 'inside the normal range for these bets';
-    html+=`<div style="margin:-2px 0 10px;padding:9px 11px;border:1px dashed var(--line2);border-radius:10px;font-size:13px;line-height:1.55">`+
-      `<b>Scoreboard</b> <span class="muted">(${cal.length} settled bets the sim priced)</span> — your prices needed <b>${be.toFixed(1)}</b> hits to break even · the model expected <b>${calExp.toFixed(1)}</b> · you got <b>${calHit}</b>, ${verdict} (${lo}–${hi}).`+
-      (need?` <span class="muted">At this edge it takes about <b>${need}</b> settled bets before results alone can tell skill from luck (${Math.min(100,Math.round(cal.length/need*100))}% of the way) — ${clvN?'CLV below gets there much sooner.':'fill the <b>Close</b> column (paste the closing board above) — CLV tells you far sooner.'}</span>`:' <span class="muted">The model isn\'t claiming an edge on these prices.</span>')+`</div>`;
-  }
-  // fun picks keep their own running total, so they don't blur whether the real bets are working
-  const fr=drows.filter(d=>d.b.fun && d.pl!=null), fnet=fr.reduce((a,d)=>a+d.pl,0), fst=fr.reduce((a,d)=>a+(+d.b.stake||0),0);
-  if(bets.some(b=>b.fun)) html+=`<div class="muted" style="font-size:12px;margin:-2px 0 10px">🎉 <b>Fun picks</b>: ${fr.length} settled · ${fr.filter(d=>d.b.result==='win').length} won · <b class="${g(fnet)}">${sgn(fnet.toFixed(2))}u</b>${fst?` (${sgn((fnet/fst*100).toFixed(0))}% of ${fst.toFixed(1)}u staked)`:''} — expected over time: about −${Math.round(FUN_EDGE*100)}%.</div>`;
-  // one section per game: games with open bets first (soonest kickoff), then settled ones (newest first).
-  // Open games get a plan from the same rule as Your card — ★ BET the best ones, cut the rest (one click trims).
-  const groups=new Map(); drows.forEach(d=>{ const k=d.b.game||''; if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(d); });
-  const kick=gm=>{ const s=(S.schedule||[]).find(x=>x.away+'@'+x.home===gm); return s?new Date(s.kickoff).getTime():null; };
-  const G=[...groups.entries()].map(([gm,rows])=>({gm, rows, pend:rows.filter(r=>r.b.result==='pending').length, last:Math.max(...rows.map(r=>Date.parse(r.b.ts)||0))}))
-    .sort((x,y)=>((y.pend>0)-(x.pend>0)) || (x.pend&&y.pend ? ((kick(x.gm)||x.last)-(kick(y.gm)||y.last)) : (y.last-x.last)));
-  const head=['Bet','Plan','Odds','Model','Close','CLV','Stake','Result','P/L',''].map((h,i)=>`<th class="${i<2?'l':''}" style="cursor:default;position:static">${h}</th>`).join('');
+  const body=$('betBody'), ins=$('betInsights'); if(!body) return;
+  if(!bets.length){ body.innerHTML='<div class="muted">No bets yet. Log picks with the 📓 buttons — results and closing lines fill themselves in.</div>'; if(ins) ins.innerHTML='<span class="muted">Nothing yet.</span>'; return; }
+  const g=v=>v>0?'ev-pos':(v<0?'ev-neg':''), sgn=v=>(v>=0?'+':'')+v, pc=v=>sgn((v*100).toFixed(1))+'%';
+  const rows=bets.map(b=>{ const dec=oddsDec(b.odds), cd=oddsDec(b.closeOdds), nd=!cd&&b.cur&&b.cur.q?oddsDec(b.cur.q):null;
+    return {b, dec, clv:dec&&cd?dec/cd-1:null, live:dec&&nd?dec/nd-1:null, pl:b.result==='win'?b.stake*((dec||1)-1):b.result==='loss'?-b.stake:b.result==='push'?0:null}; });
+  const agg=R=>{ let w=0,l=0,p=0,st=0,net=0,cs=0,cn=0,cp=0,open=0;
+    for(const r of R){ const x=r.b.result; if(x==='win'||x==='loss'){ x==='win'?w++:l++; st+=+r.b.stake||0; net+=r.pl; } else if(x==='push') p++; else open++;
+      if(r.clv!=null){ cs+=r.clv; cn++; if(r.clv>0) cp++; } }
+    return {n:R.length, w, l, p, st, net, roi:st?net/st:null, clv:cn?cs/cn:null, cn, cp, open}; };
+  const rec=a=>`${a.w}-${a.l}${a.p?'-'+a.p:''}`;
+  const A=agg(rows), F=agg(rows.filter(r=>r.b.fun));
+  let html=`<div class="logsum"><span>Record <b>${rec(A)}</b></span>`+
+    `<span>P/L <b class="${g(A.net)}">${sgn(A.net.toFixed(2))}u</b></span>`+
+    `<span>ROI <b class="${g(A.roi)}">${A.roi==null?'—':pc(A.roi)}</b></span>`+
+    `<span title="CLV = how much better your price was than FanDuel's closing price. Beat the close over many bets and profit follows — it shows long before ROI does.">CLV <b class="${g(A.clv)}">${A.clv==null?'—':pc(A.clv)}</b>${A.cn?` <span class="muted">(${Math.round(A.cp/A.cn*100)}% beat the close)</span>`:''}</span>`+
+    (A.open?`<span><b>${A.open}</b> open</span>`:'')+
+    (F.n?`<span class="muted" title="fun picks keep their own total — expected to lose about ${Math.round(FUN_EDGE*100)}% over time">🎉 fun <b class="${g(F.net)}">${sgn(F.net.toFixed(2))}u</b></span>`:'')+`</div>`;
+
+  const weeks=new Map(); for(const r of rows){ const k=weekStart(betWhen(r.b)); (weeks.get(k)||weeks.set(k,[]).get(k)).push(r); }
+  const kick=gm=>{ const s=SCHED.find(x=>x.away+'@'+x.home===gm)||(S.schedule||[]).find(x=>x.away+'@'+x.home===gm); return s?new Date(s.kickoff).getTime():null; };
+  const fmtD=t=>new Date(t).toLocaleDateString([], {month:'short', day:'numeric'}), fmtT=t=>new Date(t).toLocaleString([], {weekday:'short', hour:'numeric', minute:'2-digit'});
+  const head=['Bet','Odds','Close · CLV','Stake','Result','P/L',''].map((h,i)=>`<th class="${i<1?'l':''}" style="cursor:default;position:static">${h}</th>`).join('');
   PLANS=new Map();
-  for(const grp of G){
-    const plan=grp.gm?planFor(grp.gm):null, planOf=new Map();
-    if(plan){ plan.picks.forEach(c=>planOf.set(c.bet.id,{keep:true, stake:c.stake})); plan.skipped.forEach(s=>planOf.set(s.c.bet.id,{keep:false, why:s.why})); PLANS.set(grp.gm, plan); }
-    const gw=grp.rows.filter(r=>r.b.result==='win').length, gl=grp.rows.filter(r=>r.b.result==='loss').length, gnet=grp.rows.reduce((a,r)=>a+(r.pl||0),0), cuts=plan?plan.skipped.length:0;
-    const open=LOGOPEN.has(grp.gm)?LOGOPEN.get(grp.gm):grp.pend>0;
-    html+=`<details class="gamegrp" data-g="${esc(grp.gm)}"${open?' open':''}><summary><b>${grp.gm?fmtGame(grp.gm):'Other / custom props'}</b> <span class="muted">· ${grp.rows.length} bet${grp.rows.length>1?'s':''}${grp.pend?` · ${grp.pend} open`:''}${gw+gl?` · ${gw}-${gl}`:''}</span>`+
-      `${gw+gl?` <b class="${g(gnet)}">${sgn(gnet.toFixed(2))}u</b>`:''}${plan?` · <b class="ev-pos">bet ${plan.picks.length}</b>${cuts?` · <span style="color:var(--warn);font-weight:700">cut ${cuts}</span>`:''}`:''}</summary><div class="grpbody">`;
-    if(cuts) html+=`<div style="font-size:13px;margin:2px 0 8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>Bet the <b>${plan.picks.length}</b> marked <span class="vbadge vb-take">★ BET</span> — the best in this game (max ${maxPerGame()} per game, ${MAX_PER_TEAM} per team, one per player) — and drop the other ${cuts}.</span>`+
-      `<button class="statussel trimbtn" data-g="${esc(grp.gm)}" style="padding:4px 11px;font-size:12px">✂ Trim to the best ${plan.picks.length}</button></div>`;
-    html+=`<div style="overflow-x:auto"><table style="margin-top:0"><thead><tr>${head}</tr></thead><tbody>`;
-    grp.rows.forEach(({b,dec,clv,pl})=>{ const P=planOf.get(b.id);
-      const planCell = b.result!=='pending' ? (b.fun?'<span class="muted" title="a fun pick">🎉</span>':'') : b.fun ? '<span class="vbadge" title="a fun pick — outside the card and the plan">🎉 fun</span>' : !P ? '<span class="muted" title="no model price, so it isn\'t part of the plan">—</span>'
-        : P.keep ? `<span class="vbadge vb-take" title="bet this${Math.abs((+b.stake||0)-P.stake)>0.05?' — suggested stake '+P.stake.toFixed(1)+'u':''}">★ BET ${P.stake.toFixed(1)}u</span>`
-        : `<span class="vbadge vb-edge" title="${esc(P.why)}">cut</span>`;
-      html+=`<tr${P&&P.keep?' class="rowtake"':''}><td class="l"><b>${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)}</span>${b.offBoard&&b.result==='pending'?` <span style="color:var(--warn);font-size:12px" title="${esc('not on FanDuel now: '+b.offBoard+' — if you didn\'t place it, delete it (✕)')}">⚠ off FanDuel</span>`:''}</td><td class="l">${planCell}</td>`+
-        `<td class="odds">${esc(b.odds)}</td>`+
-        `<td>${b.modelProb!=null?pct(b.modelProb):'—'}</td>`+
-        `<td style="white-space:nowrap"><input class="bookin betclose" data-id="${b.id}" value="${(b.closeOdds||'').replace(/"/g,'&quot;')}" placeholder="close" style="width:70px">${b.closeEst?`<span class="muted" title="the line moved — closed ${esc(b.closeEst)}; this is the equivalent price at your line (model-based estimate)"> ≈</span>`:''}</td>`+
-        `<td class="${clv!=null?g(clv):''}">${clv==null?'—':sgn((clv*100).toFixed(1))+'%'}</td>`+
-        `<td>${b.stake}u</td>`+
-        `<td style="white-space:nowrap"><select class="statussel betres" data-id="${b.id}">${['pending','win','loss','push'].map(s=>`<option ${s===b.result?'selected':''}>${s}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc('auto-settled from ESPN: '+b.auto)}">🤖</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
-        `<td class="${pl!=null?g(pl):''}">${pl==null?'—':sgn(pl.toFixed(2))}</td>`+
-        `<td><button class="statussel betdel" data-id="${b.id}" style="padding:0 7px;color:var(--warn)">✕</button></td></tr>`;
-    });
-    html+='</tbody></table></div></div></details>';
-  }
-  html+=`<div class="muted" style="margin-top:8px;font-size:12px;line-height:1.5"><b>Plan</b>: for games with open bets, the same rule as Your card marks the best ones <b>★ BET</b> (with the suggested stake) and the rest <b>cut</b> — so you can log every edge as you go, then hit <b>✂ Trim</b>. <b>CLV</b> = how much better your price was than the closing line (dec you / dec close − 1). It's the leading indicator: beat the close consistently and profit follows; it shows up long before ROI does through the variance. <b>Model</b> is the sim's probability at log time (blank for props the sim doesn't cover). Fill <b>Close</b> after the line settles. A <b>≈</b> close means a prop's line moved before kickoff — it's the equivalent price at your line, estimated from the model's own distribution.</div>`;
+  [...weeks.keys()].sort((a,b)=>b-a).forEach((ws,wi)=>{
+    const R=weeks.get(ws), a=agg(R), wk=(R.find(r=>r.b.wk)||{b:{}}).b.wk;
+    const wOpen=LOGOPEN.has('W'+ws)?LOGOPEN.get('W'+ws):(wi===0||a.open>0);
+    html+=`<details class="weekgrp" data-w="${ws}"${wOpen?' open':''}><summary><b>${wk?'Week '+wk:'Week of '+fmtD(ws)}</b> <span class="muted">${wk?fmtD(ws)+' – '+fmtD(ws+6*86400e3)+' · ':''}${a.n} bet${a.n>1?'s':''}${a.open?` · ${a.open} open`:''}${a.w+a.l?` · ${rec(a)}`:''}</span>`+
+      `${a.w+a.l?` <b class="${g(a.net)}">${sgn(a.net.toFixed(2))}u</b>`:''}${a.clv!=null?` <span class="muted">· CLV</span> <b class="${g(a.clv)}">${pc(a.clv)}</b>`:''}</summary><div class="wkbody">`;
+    const groups=new Map(); R.forEach(r=>{ const k=r.b.game||''; (groups.get(k)||groups.set(k,[]).get(k)).push(r); });
+    const G=[...groups.entries()].map(([gm,rs])=>({gm, rs, pend:rs.filter(r=>r.b.result==='pending').length, t:(gm&&kick(gm))||Math.min(...rs.map(r=>betWhen(r.b)))}))
+      .sort((x,y)=>((y.pend>0)-(x.pend>0)) || (!x.gm-!y.gm) || (x.t-y.t));
+    for(const grp of G){
+      const plan=grp.gm&&grp.pend?planFor(grp.gm):null, planOf=new Map(), ga=agg(grp.rs), key=grp.gm+'#'+ws;
+      if(plan){ plan.picks.forEach(c=>planOf.set(c.bet.id,{keep:true, stake:c.stake})); plan.skipped.forEach(s=>planOf.set(s.c.bet.id,{keep:false, why:s.why})); PLANS.set(grp.gm, plan); }
+      const cuts=plan?plan.skipped.length:0, open=LOGOPEN.has(key)?LOGOPEN.get(key):grp.pend>0;
+      html+=`<details class="gamegrp" data-k="${esc(key)}"${open?' open':''}><summary><b>${grp.gm?fmtGame(grp.gm):'Parlays &amp; custom bets'}</b> <span class="muted">· ${ga.n} bet${ga.n>1?'s':''}${ga.open?` · ${ga.open} open`:''}${ga.w+ga.l?` · ${rec(ga)}`:''}</span>`+
+        `${ga.w+ga.l?` <b class="${g(ga.net)}">${sgn(ga.net.toFixed(2))}u</b>`:''}${cuts?` · <span style="color:var(--warn);font-weight:700">${cuts} to cut</span>`:''}</summary><div class="grpbody">`;
+      if(cuts) html+=`<div style="font-size:13px;margin:2px 0 8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>Keep the <b>${plan.picks.length}</b> marked <span class="vbadge vb-take">★</span> (best in this game: max ${maxPerGame()} per game, ${MAX_PER_TEAM} per team, one per player), drop the other ${cuts}.</span>`+
+        `<button class="statussel trimbtn" data-g="${esc(grp.gm)}" style="padding:4px 11px;font-size:12px">✂ Trim to the best ${plan.picks.length}</button></div>`;
+      html+=`<div style="overflow-x:auto"><table style="margin-top:0"><thead><tr>${head}</tr></thead><tbody>`;
+      grp.rs.forEach(({b,dec,clv,live,pl})=>{ const P=planOf.get(b.id), lh=leadH(b), mine=isPropMkt(b.market)?+b.market.split('|')[3]:null;
+        const moved=mine!=null && b.cur && b.cur.l!=null && b.cur.l!==mine, arrow=moved?(b.cur.l<mine?'▼':'▲')+b.cur.l+' ':'';
+        const tags=[ b.fun?'<span title="a fun pick">🎉</span>':'',
+          b.result==='pending'&&P ? (P.keep?`<span class="vbadge vb-take" title="the plan keeps this one${Math.abs((+b.stake||0)-P.stake)>0.05?' — suggested stake '+P.stake.toFixed(1)+'u':''}">★ ${P.stake.toFixed(1)}u</span>`:`<span class="vbadge vb-edge" title="${esc(P.why)}">cut</span>`) : '',
+          b.offBoard&&b.result==='pending'?`<span style="color:var(--warn);font-size:12px" title="${esc(b.offBoard+' — if you didn\'t place it, delete it (✕)')}">⚠ off FanDuel</span>`:'',
+          lh!=null?`<span class="muted" style="font-size:11px" title="${esc('logged '+fmtT(b.ts)+' · kickoff '+fmtT(b.ko))}">⏱ ${leadTxt(lh)}</span>`:'' ].filter(Boolean).join(' ');
+        // CLV: final once Close is in; before that a live read from the last pull (≈), with ▼/▲ when FanDuel moved the prop's line
+        const clvTxt = clv!=null ? ` <b class="${g(clv)}">${pc(clv)}</b>${b.closeEst?`<span class="muted" title="the line moved — closed ${esc(b.closeEst)}; this is the equivalent price at your line (model-based estimate)"> ≈</span>`:''}`
+          : b.result!=='pending'||!b.cur ? ''
+          : live!=null ? ` <span class="${g(live)}" style="font-size:12px;opacity:.85" title="${esc((moved?`FanDuel moved the line to ${b.cur.l} (${b.cur.o}) — about ${b.cur.q} at your line. `:`FanDuel now: ${b.cur.q}. `)+'A live read, not final until the close.')}">${arrow}≈${pc(live)}</span>`
+          : moved ? ` <span class="muted" style="font-size:12px" title="FanDuel moved the line to ${b.cur.l} (${esc(b.cur.o||'')})">${arrow}</span>` : '';
+        html+=`<tr${P&&P.keep?' class="rowtake"':''}><td class="l"><b${b.modelProb!=null?` title="chance when logged: ${pct(b.modelProb)}"`:''}>${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)}</span> ${tags}</td>`+
+          `<td class="odds">${esc(b.odds)}</td>`+
+          `<td style="white-space:nowrap"><input class="bookin betclose" data-id="${b.id}" value="${(b.closeOdds||'').replace(/"/g,'&quot;')}" placeholder="close" style="width:62px">${clvTxt}</td>`+
+          `<td>${b.stake}u</td>`+
+          `<td style="white-space:nowrap"><select class="statussel betres" data-id="${b.id}">${['pending','win','loss','push'].map(s=>`<option ${s===b.result?'selected':''}>${s}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc('auto-settled from ESPN: '+b.auto)}">🤖</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
+          `<td class="${pl!=null?g(pl):''}">${pl==null?'—':sgn(pl.toFixed(2))}</td>`+
+          `<td><button class="statussel betdel" data-id="${b.id}" style="padding:0 7px;color:var(--warn)">✕</button></td></tr>`;
+      });
+      html+='</tbody></table></div></div></details>';
+    }
+    html+='</div></details>';
+  });
   body.innerHTML=html;
+
+  // ---- insights (under More): the scoreboard, and results by how long before kickoff you bet
+  if(!ins) return;
+  let ih='';
+  const cal=bets.filter(b=>b.modelProb!=null&&(b.result==='win'||b.result==='loss'));
+  if(cal.length){
+    const calExp=cal.reduce((a,b)=>a+b.modelProb,0), calHit=cal.filter(b=>b.result==='win').length, be=cal.reduce((a,b)=>a+1/(oddsDec(b.odds)||2),0);
+    const sd=Math.sqrt(cal.reduce((a,b)=>a+b.modelProb*(1-b.modelProb),0)), lo=Math.max(0,Math.round(calExp-1.28*sd)), hi=Math.round(calExp+1.28*sd);
+    const verdict = calHit<lo ? '<b style="color:var(--bad)">below the normal range</b>' : calHit>hi ? '<b class="ev-pos">above the normal range</b>' : 'inside the normal range';
+    ih+=`<div style="font-size:13px;line-height:1.55"><b>Scoreboard</b> <span class="muted">(${cal.length} settled bets)</span> — break-even needed <b>${be.toFixed(1)}</b> hits · expected <b>${calExp.toFixed(1)}</b> · you got <b>${calHit}</b>, ${verdict} (${lo}–${hi}).</div>`;
+  }
+  const kind=b=>isPropMkt(b.market)?'prop':b.market==='custom'?'other':'td';
+  const TR=rows.filter(r=>TIMING_KIND==='all'||kind(r.b)===TIMING_KIND), noKo=TR.filter(r=>leadH(r.b)==null).length;
+  ih+=`<div style="margin-top:10px;font-size:13px"><b>⏱ When you bet</b> <select id="timingKind" class="statussel" style="font-size:12px"><option value="prop">player props</option><option value="td">TD scorers</option><option value="all">everything</option></select>`+
+    ` <span class="muted" style="font-size:12px">— early in the week or close to kickoff: which does better?</span></div>`+
+    `<table style="margin-top:4px;max-width:560px"><thead><tr>${['Logged','Bets','Record','ROI','CLV'].map((h,i)=>`<th class="${i<1?'l':''}" style="cursor:default;position:static">${h}</th>`).join('')}</tr></thead><tbody>`+
+    LEAD_B.map(([name,lo,hi])=>{ const a=agg(TR.filter(r=>{ const h=leadH(r.b); return h!=null&&h>=lo&&h<hi; }));
+      return `<tr><td class="l">${name}</td><td>${a.n}</td><td>${a.w+a.l?rec(a):'—'}</td><td class="${g(a.roi)}">${a.roi==null?'—':pc(a.roi)}</td><td class="${g(a.clv)}">${a.clv==null?'—':pc(a.clv)+` <span class="muted">(${a.cn})</span>`}</td></tr>`; }).join('')+
+    `</tbody></table><div class="muted" style="font-size:12px;margin-top:4px">CLV is the number to watch here — it separates good timing from luck far sooner than wins do; a row needs roughly 30+ bets before it means much.${noKo?` ${noKo} bet${noKo>1?'s have':' has'} no kickoff time yet (filled in the next time ESPN is checked).`:''}</div>`;
+  ins.innerHTML=ih;
+  const tk=$('timingKind'); if(tk){ tk.value=TIMING_KIND; tk.onchange=()=>{ TIMING_KIND=tk.value; renderBets(); }; }
 }
 
 // ---------- PLAYER PROPS: receptions / receiving / rushing / rush+rec / passing yards ----------
@@ -2849,6 +2908,10 @@ $('boardLogAll').onclick=()=>{ if(!LAST) return; let n=0;
 function setNavH(){ const n=$('jumpNav'); if(n) document.documentElement.style.setProperty('--navh', n.offsetHeight+'px'); }
 window.addEventListener('resize', setNavH);
 $('findParlays').onclick=computeParlays;
+// the picker stays collapsed until you use it; once opened it stays open on your next visit
+$('parlaySec').open=!!lsJ('nfltd_parlayopen', false);
+$('parlaySec').addEventListener('toggle', ()=>{ lsW('nfltd_parlayopen', $('parlaySec').open); if($('parlaySec').open) computeParlays(); });
+$('jumpNav').addEventListener('click', e=>{ const a=e.target.closest('a[href^="#"]'); if(!a) return; const t=document.getElementById(a.getAttribute('href').slice(1)); if(t&&t.tagName==='DETAILS') t.open=true; });
 $('parlayLegs').onchange=computeParlays;
 $('parlayMix').onchange=computeParlays;
 // cross-game slip wiring
@@ -2882,7 +2945,7 @@ $('betBody').addEventListener('change', e=>{ const id=e.target.dataset.id; if(!i
   else if(e.target.classList.contains('betres')){ b.result=e.target.value; delete b.auto; }   // your call replaces the auto one
   saveBets(); renderBets(); });
 $('betBody').addEventListener('click', e=>{ const t=e.target.closest('.trimbtn'); if(!t) return; const gm=t.dataset.g, plan=PLANS.get(gm); if(plan) trimLog(plan.picks, plan.skipped.map(x=>x.c.bet), fmtGame(gm)); });
-$('betBody').addEventListener('toggle', e=>{ const d=e.target; if(d&&d.classList&&d.classList.contains('gamegrp')) LOGOPEN.set(d.dataset.g, d.open); }, true);
+$('betBody').addEventListener('toggle', e=>{ const d=e.target; if(!d||!d.classList) return; if(d.classList.contains('gamegrp')) LOGOPEN.set(d.dataset.k, d.open); else if(d.classList.contains('weekgrp')) LOGOPEN.set('W'+d.dataset.w, d.open); }, true);
 $('betBody').addEventListener('click', e=>{ const d=e.target.closest('.betdel'); if(!d) return; bets=bets.filter(x=>x.id!==d.dataset.id); saveBets(); renderBets(); });
 $('oddsPaste').addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); applyPastedOdds(); }});
 // which TD market a one-price-per-name board fills (every market has its own box in the Markets panel)
@@ -2901,7 +2964,8 @@ $('maxGame').onchange=()=>{ try{ localStorage.setItem('nfltd_maxgame',$('maxGame
 $('simBtn').onclick=run;
 [['total','change'],['spread','change'],['favSel','change'],['outdoor','change'],['wind','change']].forEach(([id,ev])=> $(id).addEventListener(ev,maybeSim));
 loadSlip(); renderSlip();       // restore the cross-game slip from a previous visit
-loadBets(); renderBets();       // restore the bet log + CLV history
+loadBets(); for(const b of bets) if(/^line moved/.test(b.offBoard||'')) delete b.offBoard;   // moved lines are tracked as CLV now, not "off FanDuel"
+renderBets();       // restore the bet log + CLV history
 renderSlate();   // last picks you built (marked stale after 45 min) — after the log + slip load, so it can mark players already bet
 $('autoSettleChk').checked=AUTO.settle; $('autoCloseChk').checked=AUTO.close;
 $('autoSettleChk').onchange=e=>{ AUTO.settle=e.target.checked; lsW('nfltd_auto', AUTO); };
