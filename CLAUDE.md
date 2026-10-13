@@ -192,4 +192,12 @@ See README.md for what the model does and how it was validated.
   CREDITS: per-market switches (ODDSCFG.mk, mkOn/pickedMarkets) and freshMs() (20 min <3h to kickoff, 1h <24h, else 3h).
   On 2026-10-13 the 20K plan had 2,180 left: ~11K went to the two one-off backtests, the app itself burned ~850/day
   (9 credits per game opened + history closes at 10/market) — tell the user before adding anything that pulls more.
+- ★ PRICED TABLE FIT (2026-10-14, user screenshot: rows spilled under the sidebar after book tags + $ stakes were added):
+  #boardTable is sized by CONTAINER queries on .bmain (the sidebar takes 360px; .bmain tops out ~1110px), never by the
+  window: 7px cell padding, .betcol may wrap, Fair (.hidecol) hidden <=1180 (so in practice always — it is on hover of
+  Chance), .pos/logos <=900, .confcol <=760 where #boardScroll also scrolls sideways. "Model" header -> "Chance" (it is the
+  market-anchored number). "✓ logged" moved onto the log button. Measure table vs #boardScroll width after adding anything
+  to a row. SAME BET AT TWO BOOKS: a prop side at two lines is one bet — computeTopPlays marks the worse offer c.dup
+  (plain {book,market,odds,held}; winner = logged one, else higher EV) and the winner c.also; dups are off the card, hidden
+  from the Priced list (kept row shows "+1 line", details on hover) and explained under Left off.
 - Commits end with the Co-Authored-By line from the session's instructions.

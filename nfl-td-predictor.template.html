@@ -134,6 +134,12 @@
   .logsub{margin-top:14px}
   .bktag{font-size:10px;font-weight:800;letter-spacing:.04em;padding:1px 5px;border-radius:5px;border:1px solid var(--line2);color:var(--ink2);vertical-align:1px}
   .cfgrow label{margin-right:10px;white-space:nowrap}
+  #boardTable th, #boardTable td{padding-left:7px;padding-right:7px}
+  #boardTable td.betcol{white-space:normal;min-width:110px;line-height:1.25}
+  #boardTable .plname span:not(.accent):not(.pos){overflow:hidden;text-overflow:ellipsis}
+  @container (max-width:1180px){ #boardTable .hidecol{display:none} }
+  @container (max-width:900px){ #boardTable .pos{display:none} #boardTable .plname img{display:none} }
+  @container (max-width:760px){ #boardTable .confcol{display:none} #boardScroll{overflow-x:auto} #boardTable th{position:static} }
   /* sportsbook-style markets panel */
   .mtabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:9px;border-bottom:1px solid var(--line2);margin-bottom:10px}
   .mtabs::-webkit-scrollbar{display:none}
@@ -335,20 +341,20 @@
             <button class="statussel" id="boardLogAll" style="padding:4px 10px;font-size:12px" title="log every bet with an edge — the log then marks the best ones (★ BET) and trims the rest in one click">📓 Log every edge</button>
           </span>
         </div>
-        <table id="boardTable">
+        <div id="boardScroll"><table id="boardTable">
           <thead><tr>
             <th class="l" style="cursor:default">Player</th>
             <th class="l" style="cursor:default">Bet</th>
             <th style="cursor:default">Odds</th>
-            <th style="cursor:default">Model</th>
-            <th class="hidecol" style="cursor:default">Fair</th>
+            <th style="cursor:default" title="the bet's chance of winning: the other books' consensus with their cut removed (props lean 10% toward the model). Hover a price box for the pieces.">Chance</th>
+            <th class="hidecol" style="cursor:default" title="the price that chance is worth — a better price than this is an edge">Fair</th>
             <th style="cursor:default">EV</th>
-            <th style="cursor:default">Confidence</th>
+            <th class="confcol" style="cursor:default">Confidence</th>
             <th style="cursor:default">Verdict</th>
             <th style="cursor:default"></th>
           </tr></thead>
           <tbody id="boardBody"></tbody>
-        </table>
+        </table></div>
       </div>
       <div id="mktGrid"></div>
       <details class="legend" style="margin-top:8px">
@@ -1296,7 +1302,14 @@ function computeTopPlays(){
   // this game's options = every price you pasted + whatever is already in your log for it — the same rule
   // then picks the best, so logging as you go and pasting everything first end in the same answer
   const game=curGameId(), logged=pendingFor(game), now=new Map(cand.map(c=>[c.key+'|'+c.market,c]));
-  const opts=cand.filter(c=>c.tier==='take').map(c=>Object.assign({}, c, {rk:c.kelly, bet:logged.find(b=>b.key===c.key&&b.market===c.market)||null}));
+  // the same prop side at two of your books (different lines) is ONE bet: the better offer stands — higher EV at its own
+  // line, or the one already in your log — and the other is marked its duplicate (c.dup): off the card and out of the
+  // Priced list, still shown in its box.
+  { const side=c=>isPropMkt(c.market)&&c.prop&&!c.prop.alt ? c.key+'|'+c.market.split('|').slice(0,3).join('|') : null, best=new Map(), mine=new Set(logged.map(b=>b.key+'|'+b.market));
+    const beats=(a,b)=>{ const la=mine.has(a.key+'|'+a.market), lb=mine.has(b.key+'|'+b.market); return la!==lb ? la : a.ev>b.ev; };
+    for(const c of cand){ delete c.dup; delete c.also; const g=side(c); if(g && (!best.has(g) || beats(c, best.get(g)))) best.set(g, c); }
+    for(const c of cand){ const g=side(c), b=g&&best.get(g); if(b && b!==c){ c.dup={book:b.book, market:b.market, odds:b.odds, held:mine.has(b.key+'|'+b.market)}; (b.also=b.also||[]).push({book:c.book, market:c.market, odds:c.odds}); } } }   // plain summaries: no object cycles
+  const opts=cand.filter(c=>c.tier==='take'&&!c.dup).map(c=>Object.assign({}, c, {rk:c.kelly, bet:logged.find(b=>b.key===c.key&&b.market===c.market)||null}));
   const offBoard=[];
   for(const b of logged){
     if(opts.some(o=>o.key===b.key&&o.market===b.market)) continue;
@@ -1307,6 +1320,7 @@ function computeTopPlays(){
   }
   const {picks, skipped}=pickPlays(opts);
   skipped.push(...offBoard);
+  for(const c of cand) if(c.dup && c.tier==='take') skipped.push({c, why:c.dup.held ? `you already hold this bet${c.dup.book?' at '+bookName(c.dup.book):''}: ${mktLabel(c.dup.market)} ${c.dup.odds}` : `the same bet is better at ${bookName(c.dup.book)||'the other line'}: ${mktLabel(c.dup.market)} ${c.dup.odds}`});
   CARD=picks;
   // worth-explaining non-picks (hover text on "edge" badges): too-good flags, lottery darts, calibration
   for(const c of cand){ if(opts.some(o=>o.key===c.key&&o.market===c.market)) continue;
@@ -1364,22 +1378,22 @@ function renderBoard(){
   const pickOf=c=>CARD.find(p=>p.key===c.key&&p.market===c.market);
   const grp=c=>pickOf(c)?0:c.tier==='take'?1:(c.tier==='flag'||c.tier==='dart')?2:3;
   const all=CANDS.slice().sort((a,b)=>grp(a)-grp(b)||(b.kelly-a.kelly)||(b.ev-a.ev));
-  const showPass=$('boardPass').checked, nPass=all.filter(c=>grp(c)===3).length, nEdge=all.filter(c=>c.tier==='take').length;
-  BOARDROWS=all.filter(c=>showPass||grp(c)<3);
+  const showPass=$('boardPass').checked, nPass=all.filter(c=>grp(c)===3).length, nEdge=all.filter(c=>c.tier==='take'&&!c.dup).length;
+  BOARDROWS=all.filter(c=>showPass||(grp(c)<3&&!c.dup));
   $('boardHead').innerHTML=all.length?`<b>${all.length}</b> priced · <b>${nEdge}</b> with an edge · <b>${CARD.length}</b> on your card${!showPass&&nPass?` · ${nPass} with no edge hidden`:''}`:'';
   if(!BOARDROWS.length){ body.innerHTML=`<tr><td class="l muted" colspan="9">${all.length?'No prices with an edge — tick “show no-edge prices” to see them.':'Nothing priced for this game yet — paste a board above.'}</td></tr>`; return; }
   body.innerHTML=BOARDROWS.map((c,i)=>{ const pick=pickOf(c), p=c.ref&&!c.ref.dst?c.ref:null, k=c.key+'|'+c.market, isLogged=logged.has(k);
     const verdict = pick ? betBadge(pick) : ({take:edgeBadge(k), flag:'<span class="vbadge vb-flag">⚠ check</span>', dart:'<span class="vbadge vb-dart">🎲 dart</span>', pass:'<span class="vb-pass">pass</span>'}[c.tier]||'');
     return `<tr class="${pick?'rowtake oncard':''}">`+
       `<td class="l"><div class="plname"><span class="accent" style="background:${teamColor(c.abbr)}"></span>${logo(c.abbr)?`<img src="${logo(c.abbr)}">`:''}<span>${esc(c.label)}</span>${p?`<span class="pos">${p.pos}</span>`:''}${p&&p._status&&p._status!=='ACT'?`<span class="pos" style="color:var(--warn)">${p._status}</span>`:''}</div></td>`+
-      `<td class="l">${mktLabel(c.market)}</td>`+
+      `<td class="l betcol"${c.also?` title="${esc('also offered: '+c.also.map(x=>bookName(x.book)+' '+mktLabel(x.market).replace(/^.*?(over|under)/,'$1')+' '+x.odds).join(' · ')+(isLogged?' — you already logged this one':' — this one is the better bet'))}"`:''}>${mktLabel(c.market)}${c.also?' <span class="muted" style="font-size:11px">+'+c.also.length+' line</span>':''}</td>`+
       `<td class="odds">${esc(c.odds)}${bkBadge(c.book)}</td>`+
-      `<td>${pct(c.mp)}</td>`+
+      `<td title="fair price ${probToAmerican(c.mp)}">${pct(c.mp)}</td>`+
       `<td class="odds hidecol">${probToAmerican(c.mp)}</td>`+
       `<td class="${c.ev>0&&c.tier==='take'?'ev-pos':c.ev>0?'ev-dart':'ev-neg'}">${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}%</td>`+
-      `<td>${confBadge(c.conf)}</td>`+
-      `<td class="verdict">${verdict}${isLogged?' <span class="muted" style="font-size:11px" title="already in your bet log">✓ logged</span>':''}</td>`+
-      `<td style="white-space:nowrap"><button class="statussel" data-act="log" data-i="${i}" title="log this bet" style="padding:1px 7px" ${isLogged?'disabled':''}>📓</button> <button class="statussel" data-act="slip" data-i="${i}" title="add to the cross-game slip" style="padding:1px 7px">➕</button></td></tr>`; }).join('');
+      `<td class="confcol">${confBadge(c.conf)}</td>`+
+      `<td class="verdict">${verdict}</td>`+
+      `<td style="white-space:nowrap"><button class="statussel" data-act="log" data-i="${i}" title="${isLogged?'already in your bet log':'log this bet'}" style="padding:1px 7px${isLogged?';color:var(--good)':''}" ${isLogged?'disabled':''}>${isLogged?'✓':'📓'}</button> <button class="statussel" data-act="slip" data-i="${i}" title="add to the cross-game slip" style="padding:1px 7px">➕</button></td></tr>`; }).join('');
 }
 // star the card's picks in the table so both views agree
 const betBadge=c=>`<span class="vbadge vb-take" title="${esc('On Your card: bet '+mktLabel(c.market)+' '+c.odds+' for '+stakeTxt(c.stake))}">★ BET ${stakeTxt(c.stake)}</span>`;
