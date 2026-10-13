@@ -62,6 +62,18 @@ silently to the baked snapshot when not.
   the free plan has 500 credits a month. In the bet log, **⚡ Pull closing prices** fills Close on every open bet before
   kickoff (moved prop lines are estimated, ≈). The key stays in your browser. A pull returns **every US book** for the
   same credits; FanDuel's price is what you bet, and the other books set the starting chance (see *Market anchor*).
+- **💰 Bankroll in dollars** — type your balance in the Bankroll panel and every stake (Your card, My TD picks, slip, log)
+  is shown in dollars; 1 unit = 1% of the bankroll *now*. Each bet keeps the dollars staked when logged, and the bankroll
+  adds every settled bet's dollar P/L by itself, so stakes grow (or shrink) with it. After a deposit or withdrawal just
+  type the new balance.
+- **Your sportsbooks (line shopping)** — a pull already returns every US book for the same credits. Tick your books under
+  *odds settings* (FanDuel + DraftKings by default): each box then shows the **best price among them**, tagged FD / DK,
+  and every other book is "the market" it is judged against. On every 2025 anytime-TD price both books posted, taking the
+  better of FanDuel / DraftKings paid 3.3% more on average and cut the loss from betting everything from −8.7% to −5.5%
+  (both halves improved). A prop where your books post **different lines** shows each as its own offer. Bets remember
+  their book (closing lines come from it), buttons open each book's bet slip, and a **parlay is priced at the one book**
+  that pays most for all its legs. The same settings let you choose which markets a pull fetches (1 credit each) —
+  opening a game re-pulls only when prices are stale (20 min near kickoff, 1 h on game day, 3 h earlier in the week).
 - **📲 Open on FanDuel** — pulled prices carry FanDuel's own selection ids, so the slip (all legs, or each suggested
   parlay), Your card and My TD picks have buttons that open those bets straight in FanDuel's bet slip (the FanDuel app on a
   phone), plus a small FD↗ link per slip leg. Legs whose prices were pasted rather than pulled have no ids — they're listed

@@ -132,6 +132,8 @@
   details.weekgrp>summary{cursor:pointer;padding:8px 2px;font-size:14px;border-bottom:1px solid var(--line2)}
   details.weekgrp[open]>summary{margin-bottom:10px}
   .logsub{margin-top:14px}
+  .bktag{font-size:10px;font-weight:800;letter-spacing:.04em;padding:1px 5px;border-radius:5px;border:1px solid var(--line2);color:var(--ink2);vertical-align:1px}
+  .cfgrow label{margin-right:10px;white-space:nowrap}
   /* sportsbook-style markets panel */
   .mtabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:9px;border-bottom:1px solid var(--line2);margin-bottom:10px}
   .mtabs::-webkit-scrollbar{display:none}
@@ -254,17 +256,20 @@
     <h2 id="priceSec">Price this game</h2>
     <div class="panel" style="padding:10px 12px">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-        <button class="btn" id="pullOdds" style="padding:6px 14px;font-size:13px" title="fetch FanDuel's current prices for this game (The Odds API)">⚡ Pull FanDuel odds</button>
+        <button class="btn" id="pullOdds" style="padding:6px 14px;font-size:13px" title="fetch your sportsbooks' current prices for this game (The Odds API) — the best price among them fills each box">⚡ Pull odds</button>
         <span id="pullMsg" class="muted" style="font-size:12px"></span>
         <span id="oddsLeft" class="muted" style="font-size:11px;margin-left:auto" title="The Odds API credits left this month"></span>
         <details id="oddsCfg" style="width:100%;font-size:12px"><summary class="muted" style="cursor:pointer">odds settings</summary>
           <div style="margin-top:6px;display:flex;flex-direction:column;gap:6px;line-height:1.45">
             <div>The Odds API key <input id="oddsKeyIn" type="password" placeholder="paste key" autocomplete="off" spellcheck="false" style="width:170px;padding:4px 7px;font-size:12px;background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:7px"> <button class="statussel" id="oddsKeySave" style="padding:2px 9px">save</button> <span id="oddsKeyMsg" class="muted"></span></div>
-            <label><input type="checkbox" id="oddsTD"> TD scorer — anytime, 1st, last, 2+ <span class="muted">(4 credits / game)</span></label>
-            <label><input type="checkbox" id="oddsProps"> Player props — receptions, rec / rush / rush+rec / pass yds <span class="muted">(5 credits / game)</span></label>
-            <label><input type="checkbox" id="oddsAuto"> Pull automatically when I open a game <span class="muted">(if its prices are over 20 min old)</span></label>
+            <div class="cfgrow"><b>My sportsbooks</b> <span class="muted">— each box shows the best price among these (no extra credits); every other book is "the market"</span><br>
+              <label><input type="checkbox" class="bkchk" value="fanduel" checked disabled> FanDuel</label><label><input type="checkbox" class="bkchk" value="draftkings"> DraftKings</label><label><input type="checkbox" class="bkchk" value="betmgm"> BetMGM</label><label><input type="checkbox" class="bkchk" value="williamhill_us"> Caesars</label><label><input type="checkbox" class="bkchk" value="betrivers"> BetRivers</label><label><input type="checkbox" class="bkchk" value="fanatics"> Fanatics</label></div>
+            <div class="cfgrow"><b>What a pull fetches</b> <span class="muted">— 1 credit each, per game:</span> <b id="oddsCost"></b><br>
+              <label><input type="checkbox" class="mkchk" value="player_anytime_td"> Anytime TD</label><label><input type="checkbox" class="mkchk" value="player_1st_td"> 1st TD</label><label><input type="checkbox" class="mkchk" value="player_last_td"> Last TD</label><label><input type="checkbox" class="mkchk" value="player_tds_over"> 2+ TD</label><br>
+              <label><input type="checkbox" class="mkchk" value="player_receptions"> Receptions</label><label><input type="checkbox" class="mkchk" value="player_reception_yds"> Rec yds</label><label><input type="checkbox" class="mkchk" value="player_rush_yds"> Rush yds</label><label><input type="checkbox" class="mkchk" value="player_rush_reception_yds"> Rush+rec yds</label><label><input type="checkbox" class="mkchk" value="player_pass_yds"> Pass yds</label></div>
+            <label><input type="checkbox" id="oddsAuto"> Pull automatically when I open a game <span class="muted">(only if its prices are stale: 20 min old inside 3 hours of kickoff, 1 hour on game day, 3 hours earlier in the week)</span></label>
             <div>Auto-pulls stop below <input id="oddsReserve" type="number" min="0" step="10" style="width:70px;padding:3px 6px;font-size:12px"> credits <span class="muted">(left for other apps on the same key, e.g. the UFC scanner)</span></div>
-            <div class="muted">Pulls take every US book's prices (same credits): you bet FanDuel's price, and each bet's chance starts from the other books' consensus. On every 2025 game's real prices the books beat the model — anytime TD and receiving / rushing yards — so TD chances <i>are</i> the consensus and props move only 10% toward the model. A bet with no other-book price says <b>model only</b>. See Your card ("mkt · model →"). The key is saved in this browser only, never in the site's code. Prices come from FanDuel via The Odds API; the free plan has 500 credits a month. Pasting still works and overrides anything.</div>
+            <div class="muted">Pulls take every US book's prices (same credits): each box shows the best price among <b>your</b> books (tagged FD / DK …), and each bet's chance starts from the other books' consensus. On every 2025 game's real prices the books beat the model — anytime TD and receiving / rushing yards — so TD chances <i>are</i> the consensus and props move only 10% toward the model. A bet with no other-book price says <b>model only</b>. See Your card ("mkt · model →"). The key is saved in this browser only, never in the site's code. Prices come from FanDuel via The Odds API; the free plan has 500 credits a month. Pasting still works and overrides anything.</div>
           </div>
         </details>
       </div>
@@ -1145,7 +1150,7 @@ function decorateMarkets(){
     const pick=cardK.get(c.key+'|'+c.market), cls=pick?'bet':c.tier==='take'?'edge':(c.tier==='flag'||c.tier==='dart')?c.tier:'';
     if(cls) cell.classList.add(cls);
     sub.innerHTML = pick ? `★ ${stakeTxt(pick.stake)}` : `${pctS(c.mp)} <span class="${c.ev>0&&c.tier==='take'?'ev-pos':c.ev>0?'ev-dart':''}" style="font-weight:700">${c.ev>=0?'+':''}${(c.ev*100).toFixed(0)}%</span>`;
-    cell.title=`${c.label} — ${mktLabel(c.market)} ${c.odds}\n${c.mkt!=null?`chance ${pct(c.mp)} from ${c.mktSrc==='fd'?'FanDuel\'s own price (no other book priced it)':'other books'} ${pct(c.mkt)} (cut removed) · model alone ${pct(c.model)}`:`model only ${pct(c.mp)} — no other-book prices (the model alone lost to the books in testing; ⚡ Pull to check)`} · fair ${probToAmerican(c.mp)} vs book ${pct(c.bimp)} · EV ${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}% · confidence ${Math.round(c.conf.score*100)}\n`+
+    cell.title=`${c.label} — ${mktLabel(c.market)} ${c.odds}\n${c.book?bookName(c.book)+'\'s price · ':''}${c.mkt!=null?`chance ${pct(c.mp)} from ${c.mktSrc==='fd'?'that book\'s own price (no other book priced it)':'the other books'} ${pct(c.mkt)} (cut removed) · model alone ${pct(c.model)}`:`model only ${pct(c.mp)} — no other-book prices (the model alone lost to the books in testing; ⚡ Pull to check)`} · fair ${probToAmerican(c.mp)} vs book ${pct(c.bimp)} · EV ${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}% · confidence ${Math.round(c.conf.score*100)}\n`+
       (pick?'★ On Your card — bet this.':c.tier==='take'?'Edge, but not on the card: '+(SKIPWHY.get(c.key+'|'+c.market)||'the card keeps only the best bets per game')+'.':c.tier==='flag'?'⚠ Edge too big to trust — likely injury/role news; verify first.':c.tier==='dart'?'🎲 Lottery price — too rare or uncertain to price.':'No edge at this price.'); };
   grid.querySelectorAll('.mcell[data-mkt]').forEach(cell=>paint(cell, byK.get(cell.dataset.key+'|'+cell.dataset.mkt), cell.dataset.base, cell.dataset.tip));
   grid.querySelectorAll('.mcell[data-side]').forEach(cell=>{ const s=cell.dataset.s, key=cell.dataset.key, side=cell.dataset.side, mu=+cell.dataset.mu, nm=side==='O'?'over':'under';
@@ -1258,7 +1263,7 @@ function sugStake(c){ return Math.max(0.1, Math.round(KELLY_FRAC*(c.kelly||c.rk|
 function logBetFrom(c, stake, gameIn){
   const game=gameIn||curGameId();
   if(bets.some(b=>b.game===game && b.key===c.key && b.market===c.market && b.result==='pending')) return false;
-  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), ...koStamp(game), ...usdStamp(stake), game, key:c.key, player:c.label, market:c.market, odds:c.odds,
+  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), ...koStamp(game), ...usdStamp(stake), ...(c.book?{book:c.book}:{}), game, key:c.key, player:c.label, market:c.market, odds:c.odds,
     modelProb:+(+c.mp).toFixed(4), ...(c.fun?{fun:true}:{}), ...(c.model!=null?{rawP:+(+c.model).toFixed(4)}:{}), ...(c.mkt!=null?{mktP:+(+c.mkt).toFixed(4)}:{}), rk:+(c.kelly!=null?c.kelly:(c.rk||0)).toFixed(5), cf:c.conf?c.conf.score:null, ...(c.prop?{pmu:+c.prop.mu.toFixed(3)}:{}),
     stake:+(+stake).toFixed(1), closeOdds:'', result:'pending'});
   return true;
@@ -1281,10 +1286,10 @@ function computeTopPlays(){
   for(const p of LAST.awayR.concat(LAST.homeR)){ if(p._status==='OUT') continue;
     for(const m of ['anytime','first','last','two']){ const odds=LAST.bookMap[m+'|'+p._key]; if(!odds) continue;
       const f=m==='two'?(p._cal||1)**2:(p._cal||1), A=ANC[m].get(p._key);
-      add({key:p._key, label:p.name, abbr:p._abbr, market:m, odds, mp:A?A.p:p[m], model:p[m], mkt:A?A.mkt:null, mktSrc:A?A.src:null, mpRaw:p[m]/f, prior:!p.matched, role:roleLabel(p), cal:f, ref:p}); } }
+      add({key:p._key, label:p.name, abbr:p._abbr, market:m, odds, book:bookOfTk(tkFor(curGameId(), m, p._key, odds)), mp:A?A.p:p[m], model:p[m], mkt:A?A.mkt:null, mktSrc:A?A.src:null, mpRaw:p[m]/f, prior:!p.matched, role:roleLabel(p), cal:f, ref:p}); } }
   for(const [abbr,d] of [[LAST.away,LAST.dst.dstAway],[LAST.home,LAST.dst.dstHome]])
     for(const m of ['anytime','first','last']){ const odds=LAST.bookMap[m+'|DST|'+abbr]; if(!odds) continue;
-      add({key:'DST|'+abbr, label:S.teams[abbr].short+' Defense', abbr, market:m, odds, mp:d[m], mpRaw:d[m], prior:false, role:'defense (pick-6 / fumble return)', cal:1, ref:{dst:true}}); }
+      add({key:'DST|'+abbr, label:S.teams[abbr].short+' Defense', abbr, market:m, odds, book:bookOfTk(tkFor(curGameId(), m, 'DST|'+abbr, odds)), mp:d[m], mpRaw:d[m], prior:false, role:'defense (pick-6 / fumble return)', cal:1, ref:{dst:true}}); }
   for(const c of propCandidates()){ const e=propEval(c); if(e) cand.push(e); }   // player props (own confidence + verdict rules)
   CANDS=cand;
 
@@ -1324,7 +1329,7 @@ function computeTopPlays(){
       const why=`model ${pct(c.mp)} vs book ${pct(bimp)} · edge ${edge>=0?'+':''}${(edge*100).toFixed(1)} pts${c.role?' · '+c.role:''}${c.cal&&c.cal<1?' · calibrated ×'+c.cal.toFixed(2):''}${c.capped?' · scaled to the team cap':''}`;
       html+=`<div class="cpick" title="${esc(why)}"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
       `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="vbadge vb-take" style="font-size:12px;margin-left:auto">bet ${u(c.stake)}</span></div>`+
-      `<div class="cp2">${mktLabel(c.market)} <span class="odds">${esc(c.odds)}</span> ${confBadge(c.conf)}${inLog} <span class="muted" style="font-size:12px" title="${c.mkt!=null?esc('model '+pct(c.model)+' · '+(c.mktSrc==='fd'?'FanDuel\'s own price, cut removed (no other book priced it) ':'other books (fair) ')+pct(c.mkt)+' → blended '+pct(c.mp)):'No other-book prices for this bet — the model alone lost to the books in the 2025 real-price test. ⚡ Pull odds to check it against the market.'}">${c.mkt!=null?(c.mktSrc==='fd'?'FD ':'mkt ')+pct(c.mkt)+' · model '+pct(c.model)+' → ':'<span style="color:var(--warn)">model only</span> · '}${pct(c.mp)} vs ${pct(bimp)} (${edge>=0?'+':''}${(edge*100).toFixed(1)})</span></div></div>`; });
+      `<div class="cp2">${mktLabel(c.market)} <span class="odds">${esc(c.odds)}</span>${bkBadge(c.book)} ${confBadge(c.conf)}${inLog} <span class="muted" style="font-size:12px" title="${c.mkt!=null?esc('model '+pct(c.model)+' · '+(c.mktSrc==='fd'?'the book\'s own price, cut removed (no other book priced it) ':'other books (fair) ')+pct(c.mkt)+' → blended '+pct(c.mp)):'No other-book prices for this bet — the model alone lost to the books in the 2025 real-price test. ⚡ Pull odds to check it against the market.'}">${c.mkt!=null?(c.mktSrc==='fd'?'own ':'mkt ')+pct(c.mkt)+' · model '+pct(c.model)+' → ':'<span style="color:var(--warn)">model only</span> · '}${pct(c.mp)} vs ${pct(bimp)} (${edge>=0?'+':''}${(edge*100).toFixed(1)})</span></div></div>`; });
     html+='</div>';
     const teams={}; picks.forEach(c=>{ teams[c.abbr]=(teams[c.abbr]||0)+c.stake; });
     const tot=picks.reduce((a,c)=>a+c.stake,0);
@@ -1332,7 +1337,7 @@ function computeTopPlays(){
       `<span>Total <b>${u(tot)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll) · ${Object.entries(teams).map(([t,v])=>`${S.teams[t].short} ${u(v)}`).join(' · ')}</span>`+
       (unlogged.length?`<button class="statussel" id="logCard" style="padding:3px 11px">📓 log ${unlogged.length===picks.length?'these':'the '+unlogged.length+' not logged yet'}</button>`:`<span>✓ all in your log</span>`)+
       `<button class="statussel" id="cardToSlip" style="padding:3px 11px" title="send these picks to the cross-game slip — do this for each game, then let the slip pick the parlay">➕ add to slip</button>`+
-      fdButton(picks.map(c=>({game:curGameId(), market:c.market, key:c.key, label:c.label})), `Open ${picks.length>1?'these':'it'} on FanDuel`)+`</div>`;
+      fdButton(picks.map(c=>({game:curGameId(), market:c.market, key:c.key, label:c.label, odds:c.odds})), n=>`Open ${n>1?'these '+n:'it'} on FanDuel`)+`</div>`;
   } else {
     html+=`<div style="margin-top:4px"><b>No bets on this card.</b> Nothing you've priced clears the bar after calibration and sizing — the normal case, since the market is efficient on most props. (If everything's a pass, sanity-check the total/spread up top.)</div>`;
   }
@@ -1368,7 +1373,7 @@ function renderBoard(){
     return `<tr class="${pick?'rowtake oncard':''}">`+
       `<td class="l"><div class="plname"><span class="accent" style="background:${teamColor(c.abbr)}"></span>${logo(c.abbr)?`<img src="${logo(c.abbr)}">`:''}<span>${esc(c.label)}</span>${p?`<span class="pos">${p.pos}</span>`:''}${p&&p._status&&p._status!=='ACT'?`<span class="pos" style="color:var(--warn)">${p._status}</span>`:''}</div></td>`+
       `<td class="l">${mktLabel(c.market)}</td>`+
-      `<td class="odds">${esc(c.odds)}</td>`+
+      `<td class="odds">${esc(c.odds)}${bkBadge(c.book)}</td>`+
       `<td>${pct(c.mp)}</td>`+
       `<td class="odds hidecol">${probToAmerican(c.mp)}</td>`+
       `<td class="${c.ev>0&&c.tier==='take'?'ev-pos':c.ev>0?'ev-dart':'ev-neg'}">${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}%</td>`+
@@ -1564,31 +1569,63 @@ function priceableLegs(market){
   }
   return out.sort((a,b)=>(b.take-a.take)||(b.rank-a.rank));   // real edges first: a ⚠ / 🎲 price never leads "Best pick"
 }
-// ---------- FanDuel bet-slip links ----------
-// Pulled prices carry FanDuel's own market + selection ids, so any set of legs can open straight in FanDuel's bet slip
-// (the app on a phone). One leg: addToBetslip?marketId=..&selectionId=..; several: indexed pairs marketId[i]/selectionId[i].
-// Legs whose prices were pasted (never pulled) have no ids and are named instead.
+// ---------- your sportsbooks, tickets and bet-slip links ----------
+// A pull returns every US book. YOUR books (odds settings; FanDuel + DraftKings by default) are where you bet: each box
+// shows the best price among them. Every other book is "the market" the price is judged against. A pulled price carries
+// a TICKET {b: book, o: the price, m/s: that book's bet-slip ids, alt: {book: ticket} for your other books' prices}, filed
+// in the game's market map as FD#<market>#<key> and copied onto slip legs / bets. It is only trusted while the box still
+// holds that price (typing or pasting your own price drops it).
+const BOOK_NAMES={fanduel:'FanDuel', draftkings:'DraftKings', betmgm:'BetMGM', williamhill_us:'Caesars', betrivers:'BetRivers', fanatics:'Fanatics', bovada:'Bovada', betonlineag:'BetOnline'};
+const BOOK_TAGS={fanduel:'FD', draftkings:'DK', betmgm:'MGM', williamhill_us:'CZR', betrivers:'BR', fanatics:'FAN'};
+const bookName=b=>BOOK_NAMES[b]||b||'', bookTag=b=>BOOK_TAGS[b]||String(b||'').slice(0,3).toUpperCase();
+const myBooks=()=>{ const b=(ODDSCFG.books&&ODDSCFG.books.length?ODDSCFG.books:['fanduel','draftkings']).filter(x=>x!=='fanduel'); return ['fanduel'].concat(b); };   // FanDuel is always first
+const myBooksTxt=()=>myBooks().map(bookName).join(' + ');
+const bkBadge=b=>b ? ` <span class="bktag" title="this price is ${esc(bookName(b))}'s — the best among your books">${bookTag(b)}</span>` : '';
+function tkFor(game, market, key, odds){ const k='FD#'+market+'#'+key; let t=null;
+  if(LAST && curGameId()===game && LAST.mktMap && LAST.mktMap[k]) t=LAST.mktMap[k]; else { const b=BOARDS[game]; t=(b&&b.mkt&&b.mkt[k])||null; }
+  return t && (!t.o || !odds || t.o===String(odds)) ? t : null; }
+const bookOfTk=t=>t ? (t.b||'fanduel') : '';
+const legSel=l=>l.fd||tkFor(l.game, l.market, l.key, l.odds);
+// a link that opens these tickets in ONE book's bet slip (null if that book has no usable ids)
 const FD_SLIP='https://sportsbook.fanduel.com/addToBetslip';
-function fdSelFor(game, market, key){ const k='FD#'+market+'#'+key;
-  if(LAST && curGameId()===game && LAST.mktMap && LAST.mktMap[k]) return LAST.mktMap[k];
-  const b=BOARDS[game]; return (b&&b.mkt&&b.mkt[k])||null; }
-const legSel=l=>l.fd||fdSelFor(l.game, l.market, l.key);
-function fdLink(sels){
-  if(sels.length===1) return `${FD_SLIP}?marketId=${encodeURIComponent(sels[0].m)}&selectionId=${encodeURIComponent(sels[0].s)}`;
-  return FD_SLIP+'?'+sels.map((x,i)=>`marketId[${i}]=${encodeURIComponent(x.m)}&selectionId[${i}]=${encodeURIComponent(x.s)}`).join('&'); }
+function bookLink(book, tks){
+  if(!tks.length) return null;
+  if(book==='fanduel'){ if(tks.some(x=>!x.m||!x.s)) return null;
+    return tks.length===1 ? `${FD_SLIP}?marketId=${encodeURIComponent(tks[0].m)}&selectionId=${encodeURIComponent(tks[0].s)}`
+      : FD_SLIP+'?'+tks.map((x,i)=>`marketId[${i}]=${encodeURIComponent(x.m)}&selectionId[${i}]=${encodeURIComponent(x.s)}`).join('&'); }
+  if(book==='draftkings'){ if(tks.some(x=>!x.s)) return null; return 'https://sportsbook.draftkings.com/?outcomes='+tks.map(x=>encodeURIComponent(x.s)).join('+'); }
+  return null;   // the other books' links need your state in them — open those by hand
+}
+const linkable=t=>!!t && !!bookLink(bookOfTk(t), [t]);
+// buttons that open these legs in their book's bet slip — one button per book (singles can sit at different books)
 function fdButton(legs, label, mode){
-  const ok=[], miss=[]; for(const l of legs) (legSel(l)?ok:miss).push(l); if(typeof label==='function') label=label(ok.length);   // label can count the legs it really opens
-  const why='not linked yet — these prices were pasted, or pulled before FanDuel links existed';
+  const ok=[], miss=[]; for(const l of legs) (linkable(legSel(l))?ok:miss).push(l);
+  const why='not linked yet — these prices were pasted, pulled before links existed, or sit at a book without bet-slip links';
   if(!ok.length){ if(!legs.length) return '';
-    return mode==='slip' ? '' :   // the slip shows its own "Get FanDuel links" button
-      mode==='rebuild' ? `<span class="muted" style="font-size:12px">🔗 hit <b>Build my TD picks</b> again for FanDuel links</span>` :
-      `<button class="statussel fdpull" style="padding:3px 11px" title="${esc(why)} — pulls this game's FanDuel prices again (about 9 credits)">🔗 Get FanDuel link${legs.length>1?'s':''}</button>`; }
-  return `<a class="statussel fdbtn" href="${esc(fdLink(ok.map(legSel)))}" target="_blank" rel="noopener" title="opens FanDuel with ${ok.length===1?'this leg':'these '+ok.length+' legs'} in the bet slip — check the price there before you bet">📲 ${label}</a>`+
-    (miss.length?` <span class="muted" style="font-size:12px" title="${esc(why+': '+miss.map(l=>l.name||l.label).join(', '))}">+ ${miss.length} not linked</span>`:''); }
-// slip legs with no FanDuel ids (pasted, or added before links existed): pull just the markets they need, once, and
-// attach the ids — 1 credit per market per game, never for games that have kicked off
+    return mode==='slip' ? '' :   // the slip shows its own "Get links" button
+      mode==='rebuild' ? `<span class="muted" style="font-size:12px">🔗 hit <b>Build my TD picks</b> again for bet-slip links</span>` :
+      `<button class="statussel fdpull" style="padding:3px 11px" title="${esc(why)} — pulls this game's prices again">🔗 Get bet-slip link${legs.length>1?'s':''}</button>`; }
+  const by=new Map(); for(const l of ok){ const t=legSel(l), b=bookOfTk(t); (by.get(b)||by.set(b,[]).get(b)).push(t); }
+  let html='';
+  for(const [b,tks] of by){ const txt=String(typeof label==='function'?label(tks.length):label).replace(/FanDuel/g, bookName(b));
+    html+=`<a class="statussel fdbtn" href="${esc(bookLink(b,tks))}" target="_blank" rel="noopener" title="opens ${esc(bookName(b))} with ${tks.length===1?'this bet':'these '+tks.length+' bets'} in the bet slip — check the price there before you bet">📲 ${txt}${by.size>1&&typeof label!=='function'?' ('+tks.length+')':''}</a> `; }
+  return html+(miss.length?`<span class="muted" style="font-size:12px" title="${esc(why+': '+miss.map(l=>l.name||l.label).join(', '))}">+ ${miss.length} not linked</span>`:''); }
+// a PARLAY has to live at one book: the one of yours that prices every leg and pays the most for the combination
+function parlayAt(legs){
+  const tks=legs.map(legSel); if(!tks.length || tks.some(t=>!t)) return null; let best=null;
+  for(const b of myBooks()){ const ts=tks.map(t=>bookOfTk(t)===b ? t : (t.alt&&t.alt[b])||null); if(ts.some(t=>!t||!t.o)) continue;
+    const D=ts.reduce((a,t)=>a*(oddsDec(t.o)||1),1); if(!best||D>best.D) best={book:b, D, tks:ts}; }
+  return best; }
+// the parlay's button + what it really pays at that book (D0 = the product of each leg's best price, which may mix books)
+function parlayButton(legs, label, mode, D0){
+  const pa=parlayAt(legs); if(!pa) return fdButton(legs, label, mode);
+  const href=bookLink(pa.book, pa.tks), txt=label.replace(/FanDuel/g, bookName(pa.book));
+  const pays=D0 && Math.abs(pa.D/D0-1)>0.004 ? ` <span class="muted" style="font-size:12px" title="a parlay has to sit at one book — this is the best single book for these legs">at ${esc(bookName(pa.book))} it pays <span class="odds">${amStr(decToAmerican(pa.D))}</span></span>` : '';
+  return (href ? `<a class="statussel fdbtn" href="${esc(href)}" target="_blank" rel="noopener" title="opens ${esc(bookName(pa.book))} with these ${legs.length} legs in the bet slip — check the price there before you bet">📲 ${txt}</a>` : `<span class="muted" style="font-size:12px">bet it at ${esc(bookName(pa.book))}</span>`)+pays; }
+// slip legs with no ticket (pasted, or added before links existed): pull just the markets they need, once, and attach
+// the ids — 1 credit per market per game, never for games that have kicked off
 const marketOA=m=>isPropMkt(m) ? Object.keys(OA_PROP).find(x=>OA_PROP[x]===m.split('|')[1]) : Object.keys(OA_TD).find(x=>OA_TD[x]===m);
-const slipUnlinked=()=>slip.filter(l=>l.game && l.market!=='custom' && !legSel(l) && !(l.kickoff && Date.now()>new Date(l.kickoff).getTime()) && marketOA(l.market));
+const slipUnlinked=()=>slip.filter(l=>l.game && l.market!=='custom' && !linkable(legSel(l)) && !(l.kickoff && Date.now()>new Date(l.kickoff).getTime()) && marketOA(l.market));
 function slipLinkPlan(){ const by=new Map(); for(const l of slipUnlinked()){ const g=by.get(l.game)||by.set(l.game,{legs:[], mk:new Set()}).get(l.game); g.legs.push(l); g.mk.add(marketOA(l.market)); } return by; }
 let SLIP_LINK_NOTE='';
 async function linkSlipLegs(){
@@ -1598,19 +1635,18 @@ async function linkSlipLegs(){
     const [away,home]=game.split('@'); tried+=legs.length;
     let d; try{ d=await fetchGameOdds(away, home, [...mk], true); }catch(e){ notes.push(fmtGame(game)+': '+oddsWhy(e)); continue; }
     const B=BOARDS[game]||(BOARDS[game]={t:Date.now(), book:{}, prop:{}, mkt:{}}); B.mkt=B.mkt||{};
-    for(const l of legs){ let o=null;
-      if(isPropMkt(l.market)){ const [,st,side,line]=l.market.split('|'); o=(d.props[st]||[]).find(x=>x.side===side && x.line===+line && sameName(x.name,l.name)); }
-      else if(String(l.key).startsWith('DST|')){ const t=l.key.split('|')[1], tn=[S.teams[t].short, S.teams[t].name].map(normName); o=(d.td[l.market]||[]).find(x=>tn.some(n=>normName(x.name).includes(n))); }
-      else o=(d.td[l.market]||[]).find(x=>sameName(x.name,l.name));
-      if(o&&o.fd){ l.fd=o.fd; B.mkt['FD#'+l.market+'#'+l.key]=o.fd; if(LAST&&curGameId()===game){ LAST.mktMap=LAST.mktMap||{}; LAST.mktMap['FD#'+l.market+'#'+l.key]=o.fd; } linked++; }
-      else notes.push(`${l.name} ${mktLabel(l.market)}: not on FanDuel's board now${isPropMkt(l.market)?' (the line may have moved)':''}`); }
+    for(const l of legs){ let o=null; const src=(d.byBook&&d.byBook[l.book||(l.fd&&l.fd.b)||'fanduel'])||d;   // the leg's own book (pasted prices = FanDuel)
+      if(isPropMkt(l.market)){ const [,st,side,line]=l.market.split('|'); o=(src.props[st]||[]).find(x=>x.side===side && x.line===+line && sameName(x.name,l.name)); }
+      else if(String(l.key).startsWith('DST|')){ const t=l.key.split('|')[1], tn=[S.teams[t].short, S.teams[t].name].map(normName); o=(src.td[l.market]||[]).find(x=>tn.some(n=>normName(x.name).includes(n))); }
+      else o=(src.td[l.market]||[]).find(x=>sameName(x.name,l.name));
+      if(o&&linkable(o.fd)){ l.fd=o.fd; linked++; }
+      else notes.push(`${l.name} ${mktLabel(l.market)}: not on the board now${isPropMkt(l.market)?' (the line may have moved)':''}`); }
   }
-  try{ localStorage.setItem(BOARD_KEY, JSON.stringify(BOARDS)); }catch(e){}
   if(linked) saveSlip();
   SLIP_LINK_NOTE=`🔗 linked ${linked} of ${tried} leg${tried===1?'':'s'}`+(notes.length?' · '+notes.map(esc).join(' · '):'');
   renderSlip(); oddsStatus();
 }
-const fdLegLink=l=>{ const x=legSel(l); return x?` <a href="${esc(fdLink([x]))}" target="_blank" rel="noopener" title="open just this leg in FanDuel's bet slip" style="font-size:12px;text-decoration:none">FD↗</a>`:''; };
+const fdLegLink=l=>{ const x=legSel(l); return linkable(x)?` <a href="${esc(bookLink(bookOfTk(x),[x]))}" target="_blank" rel="noopener" title="open just this leg in ${esc(bookName(bookOfTk(x)))}'s bet slip" style="font-size:12px;text-decoration:none">${bookTag(bookOfTk(x))}↗</a>`:''; };
 function slipHas(game,key,market){ return slip.some(l=>l.game===game&&l.key===key&&l.market===market); }
 // the game context a leg was priced in (shown on the slip — it already shaped the probability)
 function slipCtx(abbr){
@@ -1625,7 +1661,7 @@ function addLeg(leg,market){
   if(slipHas(game,leg.key,market)) return false;
   const r=evalBet(leg.mp, leg.odds); if(!r) return false;
   const g=(S.schedule||[]).find(x=>x.away===LAST.away&&x.home===LAST.home);
-  const fd=fdSelFor(game, market, leg.key);
+  const fd=tkFor(game, market, leg.key, leg.odds);
   slip.push({game, key:leg.key, name:leg.name, abbr:leg.abbr, market, mp:+leg.mp.toFixed(4), odds:leg.odds,
     conf:leg.conf||confFor(leg.ref,market,r), ctx:slipCtx(leg.abbr), kickoff:g?g.kickoff:null, ...(fd?{fd}:{})});
   saveSlip(); renderSlip(); return true;
@@ -1705,7 +1741,7 @@ function renderSlip(){
       `<div style="font-weight:800;margin-bottom:5px">${title}</div>`+
       r.legs.map(v=>`<div style="font-size:13px;margin:2px 0"><span class="muted" style="display:inline-block;min-width:100px">${fmtGame(v.l.game)}</span>${legLine(v)}</div>`).join('')+
       `<div style="margin-top:6px;font-size:13px">hits <b>${pct(r.P)}</b> · fair <span class="odds">${probToAmerican(r.P)}</span> · pays <span class="odds">${amStr(decToAmerican(r.D))}</span> · EV <b class="ev-pos">+${((r.P*r.D-1)*100).toFixed(1)}%</b> <span class="muted">(model alone says +${(evModel*100).toFixed(1)}%)</span> · <span class="vbadge vb-take" style="font-size:12px">bet ${u(stake)}</span> <span class="muted" style="font-size:12px">¼ Kelly</span></div>`+
-      `<div style="margin-top:7px">${fdButton(r.legs.map(v=>v.l), 'Put this parlay on FanDuel', 'slip')}</div></div>`; };
+      `<div style="margin-top:7px">${parlayButton(r.legs.map(v=>v.l), 'Put this parlay on FanDuel', 'slip', r.legs.reduce((a,v)=>a*v.dec,1))}</div></div>`; };
   if(best){
     html+=pBlock(best, `🧠 Best parlay from your slip — ${best.legs.length} legs`);
     if(bigger) html+=pBlock(bigger, `💰 Bigger payout option — ${bigger.legs.length} legs (grows a bankroll ${(best.g/bigger.g).toFixed(1)}× slower, bet it smaller)`);
@@ -1954,17 +1990,42 @@ async function fetchGameOdds(away, home, markets, mustBeUpcoming){
   if(!r.ok) throw oddsFail(r.status);
   return parseOdds(await r.json());
 }
-// an Odds API event-odds body -> FanDuel's prices (+ selection ids) and the other books' consensus
+// an Odds API event-odds body -> the best price among YOUR books for every selection (+ its ticket), each of your books'
+// own board (byBook, for closing lines) and the other books' consensus.
+const tkOf=(b,o)=>{ const t={b, o:fmtAm(o.price)}; if(b==='fanduel'){ const f=fdSelOf(o); if(f){ t.m=f.m; t.s=f.s; } } else if(o.sid) t.s=String(o.sid); return t; };
 function parseOdds(j){
-  const bk=(j.bookmakers||[]).find(b=>b.key==='fanduel'), out={td:{}, props:{}, cons:consensusFrom(j.bookmakers||[]), books:(j.bookmakers||[]).map(b=>b.key)};
-  for(const m of (bk?bk.markets:[])){
-    if(OA_TD[m.key]){ const mk=OA_TD[m.key];
-      for(const o of m.outcomes){ if(m.key==='player_tds_over' ? (o.name!=='Over'||+o.point!==1.5) : o.name!=='Yes') continue;   // 2+ TD = "over 1.5"
-        (out.td[mk]=out.td[mk]||[]).push({name:o.description, price:o.price, fd:fdSelOf(o)}); } }
-    else if(OA_PROP[m.key]){ const s=OA_PROP[m.key];
-      for(const o of m.outcomes){ if(o.point==null||(o.name!=='Over'&&o.name!=='Under')) continue;
-        (out.props[s]=out.props[s]||[]).push({name:o.description, side:o.name==='Over'?'O':'U', line:+o.point, price:o.price, fd:fdSelOf(o)}); } }
-  }
+  const mine=myBooks(), bks=mine.map(k=>(j.bookmakers||[]).find(b=>b.key===k)).filter(Boolean);
+  const out={td:{}, props:{}, propsX:{}, byBook:{}, cons:consensusFrom(j.bookmakers||[]), books:(j.bookmakers||[]).map(b=>b.key), mine:bks.map(b=>b.key)};
+  const tdAll={}, prAll={}, rank=x=>mine.indexOf(x.b);
+  for(const bk of bks){ const B=(out.byBook[bk.key]={td:{}, props:{}});
+    for(const m of (bk.markets||[])){
+      if(OA_TD[m.key]){ const mk=OA_TD[m.key];
+        for(const o of m.outcomes){ if(m.key==='player_tds_over' ? (o.name!=='Over'||+o.point!==1.5) : o.name!=='Yes') continue;   // 2+ TD = "over 1.5"
+          const tk=tkOf(bk.key,o); (B.td[mk]=B.td[mk]||[]).push({name:o.description, price:o.price, fd:tk});
+          const N=(tdAll[mk]=tdAll[mk]||{}); (N[o.description]=N[o.description]||[]).push({b:bk.key, price:o.price, tk}); } }
+      else if(OA_PROP[m.key]){ const s=OA_PROP[m.key];
+        for(const o of m.outcomes){ if(o.point==null||(o.name!=='Over'&&o.name!=='Under')) continue; const sd=o.name==='Over'?'O':'U', tk=tkOf(bk.key,o);
+          (B.props[s]=B.props[s]||[]).push({name:o.description, side:sd, line:+o.point, price:o.price, fd:tk});
+          const N=(prAll[s]=prAll[s]||{}); (N[o.description]=N[o.description]||[]).push({b:bk.key, side:sd, line:+o.point, price:o.price, tk}); } }
+    } }
+  // TD: your best price (a higher American number always pays more; ties go to the book listed first). The ticket also
+  // remembers your other books' prices (alt) so a parlay can be priced at one book.
+  const withAlt=arr=>Object.assign({}, arr[0].tk, arr.length>1?{alt:Object.fromEntries(arr.map(x=>[x.b, x.tk]))}:{});
+  for(const [mk,N] of Object.entries(tdAll)) for(const [name,arr] of Object.entries(N)){ arr.sort((x,y)=>(y.price-x.price)||(rank(x)-rank(y)));
+    (out.td[mk]=out.td[mk]||[]).push({name, price:arr[0].price, fd:withAlt(arr)}); }
+  // props: each book's main line = its most balanced over/under. The box shows FanDuel's line when it lists the player
+  // (else your first book that does) with your best price per side AT THAT LINE; a book with a different line becomes
+  // an extra offer (propsX) that competes on the card as its own bet.
+  for(const [s,N] of Object.entries(prAll)) for(const [name,arr] of Object.entries(N)){
+    const mainOf=b=>{ let best=null; const A=arr.filter(x=>x.b===b);
+      for(const L of new Set(A.map(x=>x.line))){ const O=A.find(x=>x.line===L&&x.side==='O'), U=A.find(x=>x.line===L&&x.side==='U'); if(!O||!U) continue;
+        const d=Math.abs(americanToProb(O.price)-americanToProb(U.price)); if(!best||d<best.d) best={d, line:L, O, U}; }
+      return best; };
+    const mains=mine.map(b=>[b,mainOf(b)]).filter(x=>x[1]); if(!mains.length) continue;
+    const P=mains[0][1];
+    for(const sd of ['O','U']){ const offs=mains.filter(([,m])=>m.line===P.line).map(([,m])=>m[sd]).sort((x,y)=>(y.price-x.price)||(rank(x)-rank(y)));
+      (out.props[s]=out.props[s]||[]).push({name, side:sd, line:P.line, price:offs[0].price, fd:withAlt(offs)}); }
+    for(const [b,m] of mains) if(m.line!==P.line) (out.propsX[s]=out.propsX[s]||[]).push({name, book:b, line:m.line, over:m.O.price, under:m.U.price, tO:m.O.tk, tU:m.U.tk}); }
   return out;
 }
 // ---------- MARKET ANCHOR: the bet probability starts from the other books ----------
@@ -2005,18 +2066,18 @@ function lastAnchors(){ const pl=LAST.awayR.concat(LAST.homeR), a={}; for(const 
 const ipOf=a=>a>0?100/(a+100):-a/(-a+100);
 const median=a=>{ const s=a.slice().sort((x,y)=>x-y), n=s.length; return n?(n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2):null; };
 function consensusFrom(books){
-  const td={}, pr={};
+  const td={}, pr={}, mine=myBooks();   // your books' prices are what gets judged; the rest are the market
   for(const b of books) for(const m of (b.markets||[])){
     if(OA_TD[m.key]){ const mk=OA_TD[m.key];
       for(const o of m.outcomes){ if(m.key==='player_tds_over' ? (o.name!=='Over'||+o.point!==1.5) : o.name!=='Yes') continue;
-        const t=((td[mk]=td[mk]||{})[o.description]=(td[mk]&&td[mk][o.description])||{fd:null, oth:[]}); if(b.key==='fanduel') t.fd=ipOf(o.price); else t.oth.push(ipOf(o.price)); } }
+        const t=((td[mk]=td[mk]||{})[o.description]=(td[mk]&&td[mk][o.description])||{fd:null, oth:[]}); if(mine.includes(b.key)) t.fd=(t.fd||[]).concat(ipOf(o.price)); else t.oth.push(ipOf(o.price)); } }
     else if(OA_PROP[m.key]){ const s=OA_PROP[m.key], pairs={};
       for(const o of m.outcomes){ if(o.point==null) continue; const k=o.description+'|'+o.point; (pairs[k]=pairs[k]||{name:o.description, line:+o.point})[o.name==='Over'?'O':'U']=o.price; }
       for(const q of Object.values(pairs)){ if(q.O==null||q.U==null) continue; const fo=ipOf(q.O)/(ipOf(q.O)+ipOf(q.U));
-        const t=((pr[s]=pr[s]||{})[q.name+'|'+q.line]=(pr[s]&&pr[s][q.name+'|'+q.line])||{fd:null, oth:[]}); if(b.key==='fanduel') t.fd=fo; else t.oth.push(fo); } }
+        const t=((pr[s]=pr[s]||{})[q.name+'|'+q.line]=(pr[s]&&pr[s][q.name+'|'+q.line])||{fd:null, oth:[]}); if(mine.includes(b.key)) t.fd=(t.fd||[]).concat(fo); else t.oth.push(fo); } }
   }
   const out={td:{}, props:{}};
-  for(const [mk,o] of Object.entries(td)){ out.td[mk]={}; for(const [n,t] of Object.entries(o)){ if(!t.oth.length) continue; const xs=t.oth.length>=2?t.oth:t.oth.concat(t.fd!=null?[t.fd]:[]); out.td[mk][n]={ip:median(xs), n:t.oth.length}; } }
+  for(const [mk,o] of Object.entries(td)){ out.td[mk]={}; for(const [n,t] of Object.entries(o)){ if(!t.oth.length) continue; const xs=t.oth.length>=2?t.oth:t.oth.concat(t.fd||[]); out.td[mk][n]={ip:median(xs), n:t.oth.length}; } }
   for(const [s,o] of Object.entries(pr)){ out.props[s]={}; for(const [k,t] of Object.entries(o)){ const xs=t.oth; if(xs.length){ const [n,l]=[k.slice(0,k.lastIndexOf('|')), +k.slice(k.lastIndexOf('|')+1)]; out.props[s][k]={name:n, line:l, fairOver:median(xs), n:xs.length}; } } }
   return out;
 }
@@ -2039,13 +2100,18 @@ function fillGameFromOdds(d){
     const k=s+'|'+p._key, cur=LAST.propMap[k]||(LAST.propMap[k]={line:null, over:'', under:'', alts:[]});
     if(cur.line!==o.line){ cur.line=o.line; cur.over=''; cur.under=''; }
     cur[o.side==='O'?'over':'under']=fmtAm(o.price); if(o.fd) LAST.mktMap['FD#'+propMktKey(s,o.side,o.line)+'#'+p._key]=o.fd; n++; }
+  // one of your books posts a DIFFERENT line for a player: keep it as an extra offer (replaced on every pull)
+  for(const st of new Set(Object.keys(d.props).concat(Object.keys(d.propsX||{})))) for(const k of Object.keys(LAST.propMap)) if(k.startsWith(st+'|')) delete LAST.propMap[k].books;
+  for(const [st,arr] of Object.entries(d.propsX||{})) for(const x of arr){ const p=matchPlayer(cleanName(x.name), idx), cur=p&&LAST.propMap[st+'|'+p._key]; if(!cur) continue;
+    (cur.books=cur.books||[]).push({book:x.book, line:x.line, over:fmtAm(x.over), under:fmtAm(x.under)});
+    LAST.mktMap['FD#'+propMktKey(st,'O',x.line)+'#'+p._key]=x.tO; LAST.mktMap['FD#'+propMktKey(st,'U',x.line)+'#'+p._key]=x.tU; n+=2; }
   // your open bets on this game vs FanDuel's fresh board. Still offered (same line, or the line MOVED): remember the
   // current price as b.cur = {q: price at your line, l: FanDuel's line now, o: its price there} — the log shows it as a
   // live CLV read (a lowered line on your under is good CLV, not a missing bet). Not offered at all -> b.offBoard, and the
   // card stops recommending it.
   const gNow=curGameId(); let ch=false;
   for(const b of bets){ if(b.result!=='pending'||b.game!==gNow||!b.key||b.market==='custom') continue;
-    const isP=isPropMkt(b.market); if(!(isP ? d.props[b.market.split('|')[1]] : d.td[b.market])) continue;   // that market wasn't in this pull
+    const isP=isPropMkt(b.market), bd=bookBoard(d, b.book); if(!bd || !(isP ? bd.props[b.market.split('|')[1]] : bd.td[b.market])) continue;   // that market (at his book) wasn't in this pull
     const v=closeView(b,d);
     if(v){ const was=b.cur||{}; if(was.q!==v.odds || was.l!==v.line){ b.cur={q:v.odds, l:v.line, o:v.raw, t:Date.now()}; ch=true; }
       if(b.offBoard){ delete b.offBoard; ch=true; } }
@@ -2054,7 +2120,11 @@ function fillGameFromOdds(d){
   if(ch){ saveBets(); renderBets(); }
   return {n, miss:[...miss]};
 }
-const pickedMarkets=()=>[...(ODDSCFG.td?Object.keys(OA_TD):[]), ...(ODDSCFG.props?Object.keys(OA_PROP):[])];
+// which markets a pull fetches (1 credit each per game): per-market switches, defaulting to the old TD / props toggles
+const mkOn=k=>ODDSCFG.mk&&ODDSCFG.mk[k]!=null ? !!ODDSCFG.mk[k] : !!(OA_TD[k]?ODDSCFG.td:ODDSCFG.props);
+const pickedMarkets=()=>Object.keys(OA_TD).concat(Object.keys(OA_PROP)).filter(mkOn);
+// how old a game's prices may get before opening it pulls again: prices barely move early in the week
+const freshMs=g=>{ const k=Date.parse(koOf(g)||0), h=k?(k-Date.now())/3.6e6:null; return (h==null||h<3?20:h<24?60:180)*60e3; };
 function oddsStatus(){ const el=$('oddsLeft'); if(el) el.textContent = oddsRemaining!=null ? `${oddsRemaining} credits left` : ''; }
 async function pullOdds(auto){
   if(!LAST) return; const msg=$('pullMsg'), g=curGameId(), markets=pickedMarkets();
@@ -2062,24 +2132,26 @@ async function pullOdds(auto){
   if(!markets.length){ if(!auto) msg.textContent='pick TD scorer and/or player props under odds settings'; return; }
   if(auto && oddsRemaining!=null && oddsRemaining<ODDSCFG.reserve){ msg.textContent=`auto-pull paused — ${oddsRemaining} credits left (reserve ${ODDSCFG.reserve})`; return; }
   const my=++pullToken; PULLED[g]=Date.now(); lsW('nfltd_pulled', PULLED);
-  msg.textContent='pulling FanDuel odds…';
+  msg.textContent='pulling '+myBooksTxt()+'…';
   try{
     const d=await fetchGameOdds(LAST.away, LAST.home, markets, false);
     if(my!==pullToken || curGameId()!==g) return;   // you moved to another game meanwhile
     const {n,miss}=fillGameFromOdds(d);
-    msg.innerHTML=`⚡ FanDuel · <b>${n}</b> price${n===1?'':'s'} · ${new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`+
+    msg.innerHTML=`⚡ ${myBooksTxt()} · <b>${n}</b> price${n===1?'':'s'} · ${new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`+
       (n?'':' — no markets posted for this game yet')+(miss.length?` · <span style="color:var(--warn)" title="${esc(miss.join(', '))}">${miss.length} not on the roster</span>`:'');
   }catch(e){ PULLED[g]=Date.now()-15*60e3; lsW('nfltd_pulled', PULLED); if(my===pullToken) msg.innerHTML=`<span style="color:var(--warn)">${oddsWhy(e)}</span>`; }   // retry allowed in ~5 min
   oddsStatus();
 }
 // opening a game pulls its prices if they're more than 20 min old (once per game; never below the reserve)
-function autoPullSoon(){ if(!LAST||!ODDSCFG.auto||!oddsKey()) return; const t=PULLED[curGameId()]; if(t && Date.now()-t<20*60e3) return;
+function autoPullSoon(){ if(!LAST||!ODDSCFG.auto||!oddsKey()) return; const t=PULLED[curGameId()]; if(t && Date.now()-t<freshMs(curGameId())) return;
   clearTimeout(autoPullSoon.t); autoPullSoon.t=setTimeout(()=>pullOdds(true), 400); }
 // closing prices: every open bet whose game hasn't kicked off gets its Close from FanDuel's current price
 function sameName(a,b){ const x=normName(cleanName(a)), y=normName(b); if(x===y) return true;
   const ta=String(cleanName(a)).split(/\s+/), tb=String(b).split(/\s+/), la=normName(ta[ta.length-1]), lb=normName(tb[tb.length-1]==='Jr.'||tb[tb.length-1]==='Sr.'?tb[tb.length-2]:tb[tb.length-1]);
   return la===lb && (ta[0]||'')[0]===(tb[0]||'')[0]; }
 // one bet's Close from a game's odds: 'filled' | 'est' (the prop line moved — translated to your line) | 'missing'
+// one book's own board inside a pull (bets without a book are FanDuel's; old-style pulls had FanDuel at the top level)
+const bookBoard=(d,book)=>d.byBook ? d.byBook[book||'fanduel']||null : d;
 function applyClose(b, d){
   const v=closeView(b,d); if(!v||v.odds==null) return 'missing';
   b.closeOdds=v.odds;
@@ -2090,6 +2162,7 @@ function applyClose(b, d){
 // doesn't offer it at all. When a prop's line moved, the nearest line's price is translated to your line with the model's
 // own distribution (odds null if the bet has no projection to translate with).
 function closeView(b, d){
+  d=bookBoard(d, b.book)||{td:{}, props:{}};
   if(isPropMkt(b.market)){ const [,s,side,l]=b.market.split('|'), mine=(d.props[s]||[]).filter(x=>x.side===side && sameName(x.name,b.player));
     if(!mine.length) return null;
     const o=mine.slice().sort((x,y)=>Math.abs(x.line-l)-Math.abs(y.line-l))[0], raw=fmtAm(o.price);
@@ -2233,7 +2306,7 @@ async function fetchHistOdds(ev, markets){
     const j=await r.json().catch(()=>({})); if(!r.ok) throw Object.assign(oddsFail(r.status), {code:j.error_code}); return j; };
   const evl=await get(`${HIST_API}/events?apiKey=${encodeURIComponent(key)}&date=${at}`);   // 1 credit: finds the event id
   const e=(evl.data||[]).find(x=>abbrByTeamName(x.away_team)+'@'+abbrByTeamName(x.home_team)===ev.game); if(!e) throw oddsFail('noevent');
-  const j=await get(`${HIST_API}/events/${e.id}/odds?apiKey=${encodeURIComponent(key)}&date=${at}&bookmakers=fanduel&markets=${markets.join(',')}&oddsFormat=american`);
+  const j=await get(`${HIST_API}/events/${e.id}/odds?apiKey=${encodeURIComponent(key)}&date=${at}&bookmakers=${myBooks().join(',')}&markets=${markets.join(',')}&oddsFormat=american`);
   return parseOdds(j.data||{});
 }
 async function autoHistCloses(evs){
@@ -2332,7 +2405,7 @@ async function buildSlate(){
       let cons=fresh(gid)?(SLATEPX[gid].cons||null):null;
       if(!prices){ try{ const d=await fetchGameOdds(g.away, g.home, ['player_anytime_td'], true); prices=d.td.anytime||[]; cons=(d.cons&&d.cons.td.anytime)||{}; SLATEPX[gid]={t:Date.now(), prices, cons}; }
         catch(e){ notes.push(`${fmtGame(gid)}: ${oddsWhy(e)}`); continue; } }
-      if(!prices.length){ notes.push(`${fmtGame(gid)}: FanDuel hasn't posted TD prices yet`); continue; }
+      if(!prices.length){ notes.push(`${fmtGame(gid)}: no TD prices posted yet`); continue; }
       const W=await gameWeather(g), badWx=W.outdoor && (W.wind>=15 || (W.wx.pp>=50 && W.wx.precip!=='none'));
       const sim=simGame({away:g.away, home:g.home, total:g.total||44.5, spreadPts:Math.abs(g.spread||0), fav:g.fav||g.home, outdoor:W.outdoor, wind:W.wind, wx:W.wx, statusMap});
       const players=sim.awayR.concat(sim.homeR), idx=buildPlayerIndex(players), book={}, cands=[], mm={};
@@ -2344,11 +2417,11 @@ async function buildSlate(){
         const A=SA.get(p._key), mp=A?A.p:p.anytime, r=evalBet(mp, odds); if(!r) continue;
         const conf=confFor(p,'anytime',r,badWx), tier=tierOf(mp,r.edge,r.ev,!p.matched); if(tier!=='take') continue;
         const k=r.edge>0?conf.score*r.edge/(1-r.bimp):0;
-        cands.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds, mp, model:p.anytime, mkt:A?A.mkt:null, mktSrc:A?A.src:null, ev:r.ev, edge:r.edge, bimp:r.bimp, conf, kelly:k, rk:k, game:gid, kickoff:g.kickoff, fd:o.fd||null}); }
+        cands.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds, book:bookOfTk(o.fd), mp, model:p.anytime, mkt:A?A.mkt:null, mktSrc:A?A.src:null, ev:r.ev, edge:r.edge, bimp:r.bimp, conf, kelly:k, rk:k, game:gid, kickoff:g.kickoff, fd:o.fd||null}); }
       for(const o of prices){ if(!(o.price>=FUN_BAND[0] && o.price<FUN_BAND[1])) continue;
         const p=matchPlayer(cleanName(o.name), idx); if(!p || p._status==='OUT' || p._status==='DBT') continue;
         const A=SA.get(p._key);
-        fun.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds:fmtAm(o.price), mp:A?A.p:p.anytime, model:p.anytime, mkt:A?A.mkt:null, mktSrc:A?A.src:null,
+        fun.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds:fmtAm(o.price), book:bookOfTk(o.fd), mp:A?A.p:p.anytime, model:p.anytime, mkt:A?A.mkt:null, mktSrc:A?A.src:null,
           bimp:americanToProb(o.price), sim:p.anytime*americanToDec(o.price), game:gid, kickoff:g.kickoff, fun:true, fd:o.fd||null}); }
       const B=BOARDS[gid]||(BOARDS[gid]={t:Date.now(), book:{}, prop:{}, mkt:{}}); Object.assign(B.book, book); B.mkt=Object.assign(B.mkt||{}, mm); B.t=Date.now();   // open the game later: prices are there
       all.push(...pickPlays(cands).picks);   // per game: same rule as Your card
@@ -2379,8 +2452,8 @@ async function buildSlate(){
       : fpl.length>=2 ? {legs:fpl.map(c=>({game:c.game, key:c.key, name:c.label, abbr:c.abbr, market:'anytime', odds:c.odds, ...(c.fd?{fd:c.fd}:{})})),
       D:fpl.reduce((a,c)=>a*americanToDec(c.odds),1), P:fpl.reduce((a,c)=>a*c.mp,1)} : null;
     SLATE={at:Date.now(), day:games[0].kickoff, checked:games.length, notes,
-      fun:{picks:funPicks.map(({key,label,abbr,market,odds,mp,model,mkt,mktSrc,bimp,stake,game,kickoff,fd})=>({key,label,abbr,market,odds,mp,model,mkt,mktSrc,bimp,stake,game,kickoff,fd,fun:true})), parlay:funParlay, max:nPick},
-      picks:picks.map(({key,label,abbr,market,odds,mp,model,mkt,mktSrc,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev,fd})=>({key,label,abbr,market,odds,mp,model,mkt,mktSrc,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev,fd})),
+      fun:{picks:funPicks.map(({key,label,abbr,market,odds,book,mp,model,mkt,mktSrc,bimp,stake,game,kickoff,fd})=>({key,label,abbr,market,odds,book,mp,model,mkt,mktSrc,bimp,stake,game,kickoff,fd,fun:true})), parlay:funParlay, max:nPick},
+      picks:picks.map(({key,label,abbr,market,odds,book,mp,model,mkt,mktSrc,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev,fd})=>({key,label,abbr,market,odds,book,mp,model,mkt,mktSrc,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev,fd})),
       parlay:best?{legs:best.legs.map(v=>v.l), P:best.P, D:best.D}:null};
     lsW('nfltd_slate', SLATE); renderSlate();
   }finally{ btn.disabled=false; oddsStatus(); }
@@ -2398,12 +2471,12 @@ function renderSlate(){
       : `<span class="vbadge${cls}" style="margin-left:auto;font-size:12px">bet ${u(c.stake)}</span>`; };
   const parlayBadge=(PP,stake,fun,cls)=>parlayLogged(PP.legs, fun) ? '<span class="muted" style="font-size:12px">✓ already bet</span>' : `<span class="vbadge${cls}" style="font-size:12px">bet ${u(stake)}</span>`;
   let html='';
-  if(!SLATE.picks.length) html+=`<div><b>No TD bets worth making</b> across the ${SLATE.checked} game${SLATE.checked>1?'s':''} checked — FanDuel's prices are at or below what the other books say they're worth. Sitting it out is a win too.${stale}</div>`;
+  if(!SLATE.picks.length) html+=`<div><b>No TD bets worth making</b> across the ${SLATE.checked} game${SLATE.checked>1?'s':''} checked — your books' best prices are at or below what the other books say they're worth. Sitting it out is a win too.${stale}</div>`;
   else {
-    html+=`<div style="font-size:13px;margin-bottom:4px"><b>Your ${SLATE.picks.length} TD bet${SLATE.picks.length>1?'s':''} for ${dayName}</b> <span class="muted">— the best of ${SLATE.checked} game${SLATE.checked>1?'s':''}, FanDuel prices from ${when}</span>${stale}</div>`;
+    html+=`<div style="font-size:13px;margin-bottom:4px"><b>Your ${SLATE.picks.length} TD bet${SLATE.picks.length>1?'s':''} for ${dayName}</b> <span class="muted">— the best of ${SLATE.checked} game${SLATE.checked>1?'s':''}, best price at ${myBooksTxt()}, from ${when}</span>${stale}</div>`;
     SLATE.picks.forEach((c,i)=>{ html+=`<div class="cpick spick" data-g="${esc(c.game)}" title="open this game"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
       `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="muted" style="font-size:12px">${fmtGame(c.game)}</span>${stakeBadge(c,' vb-take')}</div>`+
-      `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span> ${confBadge(c.conf)} <span class="muted" style="font-size:12px">${c.mkt!=null?(c.mktSrc==='fd'?'FD ':'mkt ')+pct(c.mkt)+' · model '+pct(c.model)+' → ':'<span style="color:var(--warn)">model only</span> · '}${pct(c.mp)} vs ${pct(c.bimp)}</span></div></div>`; });
+      `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span>${bkBadge(c.book)} ${confBadge(c.conf)} <span class="muted" style="font-size:12px">${c.mkt!=null?(c.mktSrc==='fd'?'own ':'mkt ')+pct(c.mkt)+' · model '+pct(c.model)+' → ':'<span style="color:var(--warn)">model only</span> · '}${pct(c.mp)} vs ${pct(c.bimp)}</span></div></div>`; });
     const tot=SLATE.picks.reduce((a,c)=>a+c.stake,0)+(P?slateParlayStake(P,bank):0);
     html+=`<div class="muted" style="font-size:12px;margin-top:5px">Whole day <b>${u(tot)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll, parlay included — capped at ${SLATE_CAP*100}%)</div>`;
     if(P){ const stake=slateParlayStake(P,bank);
@@ -2413,12 +2486,12 @@ function renderSlate(){
     else if(SLATE.picks.length>1) html+=`<div class="muted" style="font-size:12px;margin-top:8px">${new Set(SLATE.picks.map(c=>c.game)).size<2 ? 'No parlay — it needs picks from at least two different games.' : 'No parlay today — combining these doesn\'t beat betting them as singles.'}</div>`;
     html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px"><button class="statussel" id="slateLog" style="padding:4px 11px">📓 log the picks</button>`+
       (P&&!parlayLogged(P.legs,false)?`<button class="statussel" id="slateLogParlay" style="padding:4px 11px">📓 log the parlay</button><button class="statussel" id="slateSlip" style="padding:4px 11px">➕ parlay to slip</button>`:'')+`</div>`+
-      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(SLATE.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd})), 'Open the picks on FanDuel', 'rebuild')}${P?fdButton(P.legs, 'Put the parlay on FanDuel', 'rebuild'):''}</div>`;
+      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(SLATE.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd})), 'Open the picks on FanDuel', 'rebuild')}${P?parlayButton(P.legs, 'Put the parlay on FanDuel', 'rebuild', P.D):''}</div>`;
   }
   // 🎉 fun picks: TD bets for fun, from the price range that lost least on 2025's real prices
   const F=SLATE.fun;
   if(!F) html+='<div style="margin-top:10px;font-size:13px">🎉 <b>Fun picks</b> are new — hit <b>🎯 Build my TD picks</b> again to see them.</div>';   // a list saved before they existed
-  else if(!F.picks.length) html+='<div class="muted" style="margin-top:10px;font-size:12px">🎉 No fun picks — FanDuel has no anytime prices between +'+FUN_BAND[0]+' and +'+FUN_BAND[1]+' for these games yet.</div>';
+  else if(!F.picks.length) html+='<div class="muted" style="margin-top:10px;font-size:12px">🎉 No fun picks — your books have no anytime prices between +'+FUN_BAND[0]+' and +'+FUN_BAND[1]+' for these games yet.</div>';
   if(F&&F.picks&&F.picks.length){
     const FP=F.parlay, cut=n=>Math.round((1-Math.pow(1-FUN_EDGE,n))*100);
     html+=`<div style="margin-top:12px;padding:10px 12px;border:1px dashed var(--line2);border-radius:10px">`+
@@ -2426,12 +2499,12 @@ function renderSlate(){
       `<div class="muted" style="font-size:12px;line-height:1.5;margin:3px 0 7px">Anytime TDs priced <b>+${FUN_BAND[0]} to +${FUN_BAND[1]}</b> lost about ${Math.round(FUN_EDGE*100)}% of the money bet on them over 2025's real FanDuel prices; +400 to +1500 lost about 20%, and heavy favourites about 11%. This is <b>not an edge</b> — over time you lose a little. Same small stake on each; the sim's favourites in the range go first (that order isn't proven). Fun picks you've already logged stay on this list (✓) and count toward the number shown, so rebuilding never hands you a fresh batch; anyone else in your real picks, bet log or slip is left out, so you never double up (the app only knows bets you've logged or slipped).</div>`;
     F.picks.forEach(c=>{ html+=`<div class="cpick spick" data-g="${esc(c.game)}" title="open this game"><div class="cp1"><span class="muted" style="min-width:18px">🎉</span>`+
       `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="muted" style="font-size:12px">${fmtGame(c.game)}</span>${stakeBadge(c,'')}</div>`+
-      `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span> <span class="muted" style="font-size:12px">${c.mkt!=null?'~'+pct(c.mp)+' to score ('+(c.mktSrc==='fd'?'FanDuel\'s price':'other books')+')':'~'+pct(c.mp)+' to score (<span style="color:var(--warn)">model only</span>)'}</span></div></div>`; });
+      `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span>${bkBadge(c.book)} <span class="muted" style="font-size:12px">${c.mkt!=null?'~'+pct(c.mp)+' to score ('+(c.mktSrc==='fd'?'the book\'s own price':'other books')+')':'~'+pct(c.mp)+' to score (<span style="color:var(--warn)">model only</span>)'}</span></div></div>`; });
     if(FP) html+=`<div style="margin-top:8px;font-size:13px"><b>🎰 Fun parlay</b> ${FP.legs.map(l=>`<b style="color:${teamText(l.abbr)}">${esc(l.name)}</b>`).join(' + ')} <span class="muted" style="font-size:12px">— two of the fun picks above, not new players</span><br>`+
       `pays <span class="odds">${amStr(decToAmerican(FP.D))}</span> · hits ~${pct(FP.P)} · ${parlayBadge(FP, FUN_PARLAY_STAKE, true, '')} <span class="muted" style="font-size:12px">— a parlay multiplies the house's cut (≈ −${cut(FP.legs.length)}% over time)</span></div>`;
     html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="statussel" id="funLog" style="padding:4px 11px">📓 log fun picks</button>`+
       (FP&&!parlayLogged(FP.legs,true)?`<button class="statussel" id="funLogParlay" style="padding:4px 11px">📓 log fun parlay</button>`:'')+`</div>`+
-      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(F.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd})), 'Open fun picks on FanDuel', 'rebuild')}${FP?fdButton(FP.legs, 'Put fun parlay on FanDuel', 'rebuild'):''}</div>`+
+      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(F.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd})), 'Open fun picks on FanDuel', 'rebuild')}${FP?parlayButton(FP.legs, 'Put fun parlay on FanDuel', 'rebuild', FP.D):''}</div>`+
       (FP?'':'<div class="muted" style="font-size:12px;margin-top:6px">No fun parlay — it needs picks from two different games'+(SLATE.checked<2?' (only one game on this slate)':'')+'.</div>')+`</div>`;
   }
   out.innerHTML=html+notes;
@@ -2539,7 +2612,7 @@ function renderBets(){
           : live!=null ? ` <span class="${g(live)}" style="font-size:12px;opacity:.85" title="${esc((moved?`FanDuel moved the line to ${b.cur.l} (${b.cur.o}) — about ${b.cur.q} at your line. `:`FanDuel now: ${b.cur.q}. `)+'A live read, not final until the close.')}">${arrow}≈${pc(live)}</span>`
           : moved ? ` <span class="muted" style="font-size:12px" title="FanDuel moved the line to ${b.cur.l} (${esc(b.cur.o||'')})">${arrow}</span>` : '';
         html+=`<tr${P&&P.keep?' class="rowtake"':''}><td class="l"><b${b.modelProb!=null?` title="chance when logged: ${pct(b.modelProb)}"`:''}>${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)}</span> ${tags}</td>`+
-          `<td class="odds">${esc(b.odds)}</td>`+
+          `<td class="odds">${esc(b.odds)}${b.book&&myBooks().length>1?bkBadge(b.book):''}</td>`+
           `<td style="white-space:nowrap"><input class="bookin betclose" data-id="${b.id}" value="${(b.closeOdds||'').replace(/"/g,'&quot;')}" placeholder="close" style="width:62px">${clvTxt}</td>`+
           `<td title="${b.stake}u">${betStakeTxt(b)}</td>`+
           `<td style="white-space:nowrap"><select class="statussel betres" data-id="${b.id}">${['pending','win','loss','push'].map(s=>`<option ${s===b.result?'selected':''}>${s}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc('auto-settled from ESPN: '+b.auto)}">🤖</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
@@ -2663,12 +2736,14 @@ function propCandidates(){
   for(const [k,pm] of Object.entries(LAST.propMap)){
     const i=k.indexOf('|'), s=k.slice(0,i), p=byKey.get(k.slice(i+1)); if(!p||p._status==='OUT'||!PSTAT.includes(s)) continue;
     const mu=propMu(p,s); if(mu==null) continue; const med=propMedian(mu,s);
-    const side=(sd,line,odds,alt)=>{ if(!odds||line==null) return; const pr=propSides(mu,s,line); if(!pr) return;
+    const side=(sd,line,odds,alt,x)=>{ if(!odds||line==null) return; const pr=propSides(mu,s,line); if(!pr) return;   // x = another of your books' offer at its own line
       const model=sd==='O'?pr.over:pr.under; let mo=propCons(s,p._key,line,mu), src=mo!=null?'books':null;
-      if(mo==null && !alt && line===pm.line){ const io=americanToProb(pm.over), iu=americanToProb(pm.under); if(io>0&&iu>0){ mo=io/(io+iu); src='fd'; } }   // FanDuel's own two-way price
+      const two=x?x:(!alt&&line===pm.line?pm:null);   // no other-book line: that book's own two-way price is the market
+      if(mo==null && two){ const io=americanToProb(two.over), iu=americanToProb(two.under); if(io>0&&iu>0){ mo=io/(io+iu); src='fd'; } }
       const mkt=mo!=null?(sd==='O'?mo:1-mo):null;
-      out.push({key:p._key, label:p.name, abbr:p._abbr, market:propMktKey(s,sd,line), odds, mp:mkt!=null?blendP(mkt,model,PROP_W):model, model, mkt, mktSrc:src, ref:p, prop:{s,side:sd,line,mu,med,alt}}); };
+      out.push({key:p._key, label:p.name, abbr:p._abbr, market:propMktKey(s,sd,line), odds, book:x?x.book:bookOfTk(tkFor(curGameId(), propMktKey(s,sd,line), p._key, odds)), mp:mkt!=null?blendP(mkt,model,PROP_W):model, model, mkt, mktSrc:src, ref:p, prop:{s,side:sd,line,mu,med,alt}}); };
     if(pm.line!=null){ side('O',pm.line,pm.over); side('U',pm.line,pm.under); }
+    for(const x of (pm.books||[])) if(x.line!==pm.line){ side('O',x.line,x.over,false,x); side('U',x.line,x.under,false,x); }
     for(const a of (pm.alts||[])) side('O',a.line,a.odds,true);
   }
   return out;
@@ -2971,9 +3046,16 @@ $('closePull').onclick=pullCloses;
 $('slateBtn').onclick=buildSlate;
 $('pullOdds').onclick=()=>pullOdds(false);
 document.addEventListener('click', e=>{ const b=e.target.closest&&e.target.closest('.fdpull'); if(!b) return; b.disabled=true; b.textContent='pulling…'; if(LAST) PULLED[curGameId()]=0; pullOdds(false); });
-$('oddsTD').checked=!!ODDSCFG.td; $('oddsProps').checked=!!ODDSCFG.props; $('oddsAuto').checked=!!ODDSCFG.auto; $('oddsReserve').value=ODDSCFG.reserve;
-const saveOddsCfg=()=>{ ODDSCFG={td:$('oddsTD').checked, props:$('oddsProps').checked, auto:$('oddsAuto').checked, reserve:Math.max(0,+$('oddsReserve').value||0)}; lsW('nfltd_oddscfg', ODDSCFG); };
-['oddsTD','oddsProps','oddsAuto','oddsReserve'].forEach(id=>$(id).addEventListener('change', saveOddsCfg));
+$('oddsAuto').checked=!!ODDSCFG.auto; $('oddsReserve').value=ODDSCFG.reserve;
+const bkBoxes=[...document.querySelectorAll('.bkchk')], mkBoxes=[...document.querySelectorAll('.mkchk')];
+bkBoxes.forEach(c=>{ c.checked=myBooks().includes(c.value); }); mkBoxes.forEach(c=>{ c.checked=mkOn(c.value); });
+const showOddsCost=()=>{ const n=pickedMarkets().length; $('oddsCost').textContent=n+' credit'+(n===1?'':'s'); };
+const saveOddsCfg=()=>{ const mk={}; mkBoxes.forEach(c=>{ mk[c.value]=c.checked; });
+  ODDSCFG={td:mkBoxes.some(c=>OA_TD[c.value]&&c.checked), props:mkBoxes.some(c=>OA_PROP[c.value]&&c.checked), mk, books:bkBoxes.filter(c=>c.checked).map(c=>c.value),
+    auto:$('oddsAuto').checked, reserve:Math.max(0,+$('oddsReserve').value||0)};
+  lsW('nfltd_oddscfg', ODDSCFG); showOddsCost(); };
+bkBoxes.concat(mkBoxes, [$('oddsAuto'), $('oddsReserve')]).forEach(el=>el.addEventListener('change', saveOddsCfg));
+showOddsCost();
 $('oddsKeyMsg').textContent=oddsKey()?'saved ✓':'';
 $('oddsKeySave').onclick=()=>{ const v=$('oddsKeyIn').value.trim(); try{ if(v) localStorage.setItem('nfltd_oddskey', v); else localStorage.removeItem('nfltd_oddskey'); }catch(e){}
   $('oddsKeyIn').value=''; $('oddsKeyMsg').textContent=v?'saved ✓':'removed'; oddsEvents=null; if(v) autoPullSoon(); };

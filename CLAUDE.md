@@ -173,4 +173,23 @@ See README.md for what the model does and how it was validated.
   koStamp(game) at log time (SCHED + CUR_WK), back-filled by autoSettle from ESPN events for older bets (koX = not found).
   Parlay picker = details#parlaySec, collapsed by default; computeParlays() returns early while closed and runs on open;
   open state in nfltd_parlayopen; #jumpNav links open a <details> target.
+- 💰 BANKROLL $ (2026-10-13): BANK={amt,at,mt} (nfltd_bank, synced + exported). bankNow() = amt + dollar P/L of bets with
+  b.st (settled-at, stamped by autoSettle and the result select) > BANK.at; unitUsd() = bankNow()/getBankroll() (the old
+  units box is a hidden field = 100, so 1u = 1%). stakeTxt(u) / betStakeTxt(b) render every stake ($ when a bankroll is
+  set, else units); bets store `usd` at log time (usdStamp). Typing a new balance = setBank() resets the base. The log
+  (stake, P/L, totals, ROI) switches to dollars via usdOn/mny.
+- MULTI-BOOK (2026-10-13, "search DraftKings + FanDuel for best odds"): myBooks() = ODDSCFG.books (FanDuel always first,
+  default + DraftKings). parseOdds() -> best price among YOUR books per TD selection / per prop side at the primary
+  (FanDuel's) line, each with a TICKET {b, o, m?, s?, alt:{book:ticket}} filed as FD#<market>#<key> (name kept for
+  compatibility); a book with a different prop line -> d.propsX -> pm.books[] -> its own candidates (side(...,x)). tkFor()
+  only trusts a ticket while the box still holds that price. consensusFrom() excludes YOUR books (6 others typically).
+  Candidates/bets/slip legs carry `book`; d.byBook[book] is that book's own board -> closeView()/applyClose use the
+  bet's book (history pulls bookmakers=myBooks). Links: bookLink() — FanDuel addToBetslip, DraftKings ?outcomes=sid+sid
+  (API gives the single-leg form; the '+' join is the common format, unverified like FanDuel's multi-leg); other books'
+  links need {state} -> not linked. fdButton() makes one button per book; parlayAt()/parlayButton() price a parlay at the
+  ONE book that has every leg and pays most ("at DraftKings it pays +1475"). 2025 check: better of FD/DK on anytime =
+  +3.3% payout, every-bet ROI -8.7% -> -5.5% (both halves), fun band -5.5% -> -3.9%.
+  CREDITS: per-market switches (ODDSCFG.mk, mkOn/pickedMarkets) and freshMs() (20 min <3h to kickoff, 1h <24h, else 3h).
+  On 2026-10-13 the 20K plan had 2,180 left: ~11K went to the two one-off backtests, the app itself burned ~850/day
+  (9 credits per game opened + history closes at 10/market) — tell the user before adding anything that pulls more.
 - Commits end with the Co-Authored-By line from the session's instructions.
