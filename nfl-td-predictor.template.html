@@ -239,6 +239,17 @@
 
     <div class="book">
     <aside class="bslip" id="bslip">
+    <!-- BANKROLL: dollars in, dollar stakes out; it grows (or shrinks) by itself as bets settle -->
+    <h2 id="bankSec">Bankroll</h2>
+    <div class="panel" style="padding:10px 12px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:20px;font-weight:800">$</span>
+        <input id="bankUsd" type="number" min="0" step="1" placeholder="your bankroll" style="width:120px;padding:6px 8px;font-size:16px;font-weight:700" title="what's in your betting account right now — type a new number any time (after a deposit or a withdrawal)">
+        <span id="bankNow" style="font-size:12px;line-height:1.45"></span>
+      </div>
+      <div id="bankNote" class="muted" style="font-size:12px;margin-top:6px;line-height:1.5"></div>
+      <input id="bankroll" type="hidden">
+    </div>
     <!-- PRICE THIS GAME: one paste box for every market -->
     <h2 id="priceSec">Price this game</h2>
     <div class="panel" style="padding:10px 12px">
@@ -280,7 +291,6 @@
         <div style="font-weight:800;font-size:15px"><span class="star">🎯</span> The best plays from this game <span class="muted" style="font-weight:400;font-size:13px">— what to bet and how much</span></div>
         <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
           <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px" title="the most bets the card (and the log's plan) will pick from one game">Max per game <select id="maxGame" class="statussel" style="font-size:12px"><option>1</option><option>2</option><option selected>3</option><option>4</option></select></label>
-          <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px">Bankroll <input id="bankroll" type="number" min="1" step="10" style="width:90px;padding:4px 7px"> units</label>
         </div>
       </div>
       <div id="cardBody" style="margin-top:6px"></div>
@@ -1134,7 +1144,7 @@ function decorateMarkets(){
     if(!c){ sub.innerHTML=base; cell.title=tip||''; return; }
     const pick=cardK.get(c.key+'|'+c.market), cls=pick?'bet':c.tier==='take'?'edge':(c.tier==='flag'||c.tier==='dart')?c.tier:'';
     if(cls) cell.classList.add(cls);
-    sub.innerHTML = pick ? `★ ${pick.stake.toFixed(1)}u` : `${pctS(c.mp)} <span class="${c.ev>0&&c.tier==='take'?'ev-pos':c.ev>0?'ev-dart':''}" style="font-weight:700">${c.ev>=0?'+':''}${(c.ev*100).toFixed(0)}%</span>`;
+    sub.innerHTML = pick ? `★ ${stakeTxt(pick.stake)}` : `${pctS(c.mp)} <span class="${c.ev>0&&c.tier==='take'?'ev-pos':c.ev>0?'ev-dart':''}" style="font-weight:700">${c.ev>=0?'+':''}${(c.ev*100).toFixed(0)}%</span>`;
     cell.title=`${c.label} — ${mktLabel(c.market)} ${c.odds}\n${c.mkt!=null?`chance ${pct(c.mp)} from ${c.mktSrc==='fd'?'FanDuel\'s own price (no other book priced it)':'other books'} ${pct(c.mkt)} (cut removed) · model alone ${pct(c.model)}`:`model only ${pct(c.mp)} — no other-book prices (the model alone lost to the books in testing; ⚡ Pull to check)`} · fair ${probToAmerican(c.mp)} vs book ${pct(c.bimp)} · EV ${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}% · confidence ${Math.round(c.conf.score*100)}\n`+
       (pick?'★ On Your card — bet this.':c.tier==='take'?'Edge, but not on the card: '+(SKIPWHY.get(c.key+'|'+c.market)||'the card keeps only the best bets per game')+'.':c.tier==='flag'?'⚠ Edge too big to trust — likely injury/role news; verify first.':c.tier==='dart'?'🎲 Lottery price — too rare or uncertain to price.':'No edge at this price.'); };
   grid.querySelectorAll('.mcell[data-mkt]').forEach(cell=>paint(cell, byK.get(cell.dataset.key+'|'+cell.dataset.mkt), cell.dataset.base, cell.dataset.tip));
@@ -1248,7 +1258,7 @@ function sugStake(c){ return Math.max(0.1, Math.round(KELLY_FRAC*(c.kelly||c.rk|
 function logBetFrom(c, stake, gameIn){
   const game=gameIn||curGameId();
   if(bets.some(b=>b.game===game && b.key===c.key && b.market===c.market && b.result==='pending')) return false;
-  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), ...koStamp(game), game, key:c.key, player:c.label, market:c.market, odds:c.odds,
+  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), ...koStamp(game), ...usdStamp(stake), game, key:c.key, player:c.label, market:c.market, odds:c.odds,
     modelProb:+(+c.mp).toFixed(4), ...(c.fun?{fun:true}:{}), ...(c.model!=null?{rawP:+(+c.model).toFixed(4)}:{}), ...(c.mkt!=null?{mktP:+(+c.mkt).toFixed(4)}:{}), rk:+(c.kelly!=null?c.kelly:(c.rk||0)).toFixed(5), cf:c.conf?c.conf.score:null, ...(c.prop?{pmu:+c.prop.mu.toFixed(3)}:{}),
     stake:+(+stake).toFixed(1), closeOdds:'', result:'pending'});
   return true;
@@ -1258,7 +1268,7 @@ function trimLog(picks, cutBets, label){
   if(!cutBets.length) return;
   if(!confirm(`Remove ${cutBets.length} bet${cutBets.length>1?'s':''} from your log for ${label} and keep the best ${picks.length} at the suggested stakes?`)) return;
   const cut=new Set(cutBets.map(b=>b.id));
-  picks.forEach(c=>{ if(c.bet) c.bet.stake=c.stake; });
+  picks.forEach(c=>{ if(c.bet){ c.bet.stake=c.stake; Object.assign(c.bet, usdStamp(c.stake)); } });
   bets=bets.filter(b=>!cut.has(b.id)); saveBets(); renderBets();
 }
 let CANDS=[], BOARDROWS=[];
@@ -1302,7 +1312,7 @@ function computeTopPlays(){
   SKIPWHY=new Map(); for(const x of skipped){ const k=x.c.key+'|'+x.c.market; if(!SKIPWHY.has(k)) SKIPWHY.set(k, x.why); }
   const cutLogged=skipped.filter(s=>s.c.bet).map(s=>s.c.bet), unlogged=picks.filter(c=>!c.bet);
 
-  const u=v=>(Math.round(v*10)/10).toFixed(1)+'u', maxG=maxPerGame(), nEdge=opts.filter(o=>o.rk>0).length;
+  const u=stakeTxt, maxG=maxPerGame(), nEdge=opts.filter(o=>o.rk>0).length;
   let html='';
   if(!cand.length && !logged.length){
     html=`<div class="muted">Paste a board above (or type prices in the tables) — TD odds or player props — and this picks the best ${maxG} bets in the game and sizes them.</div>`;
@@ -1310,7 +1320,7 @@ function computeTopPlays(){
     html+=`<div style="font-size:13px;margin:0 0 2px"><b>Bet ${picks.length===1?'this one':'these '+picks.length}</b> <span class="muted">— best ${picks.length} of ${nEdge} edge${nEdge===1?'':'s'} (max ${maxG}/game, ${MAX_PER_TEAM}/team, 1/player). Outlined boxes = skip.</span></div>`;
     html+='<div>';
     picks.forEach((c,i)=>{ const bimp=c.bimp!=null?c.bimp:1/(oddsDec(c.odds)||2), edge=c.mp-bimp;
-      const inLog=c.bet?` <span class="muted" style="font-size:12px" title="already in your bet log">✓ in log${Math.abs((+c.bet.stake||0)-c.stake)>0.05?` at ${c.bet.stake}u`:''}${isPropMkt(c.bet.market)&&c.bet.cur&&c.bet.cur.l!=null&&c.bet.cur.l!==+c.bet.market.split('|')[3]?` · line now ${c.bet.cur.l}`:''}</span>`:'';
+      const inLog=c.bet?` <span class="muted" style="font-size:12px" title="already in your bet log">✓ in log${Math.abs((+c.bet.stake||0)-c.stake)>0.05?` at ${betStakeTxt(c.bet)}`:''}${isPropMkt(c.bet.market)&&c.bet.cur&&c.bet.cur.l!=null&&c.bet.cur.l!==+c.bet.market.split('|')[3]?` · line now ${c.bet.cur.l}`:''}</span>`:'';
       const why=`model ${pct(c.mp)} vs book ${pct(bimp)} · edge ${edge>=0?'+':''}${(edge*100).toFixed(1)} pts${c.role?' · '+c.role:''}${c.cal&&c.cal<1?' · calibrated ×'+c.cal.toFixed(2):''}${c.capped?' · scaled to the team cap':''}`;
       html+=`<div class="cpick" title="${esc(why)}"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
       `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="vbadge vb-take" style="font-size:12px;margin-left:auto">bet ${u(c.stake)}</span></div>`+
@@ -1367,7 +1377,7 @@ function renderBoard(){
       `<td style="white-space:nowrap"><button class="statussel" data-act="log" data-i="${i}" title="log this bet" style="padding:1px 7px" ${isLogged?'disabled':''}>📓</button> <button class="statussel" data-act="slip" data-i="${i}" title="add to the cross-game slip" style="padding:1px 7px">➕</button></td></tr>`; }).join('');
 }
 // star the card's picks in the table so both views agree
-const betBadge=c=>`<span class="vbadge vb-take" title="${esc('On Your card: bet '+mktLabel(c.market)+' '+c.odds+' for '+c.stake.toFixed(1)+'u')}">★ BET ${c.stake.toFixed(1)}u</span>`;
+const betBadge=c=>`<span class="vbadge vb-take" title="${esc('On Your card: bet '+mktLabel(c.market)+' '+c.odds+' for '+stakeTxt(c.stake))}">★ BET ${stakeTxt(c.stake)}</span>`;
 const edgeWhy=k=>'Beats the fair price, but not on Your card — '+(SKIPWHY.get(k)||'the card keeps only the strongest bets per team')+'. Skip it.';
 const edgeBadge=k=>`<span class="vbadge vb-edge" title="${esc(edgeWhy(k))}">edge</span>`;
 // one click: every card pick goes to the cross-game slip (with its confidence + game context)
@@ -1675,7 +1685,7 @@ function bestParlay(V){
 function renderSlip(){
   const body=$('slipBody'); if(!body) return;
   if(!slip.length){ body.innerHTML=`<div class="muted">No legs yet. Price a game, then hit <b>➕ add these to slip</b> on Your card (or pick legs here). Do that for every game you like — the slip keeps the best leg per game and builds the parlay that grows your bankroll fastest.</div>`; return; }
-  const V=slip.map(legView), bank=getBankroll(), u=v=>(Math.round(v*10)/10).toFixed(1)+'u';
+  const V=slip.map(legView), bank=getBankroll(), u=stakeTxt;
   const legLine=v=>`<b style="color:${teamText(v.l.abbr)}">${esc(v.l.name)}</b> <span class="muted">${mktLabel(v.l.market)}</span> <span class="odds">${v.l.odds}</span> ${confBadge(v.conf)}`;
   let html='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">';
   V.forEach((v,i)=>{ html+=`<div style="display:flex;gap:8px;align-items:center;font-size:13px;flex-wrap:wrap${v.started?';opacity:.5':''}">`+
@@ -1755,8 +1765,8 @@ function mergeRecs(local, remote, keyOf, tomb){
   for(const r of (remote||[])){ if(!r) continue; const k=keyOf(r); m.set(k, pick(m.get(k), r)); }
   return [...m.values()].filter(r=>!(tomb[keyOf(r)]>=(r.mt||0)));
 }
-const syncCanon=p=>JSON.stringify([p.bets, p.slip, p.bankroll, p.bankMt||0, p.tomb]);
-const syncPayload=()=>({app:'nfl-td-predictor', v:2, at:new Date().toISOString(), bets, slip, bankroll:getBankroll(), bankMt, tomb:TOMB});
+const syncCanon=p=>JSON.stringify([p.bets, p.slip, p.bankroll, p.bankMt||0, p.tomb, p.bank||null]);
+const syncPayload=()=>({app:'nfl-td-predictor', v:2, at:new Date().toISOString(), bets, slip, bankroll:getBankroll(), bankMt, tomb:TOMB, bank:BANK});
 function applyRemote(r){
   const before=syncCanon(syncPayload());
   for(const kind of ['bets','slip']) for(const [k,t] of Object.entries((r.tomb&&r.tomb[kind])||{})) if(!(TOMB[kind][k]>=t)) TOMB[kind][k]=t;
@@ -1765,6 +1775,7 @@ function applyRemote(r){
   bets=mergeRecs(bets, r.bets, betKey, TOMB.bets).sort((x,y)=>String(y.ts).localeCompare(String(x.ts)));
   slip=mergeRecs(slip, r.slip, legKey, TOMB.slip);
   if((r.bankMt||0)>bankMt && r.bankroll>0){ bankMt=r.bankMt; $('bankroll').value=r.bankroll; lsSet('nfltd_bankroll', r.bankroll); lsSet('nfltd_bankmt', bankMt); }
+  if(r.bank && (r.bank.mt||0)>(BANK.mt||0)){ BANK=r.bank; lsW('nfltd_bank', BANK); }
   // a merge isn't a local edit: persist without stamping
   betSnap=snapOf(bets, betKey); slipSnap=snapOf(slip, legKey); saveTomb();
   try{ localStorage.setItem('nfltd_bets', JSON.stringify(bets)); localStorage.setItem('nfltd_slip', JSON.stringify(slip)); }catch(e){}
@@ -1828,7 +1839,8 @@ function addBet(){
   const o=betOptCache[+$('betPlayer').value], mkt=$('betMarket').value;
   let odds=$('betOdds').value.trim(); if(/^\d/.test(odds)) odds='+'+odds;
   const dec=oddsDec(odds); if(!dec){ betFlash('enter the price, e.g. +150'); return; }
-  const stake=Math.abs(parseFloat($('betStake').value))||1;
+  const rawStake=Math.abs(parseFloat($('betStake').value))||0, kUsd=unitUsd();   // with a dollar bankroll the box is dollars
+  const stake=kUsd!=null ? (rawStake>0 ? +(rawStake/kUsd).toFixed(1) : 1) : (rawStake||1), usd=kUsd!=null ? {usd:rawStake>0?rawStake:+kUsd.toFixed(2)} : {};
   const custom = mkt==='custom' || (o&&o.key==='custom');
   let player, market, key=null, mp=null, game=LAST?LAST.away+'@'+LAST.home:'';
   // a custom prop can be from any game — don't stamp it with whichever matchup happens to be open
@@ -1836,7 +1848,7 @@ function addBet(){
   else { player=o.name; key=o.key; market=mkt; mp = o.p ? o.p[mkt] : (o.dst ? o.dst[mkt] : null); }
   let rk=null, cf=null;   // rank for the log's plan (confidence-adjusted Kelly), like bets logged from the card
   if(mp!=null){ const r=evalBet(mp, odds); if(r){ const cn=confFor(o.p||{dst:true}, market, r); cf=cn.score; rk=r.edge>0?+(cn.score*r.edge/(1-r.bimp)).toFixed(5):0; } }
-  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*9999), ts:new Date().toISOString(), ...koStamp(game), game, key, player, market, odds, modelProb:(mp!=null?+mp.toFixed(4):null), rk, cf, stake, closeOdds:'', result:'pending'});
+  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*9999), ts:new Date().toISOString(), ...koStamp(game), ...usd, game, key, player, market, odds, modelProb:(mp!=null?+mp.toFixed(4):null), rk, cf, stake, closeOdds:'', result:'pending'});
   saveBets(); $('betOdds').value=''; $('betCustom').value=''; renderBets(); betFlash('logged ✓');
 }
 // Fill Close from a pasted board: matches your OPEN bets (pending, or logged in the last 2 days without a
@@ -1887,6 +1899,31 @@ const OA_TD={player_anytime_td:'anytime', player_1st_td:'first', player_last_td:
 const OA_PROP={player_receptions:'rec', player_reception_yds:'recyd', player_rush_yds:'ryd', player_rush_reception_yds:'rryd', player_pass_yds:'pyd'};
 const lsJ=(k,d)=>{ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } };
 const lsW=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
+// ---------- BANKROLL IN DOLLARS ----------
+// BANK.amt = what the user says is in the account at BANK.at. From then on every settled bet (b.st = when it settled) adds
+// its dollar P/L, so the bankroll — and every stake, since stakes are a % of it — grows or shrinks by itself. 1 unit is
+// always 1% of the bankroll NOW (getBankroll() units = 100%). A bet keeps the dollars staked when it was logged (b.usd).
+let BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {}));
+const betUsd=b=>b.usd!=null ? +b.usd : (BANK.amt ? (+b.stake||0)*BANK.amt/getBankroll() : null);   // older bets: at the starting unit
+const betPlUsd=b=>{ const u=betUsd(b); if(u==null) return null; const d=oddsDec(b.odds)||1; return b.result==='win'?u*(d-1):b.result==='loss'?-u:b.result==='push'?0:null; };
+function bankNow(){ if(!BANK.amt) return null; let x=BANK.amt; for(const b of bets) if(b.st>BANK.at){ const p=betPlUsd(b); if(p!=null) x+=p; } return Math.max(0,x); }
+const unitUsd=()=>{ const n=bankNow(); return n!=null ? n/getBankroll() : null; };
+const fmtUsd=x=>{ const a=Math.abs(x); return (x<0?'−':'')+'$'+(a>=20?Math.round(a).toLocaleString():a>=1?(Math.round(a*2)/2).toFixed(Math.round(a*2)%2?2:0):a.toFixed(2)); };
+// a stake for display: dollars when a bankroll is set, units otherwise
+const stakeTxt=u=>{ const k=unitUsd(); return k!=null ? fmtUsd(u*k) : (Math.round(u*10)/10).toFixed(1)+'u'; };
+const betStakeTxt=b=>BANK.amt&&betUsd(b)!=null ? fmtUsd(betUsd(b)) : b.stake+'u';
+const usdStamp=u=>{ const k=unitUsd(); return k!=null ? {usd:+(u*k).toFixed(2)} : {}; };   // goes on a bet when it's logged
+function renderBank(){
+  const inp=$('bankUsd'); if(!inp) return; const now=bankNow();
+  if(document.activeElement!==inp) inp.value=now!=null ? Math.round(now*100)/100 : '';
+  const bs=$('betStake'); if(bs) bs.placeholder=now!=null?'stake $':'stake 1';
+  if(now==null){ $('bankNow').textContent=''; $('bankNote').innerHTML='Type what\'s in your betting account and every stake on this page turns into dollars. From then on it grows or shrinks by itself as your bets settle.'; return; }
+  const done=bets.filter(b=>b.st>BANK.at && betPlUsd(b)!=null), d=now-BANK.amt, open=bets.filter(b=>b.result==='pending'), risk=open.reduce((a,b)=>a+(betUsd(b)||0),0);
+  const since=new Date(BANK.at).toLocaleDateString([], {month:'short', day:'numeric'});
+  $('bankNow').innerHTML=done.length ? `<b class="${d>0?'ev-pos':d<0?'ev-neg':''}">${d>=0?'+':''}${fmtUsd(d)}</b> <span class="muted">since ${since} · ${done.length} settled bet${done.length>1?'s':''} (started ${fmtUsd(BANK.amt)})</span>` : `<span class="muted">set ${since}</span>`;
+  $('bankNote').innerHTML=`1 unit = 1% = <b>${fmtUsd(unitUsd())}</b>. Every stake on the page is in dollars and scales as this grows.${open.length?` <b>${fmtUsd(risk)}</b> is riding on ${open.length} open bet${open.length>1?'s':''}.`:''} Deposited or withdrew? Just type the new balance.`;
+}
+function setBank(v){ BANK = v>0 ? {amt:+(+v).toFixed(2), at:Date.now(), mt:Date.now()} : {amt:null, at:0, mt:Date.now()}; lsW('nfltd_bank', BANK); syncSoon(); if(LAST) computeTopPlays(); renderSlip(); renderBets(); try{ if(SLATE) renderSlate(); }catch(e){} }
 let ODDSCFG=Object.assign({td:true, props:true, auto:true, reserve:150}, lsJ('nfltd_oddscfg',{}));
 let PULLED=(p=>{ const old=Date.now()-2*86400e3; for(const k of Object.keys(p)) if(!(p[k]>old)) delete p[k]; return p; })(lsJ('nfltd_pulled',{}));
 let oddsRemaining=lsJ('nfltd_oddsleft',null), oddsEvents=null, pullToken=0;
@@ -2177,7 +2214,7 @@ async function autoSettle(manual){
       const r = res.some(x=>x.r==='loss') ? 'loss' : res.some(x=>x.r===null) ? null : (legs.length>1 && res.some(x=>x.r==='push')) ? null : res.every(x=>x.r==='win') ? 'win' : 'push';
       const txt=res.map(x=>x.why).join(' · ')+(legs.length>1 && r===null && res.some(x=>x.r==='push')?' — a leg was void, FanDuel reprices the parlay: settle by hand':'');
       if(!r){ if(b.autoNote!==txt){ b.autoNote=txt; changed=true; } byHand++; continue; }
-      b.result=r; b.auto=txt; delete b.autoNote; settled++; changed=true;
+      b.result=r; b.auto=txt; b.st=Date.now(); delete b.autoNote; settled++; changed=true;
     }
     if(changed){ saveBets(); renderBets(); }
     const closeTxt=AUTO.close ? await autoHistCloses(evs) : '';
@@ -2350,7 +2387,7 @@ async function buildSlate(){
 }
 function renderSlate(){
   const out=$('slateBody'); if(!out||!SLATE) return;
-  const u=v=>(Math.round(v*10)/10).toFixed(1)+'u', bank=getBankroll(), dayName=new Date(SLATE.day).toLocaleDateString([], {weekday:'long'});
+  const u=stakeTxt, bank=getBankroll(), dayName=new Date(SLATE.day).toLocaleDateString([], {weekday:'long'});
   const age=Math.round((Date.now()-SLATE.at)/60e3), when=new Date(SLATE.at).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
   const notes=SLATE.notes.length?`<div class="muted" style="font-size:12px;margin-top:6px">Skipped: ${SLATE.notes.map(esc).join(' · ')}</div>`:'';
   const stale=age>45?` <span style="color:var(--warn)">— ${age} min old, rebuild for fresh prices</span>`:'';
@@ -2400,7 +2437,7 @@ function renderSlate(){
   out.innerHTML=html+notes;
   const lp=$('slateLog'); if(lp) lp.onclick=()=>{ let n=0; for(const c of SLATE.picks) if(logBetFrom(Object.assign({market:'anytime'},c), c.stake, c.game)) n++; if(n){ saveBets(); renderBets(); } lp.textContent=n?`✓ logged ${n}`:'already logged'; };
   const logParlay=(PP, stake, label, extra)=>{ const first=PP.legs.map(l=>l.game).filter(koOf).sort((x,y)=>Date.parse(koOf(x))-Date.parse(koOf(y)))[0];
-    bets.unshift(Object.assign({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), ...(first?koStamp(first):{}), game:'', key:null, player:label+PP.legs.map(l=>l.name).join(' + '), market:'custom', odds:amStr(decToAmerican(PP.D)), modelProb:+PP.P.toFixed(4), stake, closeOdds:'', result:'pending',
+    bets.unshift(Object.assign({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), ...(first?koStamp(first):{}), ...usdStamp(stake), game:'', key:null, player:label+PP.legs.map(l=>l.name).join(' + '), market:'custom', odds:amStr(decToAmerican(PP.D)), modelProb:+PP.P.toFixed(4), stake, closeOdds:'', result:'pending',
     legs:PP.legs.map(l=>({game:l.game, key:l.key, market:l.market||'anytime', name:l.name}))}, extra||{})); saveBets(); renderBets(); };
   const lpp=$('slateLogParlay'); if(lpp) lpp.onclick=()=>{ logParlay(P, slateParlayStake(P,bank), 'Parlay: '); lpp.textContent='✓ logged'; };
   const ls=$('slateSlip'); if(ls) ls.onclick=()=>{ let n=0; for(const l of P.legs) if(!slipHas(l.game,l.key,l.market)){ slip.push(Object.assign({},l)); n++; } if(n){ saveSlip(); renderSlip(); } ls.textContent=n?`✓ added ${n}`:'already in slip'; };
@@ -2410,7 +2447,7 @@ function renderSlate(){
     $('awaySel').value=a; $('homeSel').value=h; userPicked=true; onMatchupChange(); setTimeout(()=>$('mktSec').scrollIntoView({behavior:'smooth'}), 300); }; });
 }
 function exportData(){
-  const data={app:'nfl-td-predictor', version:1, exportedAt:new Date().toISOString(), bets, slip, bankroll:getBankroll()};
+  const data={app:'nfl-td-predictor', version:1, exportedAt:new Date().toISOString(), bets, slip, bankroll:getBankroll(), bank:BANK};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,1)],{type:'application/json'}));
   a.download=`nfl-td-bets-${new Date().toISOString().slice(0,10)}.json`;
@@ -2430,6 +2467,7 @@ function importData(file){
       bets.sort((x,y)=>String(y.ts).localeCompare(String(x.ts)));
       for(const l of (d.slip||[])) if(l&&!slipHas(l.game,l.key,l.market)){ slip.push(l); legs++; }
       if(d.bankroll>0){ $('bankroll').value=d.bankroll; try{ localStorage.setItem('nfltd_bankroll',d.bankroll); }catch(e){} bankMt=Date.now(); lsSet('nfltd_bankmt', bankMt); }
+      if(d.bank && d.bank.amt && (d.bank.mt||0)>(BANK.mt||0)){ BANK=d.bank; lsW('nfltd_bank', BANK); }
       saveBets(); saveSlip(); renderBets(); renderSlip(); if(LAST) computeTopPlays();
       betFlash(`imported ${added} new bets${updated?`, updated ${updated}`:''}${legs?`, ${legs} slip legs`:''}`);
     }catch(e){ betFlash('that file isn\'t an export from this app'); } };
@@ -2447,22 +2485,25 @@ const LEAD_B=[['3+ days out',72,Infinity],['1–3 days out',24,72],['3–24 hour
 let TIMING_KIND='prop';
 function renderBets(){
   const body=$('betBody'), ins=$('betInsights'); if(!body) return;
+  try{ renderBank(); }catch(e){}
   if(!bets.length){ body.innerHTML='<div class="muted">No bets yet. Log picks with the 📓 buttons — results and closing lines fill themselves in.</div>'; if(ins) ins.innerHTML='<span class="muted">Nothing yet.</span>'; return; }
   const g=v=>v>0?'ev-pos':(v<0?'ev-neg':''), sgn=v=>(v>=0?'+':'')+v, pc=v=>sgn((v*100).toFixed(1))+'%';
+  const usdOn=!!BANK.amt, mny=v=>usdOn ? (v>=0?'+':'')+fmtUsd(v) : sgn(v.toFixed(2))+'u';   // P/L in dollars once a bankroll is set
   const rows=bets.map(b=>{ const dec=oddsDec(b.odds), cd=oddsDec(b.closeOdds), nd=!cd&&b.cur&&b.cur.q?oddsDec(b.cur.q):null;
-    return {b, dec, clv:dec&&cd?dec/cd-1:null, live:dec&&nd?dec/nd-1:null, pl:b.result==='win'?b.stake*((dec||1)-1):b.result==='loss'?-b.stake:b.result==='push'?0:null}; });
+    return {b, dec, clv:dec&&cd?dec/cd-1:null, live:dec&&nd?dec/nd-1:null, stk:usdOn?(betUsd(b)||0):(+b.stake||0),
+      pl:usdOn?betPlUsd(b):(b.result==='win'?b.stake*((dec||1)-1):b.result==='loss'?-b.stake:b.result==='push'?0:null)}; });
   const agg=R=>{ let w=0,l=0,p=0,st=0,net=0,cs=0,cn=0,cp=0,open=0;
-    for(const r of R){ const x=r.b.result; if(x==='win'||x==='loss'){ x==='win'?w++:l++; st+=+r.b.stake||0; net+=r.pl; } else if(x==='push') p++; else open++;
+    for(const r of R){ const x=r.b.result; if(x==='win'||x==='loss'){ x==='win'?w++:l++; st+=r.stk; net+=r.pl||0; } else if(x==='push') p++; else open++;
       if(r.clv!=null){ cs+=r.clv; cn++; if(r.clv>0) cp++; } }
     return {n:R.length, w, l, p, st, net, roi:st?net/st:null, clv:cn?cs/cn:null, cn, cp, open}; };
   const rec=a=>`${a.w}-${a.l}${a.p?'-'+a.p:''}`;
   const A=agg(rows), F=agg(rows.filter(r=>r.b.fun));
   let html=`<div class="logsum"><span>Record <b>${rec(A)}</b></span>`+
-    `<span>P/L <b class="${g(A.net)}">${sgn(A.net.toFixed(2))}u</b></span>`+
+    `<span>P/L <b class="${g(A.net)}">${mny(A.net)}</b></span>`+
     `<span>ROI <b class="${g(A.roi)}">${A.roi==null?'—':pc(A.roi)}</b></span>`+
     `<span title="CLV = how much better your price was than FanDuel's closing price. Beat the close over many bets and profit follows — it shows long before ROI does.">CLV <b class="${g(A.clv)}">${A.clv==null?'—':pc(A.clv)}</b>${A.cn?` <span class="muted">(${Math.round(A.cp/A.cn*100)}% beat the close)</span>`:''}</span>`+
     (A.open?`<span><b>${A.open}</b> open</span>`:'')+
-    (F.n?`<span class="muted" title="fun picks keep their own total — expected to lose about ${Math.round(FUN_EDGE*100)}% over time">🎉 fun <b class="${g(F.net)}">${sgn(F.net.toFixed(2))}u</b></span>`:'')+`</div>`;
+    (F.n?`<span class="muted" title="fun picks keep their own total — expected to lose about ${Math.round(FUN_EDGE*100)}% over time">🎉 fun <b class="${g(F.net)}">${mny(F.net)}</b></span>`:'')+`</div>`;
 
   const weeks=new Map(); for(const r of rows){ const k=weekStart(betWhen(r.b)); (weeks.get(k)||weeks.set(k,[]).get(k)).push(r); }
   const kick=gm=>{ const s=SCHED.find(x=>x.away+'@'+x.home===gm)||(S.schedule||[]).find(x=>x.away+'@'+x.home===gm); return s?new Date(s.kickoff).getTime():null; };
@@ -2473,7 +2514,7 @@ function renderBets(){
     const R=weeks.get(ws), a=agg(R), wk=(R.find(r=>r.b.wk)||{b:{}}).b.wk;
     const wOpen=LOGOPEN.has('W'+ws)?LOGOPEN.get('W'+ws):(wi===0||a.open>0);
     html+=`<details class="weekgrp" data-w="${ws}"${wOpen?' open':''}><summary><b>${wk?'Week '+wk:'Week of '+fmtD(ws)}</b> <span class="muted">${wk?fmtD(ws)+' – '+fmtD(ws+6*86400e3)+' · ':''}${a.n} bet${a.n>1?'s':''}${a.open?` · ${a.open} open`:''}${a.w+a.l?` · ${rec(a)}`:''}</span>`+
-      `${a.w+a.l?` <b class="${g(a.net)}">${sgn(a.net.toFixed(2))}u</b>`:''}${a.clv!=null?` <span class="muted">· CLV</span> <b class="${g(a.clv)}">${pc(a.clv)}</b>`:''}</summary><div class="wkbody">`;
+      `${a.w+a.l?` <b class="${g(a.net)}">${mny(a.net)}</b>`:''}${a.clv!=null?` <span class="muted">· CLV</span> <b class="${g(a.clv)}">${pc(a.clv)}</b>`:''}</summary><div class="wkbody">`;
     const groups=new Map(); R.forEach(r=>{ const k=r.b.game||''; (groups.get(k)||groups.set(k,[]).get(k)).push(r); });
     const G=[...groups.entries()].map(([gm,rs])=>({gm, rs, pend:rs.filter(r=>r.b.result==='pending').length, t:(gm&&kick(gm))||Math.min(...rs.map(r=>betWhen(r.b)))}))
       .sort((x,y)=>((y.pend>0)-(x.pend>0)) || (!x.gm-!y.gm) || (x.t-y.t));
@@ -2482,14 +2523,14 @@ function renderBets(){
       if(plan){ plan.picks.forEach(c=>planOf.set(c.bet.id,{keep:true, stake:c.stake})); plan.skipped.forEach(s=>planOf.set(s.c.bet.id,{keep:false, why:s.why})); PLANS.set(grp.gm, plan); }
       const cuts=plan?plan.skipped.length:0, open=LOGOPEN.has(key)?LOGOPEN.get(key):grp.pend>0;
       html+=`<details class="gamegrp" data-k="${esc(key)}"${open?' open':''}><summary><b>${grp.gm?fmtGame(grp.gm):'Parlays &amp; custom bets'}</b> <span class="muted">· ${ga.n} bet${ga.n>1?'s':''}${ga.open?` · ${ga.open} open`:''}${ga.w+ga.l?` · ${rec(ga)}`:''}</span>`+
-        `${ga.w+ga.l?` <b class="${g(ga.net)}">${sgn(ga.net.toFixed(2))}u</b>`:''}${cuts?` · <span style="color:var(--warn);font-weight:700">${cuts} to cut</span>`:''}</summary><div class="grpbody">`;
+        `${ga.w+ga.l?` <b class="${g(ga.net)}">${mny(ga.net)}</b>`:''}${cuts?` · <span style="color:var(--warn);font-weight:700">${cuts} to cut</span>`:''}</summary><div class="grpbody">`;
       if(cuts) html+=`<div style="font-size:13px;margin:2px 0 8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>Keep the <b>${plan.picks.length}</b> marked <span class="vbadge vb-take">★</span> (best in this game: max ${maxPerGame()} per game, ${MAX_PER_TEAM} per team, one per player), drop the other ${cuts}.</span>`+
         `<button class="statussel trimbtn" data-g="${esc(grp.gm)}" style="padding:4px 11px;font-size:12px">✂ Trim to the best ${plan.picks.length}</button></div>`;
       html+=`<div style="overflow-x:auto"><table style="margin-top:0"><thead><tr>${head}</tr></thead><tbody>`;
       grp.rs.forEach(({b,dec,clv,live,pl})=>{ const P=planOf.get(b.id), lh=leadH(b), mine=isPropMkt(b.market)?+b.market.split('|')[3]:null;
         const moved=mine!=null && b.cur && b.cur.l!=null && b.cur.l!==mine, arrow=moved?(b.cur.l<mine?'▼':'▲')+b.cur.l+' ':'';
         const tags=[ b.fun?'<span title="a fun pick">🎉</span>':'',
-          b.result==='pending'&&P ? (P.keep?`<span class="vbadge vb-take" title="the plan keeps this one${Math.abs((+b.stake||0)-P.stake)>0.05?' — suggested stake '+P.stake.toFixed(1)+'u':''}">★ ${P.stake.toFixed(1)}u</span>`:`<span class="vbadge vb-edge" title="${esc(P.why)}">cut</span>`) : '',
+          b.result==='pending'&&P ? (P.keep?`<span class="vbadge vb-take" title="the plan keeps this one${Math.abs((+b.stake||0)-P.stake)>0.05?' — suggested stake '+stakeTxt(P.stake):''}">★ ${stakeTxt(P.stake)}</span>`:`<span class="vbadge vb-edge" title="${esc(P.why)}">cut</span>`) : '',
           b.offBoard&&b.result==='pending'?`<span style="color:var(--warn);font-size:12px" title="${esc(b.offBoard+' — if you didn\'t place it, delete it (✕)')}">⚠ off FanDuel</span>`:'',
           lh!=null?`<span class="muted" style="font-size:11px" title="${esc('logged '+fmtT(b.ts)+' · kickoff '+fmtT(b.ko))}">⏱ ${leadTxt(lh)}</span>`:'' ].filter(Boolean).join(' ');
         // CLV: final once Close is in; before that a live read from the last pull (≈), with ▼/▲ when FanDuel moved the prop's line
@@ -2500,9 +2541,9 @@ function renderBets(){
         html+=`<tr${P&&P.keep?' class="rowtake"':''}><td class="l"><b${b.modelProb!=null?` title="chance when logged: ${pct(b.modelProb)}"`:''}>${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)}</span> ${tags}</td>`+
           `<td class="odds">${esc(b.odds)}</td>`+
           `<td style="white-space:nowrap"><input class="bookin betclose" data-id="${b.id}" value="${(b.closeOdds||'').replace(/"/g,'&quot;')}" placeholder="close" style="width:62px">${clvTxt}</td>`+
-          `<td>${b.stake}u</td>`+
+          `<td title="${b.stake}u">${betStakeTxt(b)}</td>`+
           `<td style="white-space:nowrap"><select class="statussel betres" data-id="${b.id}">${['pending','win','loss','push'].map(s=>`<option ${s===b.result?'selected':''}>${s}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc('auto-settled from ESPN: '+b.auto)}">🤖</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
-          `<td class="${pl!=null?g(pl):''}">${pl==null?'—':sgn(pl.toFixed(2))}</td>`+
+          `<td class="${pl!=null?g(pl):''}">${pl==null?'—':usdOn?mny(pl):sgn(pl.toFixed(2))}</td>`+
           `<td><button class="statussel betdel" data-id="${b.id}" style="padding:0 7px;color:var(--warn)">✕</button></td></tr>`;
       });
       html+='</tbody></table></div></div></details>';
@@ -2942,7 +2983,7 @@ $('betImportFile').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f
 $('betClear').onclick=()=>{ if(bets.length && confirm('Clear all '+bets.length+' logged bets?'+(SYNC.token?' This clears them on every synced PC too.':'')+' This can\'t be undone.')){ bets=[]; saveBets(); renderBets(); } };
 $('betBody').addEventListener('change', e=>{ const id=e.target.dataset.id; if(!id) return; const b=bets.find(x=>x.id===id); if(!b) return;
   if(e.target.classList.contains('betclose')){ b.closeOdds=e.target.value.trim(); delete b.closeEst; }
-  else if(e.target.classList.contains('betres')){ b.result=e.target.value; delete b.auto; }   // your call replaces the auto one
+  else if(e.target.classList.contains('betres')){ b.result=e.target.value; delete b.auto; if(b.result==='pending') delete b.st; else b.st=Date.now(); }   // your call replaces the auto one
   saveBets(); renderBets(); });
 $('betBody').addEventListener('click', e=>{ const t=e.target.closest('.trimbtn'); if(!t) return; const gm=t.dataset.g, plan=PLANS.get(gm); if(plan) trimLog(plan.picks, plan.skipped.map(x=>x.c.bet), fmtGame(gm)); });
 $('betBody').addEventListener('toggle', e=>{ const d=e.target; if(!d||!d.classList) return; if(d.classList.contains('gamegrp')) LOGOPEN.set(d.dataset.k, d.open); else if(d.classList.contains('weekgrp')) LOGOPEN.set('W'+d.dataset.w, d.open); }, true);
@@ -2958,6 +2999,8 @@ document.querySelectorAll('.mktbtn[data-mkt]').forEach(b=>{
 });
 
 try{ $('bankroll').value=localStorage.getItem('nfltd_bankroll')||100; }catch(e){ $('bankroll').value=100; }
+$('bankUsd').addEventListener('change', e=>setBank(+e.target.value||0));
+$('bankUsd').addEventListener('keydown', e=>{ if(e.key==='Enter') e.target.blur(); });
 $('bankroll').addEventListener('input',()=>{ try{ localStorage.setItem('nfltd_bankroll',$('bankroll').value); }catch(e){} bankMt=Date.now(); lsSet('nfltd_bankmt', bankMt); syncSoon(); if(LAST) computeTopPlays(); renderSlip(); renderBets(); });
 try{ const v=localStorage.getItem('nfltd_maxgame'); if(v) $('maxGame').value=v; }catch(e){}
 $('maxGame').onchange=()=>{ try{ localStorage.setItem('nfltd_maxgame',$('maxGame').value); }catch(e){} if(LAST) computeTopPlays(); renderBets(); };
