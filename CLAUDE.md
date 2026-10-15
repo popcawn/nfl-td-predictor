@@ -145,6 +145,16 @@ See README.md for what the model does and how it was validated.
   with 5 new names = unlimited -EV betting. Now fun bets already logged for the slate's games keep their slots (✓) and
   count toward N; only empty slots fill; a logged fun parlay stays the fun parlay (parlayLogged hides the log buttons).
   betOnSet() is a Map log|slip: slip shows "✓ in your slip" (a plan, not a bet).
+  FUN FILTERS (2026-10-15, user: "single game picks, 1pm slate only, 4pm games only, 1pm+4pm slate, themed picks"): the
+  per-game pricing is `slateGame(g, injMap)` (shared by buildSlate and priceFunGames). SLATE.funPool = every in-band
+  option seen, SLATE.funGames = gid -> priced-at; `pickFun(pool, n, realKeys)` applies FUNF (nfltd_funf: win
+  all|1pm|4pm|early|night|game, game, theme) and stores the filter in SLATE.fun.F; `refun()` re-picks on a select change
+  (no credits). Windows by Eastern time (`etSlot`): Sun 12-15h = 1pm, Sun 15-19h = 4pm, >=19h any day = night, else
+  (London, Saturday) only under all/one game. Themes: pos RB/WR/TE/QB from S.rosters, dog/fav from SCHED fav+spread,
+  home/road (not neutral sites), shootout = week's top-third totals, div = hard-coded NFL_DIV. Unpriced games in a window
+  -> "⚡ Check N more games" (priceFunGames; 'all' never offers it); >45-min-old prices -> "↻ Refresh". One game =
+  alternate teams, no fun parlay (books price SGPs themselves). Pool entries for games a build didn't re-price carry
+  over until kickoff. Logged fun bets keep their slots only if they fit the filter and kicked off < 4 h ago.
 - FANDUEL BET-SLIP LINKS (2026-10-07): pulls add `includeLinks=true&includeSids=true` (no extra credits — checked: 2 markets
   = 2 credits). Each FD outcome has link `https://sportsbook.fanduel.com/addToBetslip?marketId=42.x&selectionId=y` + sid;
   `fdSelOf()` keeps {m,s}; filed in LAST.mktMap as `FD#<market>#<key>` (saved with the board; props market =

@@ -56,6 +56,11 @@ silently to the baked snapshot when not.
   favourites about 11%. Ordering inside the range (the other books, the model, shortest price) never reliably helped, so
   the range is the rule. Logged fun bets are tagged 🎉, kept out of Your card and the log's plan, and get their own running
   total. **Not an edge** — they lose a little over time, by design.
+  **Filters** narrow who's on the list: *games* (all games checked so far, Sunday 1 PM ET, 4 PM ET, 1 PM + 4 PM, night
+  games, or one game — one game alternates the two teams and has no fun parlay, since the book prices a same-game parlay
+  itself) and *theme* (RBs, WRs, TEs, QBs, underdogs, favourites, home, road, shootouts = the week's top-third totals,
+  division games). Changing a filter is free; games it needs that weren't priced get a **⚡ Check N more games** button
+  (1 credit per game, free within 20 minutes of the last pull). Filters change who, not the odds.
 - **⚡ Pull FanDuel odds** — with a [The Odds API](https://the-odds-api.com) key saved under *odds settings*, one click (or
   automatically when you open a game) fills FanDuel's current prices for that game: TD scorer markets (4 credits per game)
   and/or player props (5 credits). Auto-pulls stop below a credit reserve so other apps on the same key keep working;

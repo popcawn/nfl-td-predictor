@@ -2398,48 +2398,54 @@ async function gameWeather(g){
     return {outdoor:true, wind:Math.round(j.hourly.wind_speed_10m[i]), wx:{precip:k.precip, pp:j.hourly.precipitation_probability[i]||0}};
   }catch(e){ return calm; }
 }
+const pxFresh=gid=>!!SLATEPX[gid] && Date.now()-SLATEPX[gid].t<20*60e3;   // anytime prices this recent are reused — no credit
+async function slateInjuries(){ try{ return parseInjuries(await (await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries')).json()); }catch(e){ return new Map(); } }
+// one game for the slate: your books' anytime prices (cached 20 min), the sim and the market anchor -> real candidates
+// ('take' tier) and every in-band fun option. The prices also go on the game's saved board (open the game later: they're there).
+async function slateGame(g, injMap){
+  const gid=g.away+'@'+g.home, statusMap={};
+  for(const ab of [g.away,g.home]) for(const p of (S.rosters[ab]||[])){ const c=injMap.get(String(p.id)); if(c) statusMap[ab+'|'+p.id]=c; }
+  if(LAST) for(const [k,v] of Object.entries(LAST.statusMap)) if(k.startsWith(g.away+'|')||k.startsWith(g.home+'|')) statusMap[k]=v;   // your own status edits win
+  let prices=pxFresh(gid)?SLATEPX[gid].prices:null, cons=pxFresh(gid)?(SLATEPX[gid].cons||null):null;
+  if(!prices){ try{ const d=await fetchGameOdds(g.away, g.home, ['player_anytime_td'], true); prices=d.td.anytime||[]; cons=(d.cons&&d.cons.td.anytime)||{}; SLATEPX[gid]={t:Date.now(), prices, cons}; }
+    catch(e){ return {note:`${fmtGame(gid)}: ${oddsWhy(e)}`}; } }
+  if(!prices.length) return {note:`${fmtGame(gid)}: no TD prices posted yet`};
+  const W=await gameWeather(g), badWx=W.outdoor && (W.wind>=15 || (W.wx.pp>=50 && W.wx.precip!=='none'));
+  const sim=simGame({away:g.away, home:g.home, total:g.total||44.5, spreadPts:Math.abs(g.spread||0), fav:g.fav||g.home, outdoor:W.outdoor, wind:W.wind, wx:W.wx, statusMap});
+  const players=sim.awayR.concat(sim.homeR), idx=buildPlayerIndex(players), book={}, cands=[], fun=[], mm={};
+  for(const [name,c] of Object.entries(cons||{})){ const p=matchPlayer(cleanName(name), idx); if(p) mm['anytime|'+p._key]={ip:c.ip, n:c.n}; }
+  for(const o of prices){ const p=matchPlayer(cleanName(o.name), idx); if(p) book['anytime|'+p._key]=fmtAm(o.price); }
+  const SA=anchorTD(players, mm, 'anytime', book);
+  for(const o of prices){ const p=matchPlayer(cleanName(o.name), idx); if(!p) continue;
+    const odds=fmtAm(o.price); book['anytime|'+p._key]=odds; if(o.fd) mm['FD#anytime#'+p._key]=o.fd; if(p._status==='OUT') continue;
+    const A=SA.get(p._key), mp=A?A.p:p.anytime, r=evalBet(mp, odds); if(!r) continue;
+    const conf=confFor(p,'anytime',r,badWx), tier=tierOf(mp,r.edge,r.ev,!p.matched); if(tier!=='take') continue;
+    const k=r.edge>0?conf.score*r.edge/(1-r.bimp):0;
+    cands.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds, book:bookOfTk(o.fd), mp, model:p.anytime, mkt:A?A.mkt:null, mktSrc:A?A.src:null, ev:r.ev, edge:r.edge, bimp:r.bimp, conf, kelly:k, rk:k, game:gid, kickoff:g.kickoff, fd:o.fd||null}); }
+  for(const o of prices){ if(!(o.price>=FUN_BAND[0] && o.price<FUN_BAND[1])) continue;
+    const p=matchPlayer(cleanName(o.name), idx); if(!p || p._status==='OUT' || p._status==='DBT') continue;
+    const A=SA.get(p._key);
+    fun.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds:fmtAm(o.price), book:bookOfTk(o.fd), mp:A?A.p:p.anytime, model:p.anytime, mkt:A?A.mkt:null, mktSrc:A?A.src:null,
+      bimp:americanToProb(o.price), sim:p.anytime*americanToDec(o.price), game:gid, kickoff:g.kickoff, fd:o.fd||null}); }
+  const B=BOARDS[gid]||(BOARDS[gid]={t:Date.now(), book:{}, prop:{}, mkt:{}}); Object.assign(B.book, book); B.mkt=Object.assign(B.mkt||{}, mm); B.t=Date.now();
+  return {cands, fun};
+}
+const realKeysOf=SL=>new Set(((SL&&SL.picks)||[]).map(c=>c.game+'|'+c.key));
 async function buildSlate(){
   const out=$('slateBody'), btn=$('slateBtn'), scope=$('slateScope').value, nPick=+$('slateN').value||5;
   if(!oddsKey()){ out.innerHTML=`The picks need FanDuel's prices — add your The Odds API key once under <b>Price this game → odds settings</b>.`; $('oddsCfg').open=true; $('priceSec').scrollIntoView({behavior:'smooth'}); return; }
   const now=Date.now(), up=SCHED.filter(g=>new Date(g.kickoff).getTime()>now);
   if(!up.length){ out.textContent='No upcoming games on this week\'s slate.'; return; }
   const day=iso=>new Date(iso).toDateString(), games=scope==='week'?up:up.filter(g=>day(g.kickoff)===day(up[0].kickoff));
-  const fresh=gid=>SLATEPX[gid] && Date.now()-SLATEPX[gid].t<20*60e3, cost=games.filter(g=>!fresh(g.away+'@'+g.home)).length;
+  const cost=games.filter(g=>!pxFresh(g.away+'@'+g.home)).length;
   if(cost && oddsRemaining!=null && oddsRemaining-cost<ODDSCFG.reserve &&
      !confirm(`This uses ${cost} The Odds API credit${cost>1?'s':''} (1 per game). You have ${oddsRemaining} left and your reserve is ${ODDSCFG.reserve}. Go ahead?`)) return;
   btn.disabled=true; out.innerHTML=`<span class="muted">Checking ${games.length} game${games.length>1?'s':''} — injuries, lines, weather, FanDuel prices…</span>`;
   try{
-    let injMap=new Map(); try{ injMap=parseInjuries(await (await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries')).json()); }catch(e){}
-    const all=[], notes=[], fun=[];
-    for(const g of games){
-      const gid=g.away+'@'+g.home, statusMap={};
-      for(const ab of [g.away,g.home]) for(const p of (S.rosters[ab]||[])){ const c=injMap.get(String(p.id)); if(c) statusMap[ab+'|'+p.id]=c; }
-      if(LAST) for(const [k,v] of Object.entries(LAST.statusMap)) if(k.startsWith(g.away+'|')||k.startsWith(g.home+'|')) statusMap[k]=v;   // your own status edits win
-      let prices=fresh(gid)?SLATEPX[gid].prices:null;
-      let cons=fresh(gid)?(SLATEPX[gid].cons||null):null;
-      if(!prices){ try{ const d=await fetchGameOdds(g.away, g.home, ['player_anytime_td'], true); prices=d.td.anytime||[]; cons=(d.cons&&d.cons.td.anytime)||{}; SLATEPX[gid]={t:Date.now(), prices, cons}; }
-        catch(e){ notes.push(`${fmtGame(gid)}: ${oddsWhy(e)}`); continue; } }
-      if(!prices.length){ notes.push(`${fmtGame(gid)}: no TD prices posted yet`); continue; }
-      const W=await gameWeather(g), badWx=W.outdoor && (W.wind>=15 || (W.wx.pp>=50 && W.wx.precip!=='none'));
-      const sim=simGame({away:g.away, home:g.home, total:g.total||44.5, spreadPts:Math.abs(g.spread||0), fav:g.fav||g.home, outdoor:W.outdoor, wind:W.wind, wx:W.wx, statusMap});
-      const players=sim.awayR.concat(sim.homeR), idx=buildPlayerIndex(players), book={}, cands=[], mm={};
-      for(const [name,c] of Object.entries(cons||{})){ const p=matchPlayer(cleanName(name), idx); if(p) mm['anytime|'+p._key]={ip:c.ip, n:c.n}; }
-      for(const o of prices){ const p=matchPlayer(cleanName(o.name), idx); if(p) book['anytime|'+p._key]=fmtAm(o.price); }
-      const SA=anchorTD(players, mm, 'anytime', book);
-      for(const o of prices){ const p=matchPlayer(cleanName(o.name), idx); if(!p) continue;
-        const odds=fmtAm(o.price); book['anytime|'+p._key]=odds; if(o.fd) mm['FD#anytime#'+p._key]=o.fd; if(p._status==='OUT') continue;
-        const A=SA.get(p._key), mp=A?A.p:p.anytime, r=evalBet(mp, odds); if(!r) continue;
-        const conf=confFor(p,'anytime',r,badWx), tier=tierOf(mp,r.edge,r.ev,!p.matched); if(tier!=='take') continue;
-        const k=r.edge>0?conf.score*r.edge/(1-r.bimp):0;
-        cands.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds, book:bookOfTk(o.fd), mp, model:p.anytime, mkt:A?A.mkt:null, mktSrc:A?A.src:null, ev:r.ev, edge:r.edge, bimp:r.bimp, conf, kelly:k, rk:k, game:gid, kickoff:g.kickoff, fd:o.fd||null}); }
-      for(const o of prices){ if(!(o.price>=FUN_BAND[0] && o.price<FUN_BAND[1])) continue;
-        const p=matchPlayer(cleanName(o.name), idx); if(!p || p._status==='OUT' || p._status==='DBT') continue;
-        const A=SA.get(p._key);
-        fun.push({key:p._key, label:p.name, abbr:p._abbr, market:'anytime', odds:fmtAm(o.price), book:bookOfTk(o.fd), mp:A?A.p:p.anytime, model:p.anytime, mkt:A?A.mkt:null, mktSrc:A?A.src:null,
-          bimp:americanToProb(o.price), sim:p.anytime*americanToDec(o.price), game:gid, kickoff:g.kickoff, fun:true, fd:o.fd||null}); }
-      const B=BOARDS[gid]||(BOARDS[gid]={t:Date.now(), book:{}, prop:{}, mkt:{}}); Object.assign(B.book, book); B.mkt=Object.assign(B.mkt||{}, mm); B.t=Date.now();   // open the game later: prices are there
-      all.push(...pickPlays(cands).picks);   // per game: same rule as Your card
-    }
+    const injMap=await slateInjuries(), all=[], notes=[], fun=[], funGames={};
+    for(const g of games){ const r=await slateGame(g, injMap); if(r.note){ notes.push(r.note); continue; }
+      funGames[g.away+'@'+g.home]=Date.now(); fun.push(...r.fun);
+      all.push(...pickPlays(r.cands).picks); }   // per game: same rule as Your card
     try{ localStorage.setItem(BOARD_KEY, JSON.stringify(BOARDS)); }catch(e){}
     lsW('nfltd_slatepx', SLATEPX);
     all.sort((a,b)=>b.rk-a.rk);
@@ -2448,29 +2454,89 @@ async function buildSlate(){
     const {best}=bestParlay(legs.map(legView));
     const room=SLATE_CAP*bank-(best?slateParlayStake(best,bank):0), tot=picks.reduce((a,c)=>a+c.stake,0);
     if(tot>room) picks.forEach(c=>{ c.stake=Math.floor(c.stake*room/tot*10)/10; });   // floor: the whole day never tops the cap
-    const gids=new Set(games.map(g=>g.away+'@'+g.home)), funPicks=[], perGame=new Map(), teams=new Set();
-    const taken=new Set([...picks.map(c=>c.game+'|'+c.key), ...betOnSet().keys()]);
-    const seat=c=>{ funPicks.push(c); teams.add(c.game+'|'+c.abbr); perGame.set(c.game,(perGame.get(c.game)||0)+1); };
-    for(const b of bets) if(b.fun && !b.legs && b.result==='pending' && gids.has(b.game) && funPicks.length<nPick){
-      const cur=fun.find(c=>c.game===b.game && c.key===b.key);   // today's price if FanDuel still has him
-      seat(Object.assign(cur||{key:b.key, label:b.player, abbr:String(b.key).split('|')[0], market:'anytime', odds:b.odds, mp:b.modelProb, model:null, mkt:b.mktP??null, bimp:americanToProb(b.odds), game:b.game, kickoff:null, fun:true}, {stake:b.stake, logged:true})); }
-    fun.sort((a,b)=>b.sim-a.sim);
-    for(const pass of [1,2]) for(const c of fun){ if(funPicks.length>=nPick) break;
-      if(taken.has(c.game+'|'+c.key) || funPicks.includes(c) || teams.has(c.game+'|'+c.abbr) || (perGame.get(c.game)||0)>=pass) continue;
-      funPicks.push(c); teams.add(c.game+'|'+c.abbr); perGame.set(c.game,(perGame.get(c.game)||0)+1); }
-    funPicks.forEach(c=>{ if(!c.logged) c.stake=FUN_STAKE; });
-    const fpl=[], fpg=new Set(); for(const c of funPicks.slice().sort((a,b)=>b.mp-a.mp)){   // the parlay takes the likeliest legs: a fun parlay should cash now and then
-      if(fpl.length>=FUN_PARLAY_LEGS) break; if(fpg.has(c.game)) continue; fpg.add(c.game); fpl.push(c); }
-    const fpDone=bets.find(b=>b.fun && b.legs && b.result==='pending' && b.legs.every(l=>gids.has(l.game)));
-    const funParlay=fpDone ? {legs:fpDone.legs.map(l=>({game:l.game, key:l.key, name:l.name, abbr:String(l.key).split('|')[0], market:l.market||'anytime'})), D:americanToDec(fpDone.odds), P:fpDone.modelProb||0}
-      : fpl.length>=2 ? {legs:fpl.map(c=>({game:c.game, key:c.key, name:c.label, abbr:c.abbr, market:'anytime', odds:c.odds, ...(c.fd?{fd:c.fd}:{})})),
-      D:fpl.reduce((a,c)=>a*americanToDec(c.odds),1), P:fpl.reduce((a,c)=>a*c.mp,1)} : null;
-    SLATE={at:Date.now(), day:games[0].kickoff, checked:games.length, notes,
-      fun:{picks:funPicks.map(({key,label,abbr,market,odds,book,mp,model,mkt,mktSrc,bimp,stake,game,kickoff,fd})=>({key,label,abbr,market,odds,book,mp,model,mkt,mktSrc,bimp,stake,game,kickoff,fd,fun:true})), parlay:funParlay, max:nPick},
+    // fun options from games a fun filter priced earlier (not re-checked by this build) stay until kickoff
+    for(const c of ((SLATE&&SLATE.funPool)||[])) if(!funGames[c.game] && Date.parse(c.kickoff)>now) fun.push(c);
+    for(const [gid,t] of Object.entries((SLATE&&SLATE.funGames)||{})) if(!funGames[gid] && SCHED.some(g=>g.away+'@'+g.home===gid && Date.parse(g.kickoff)>now)) funGames[gid]=t;
+    SLATE={at:Date.now(), day:games[0].kickoff, checked:games.length, notes, funPool:fun.map(funSlim), funGames, fun:null,
       picks:picks.map(({key,label,abbr,market,odds,book,mp,model,mkt,mktSrc,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev,fd})=>({key,label,abbr,market,odds,book,mp,model,mkt,mktSrc,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev,fd})),
       parlay:best?{legs:best.legs.map(v=>v.l), P:best.P, D:best.D}:null};
+    SLATE.fun=pickFun(SLATE.funPool, nPick, realKeysOf(SLATE));
     lsW('nfltd_slate', SLATE); renderSlate();
   }finally{ btn.disabled=false; oddsStatus(); }
+}
+// 🎉 FUN FILTERS (2026-10-15, user: "single game picks, 1pm slate only, 4pm games only, 1pm+4pm slate, themed picks").
+// Every in-band price a build (or a filter's ⚡ check) sees is kept in SLATE.funPool, with SLATE.funGames = when each game
+// was priced; changing a filter re-picks from that pool for free. Games a filter needs that weren't priced get a button
+// (1 credit per game, free while the 20-min price cache holds) — never an automatic pull. A filter narrows WHO only: the
+// +100..+400 band, the flat stakes, the no-doubling rules and "logged fun picks keep their slots" all stay.
+const FUN_WINS=[['all','All games checked so far'],['1pm','Sunday 1 PM ET'],['4pm','Sunday 4 PM ET'],['early','Sunday 1 PM + 4 PM ET'],['night','Night games']];
+const FUN_THEMES=[['none','No theme'],['rb','🏃 Running backs'],['wr','🙌 Wide receivers'],['te','🧱 Tight ends'],['qb','🎯 QBs (to run one in)'],['dog','🐶 Underdogs'],['fav','💪 Favourites'],
+  ['home','🏠 Home teams'],['road','✈️ Road teams'],['shoot','🔥 Shootouts (week\'s highest totals)'],['div','⚔️ Division games']];
+const NFL_DIV=['BUF MIA NE NYJ','BAL CIN CLE PIT','HOU IND JAX TEN','DEN KC LAC LV','DAL NYG PHI WAS','CHI DET GB MIN','ATL CAR NO TB','ARI LA SEA SF'].map(s=>s.split(' '));
+let FUNF=Object.assign({win:'all', game:'', theme:'none'}, lsJ('nfltd_funf', {}));
+const funSlim=({key,label,abbr,odds,book,mp,model,mkt,mktSrc,bimp,sim,game,kickoff,fd})=>({key,label,abbr,market:'anytime',odds,book,mp,model,mkt,mktSrc,bimp,sim,game,kickoff,fd});
+function etSlot(iso){   // Eastern time: Sunday 1 PM / 4 PM windows, night games (7 PM or later, any day), other (London, Saturday, holidays)
+  if(!iso) return 'other';
+  const o={}; new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York', weekday:'short', hour:'numeric', hourCycle:'h23'}).formatToParts(new Date(iso)).forEach(x=>o[x.type]=x.value);
+  const h=+o.hour; return h>=19?'night' : o.weekday==='Sun'&&h>=12&&h<15?'1pm' : o.weekday==='Sun'&&h>=15?'4pm' : 'other'; }
+const funWinHas=(F,gid,ko)=>F.win==='all' || (F.win==='game' ? gid===F.game : F.win==='early' ? ['1pm','4pm'].includes(etSlot(ko)) : etSlot(ko)===F.win);
+const funWinLabel=F=>F.win==='game' ? fmtGame(F.game) : (FUN_WINS.find(w=>w[0]===F.win)||FUN_WINS[0])[1];
+const funThemeLabel=t=>(FUN_THEMES.find(x=>x[0]===t)||FUN_THEMES[0])[1];
+function funThemeHas(t, gid, key){
+  if(t==='none') return true;
+  const [abbr,id]=String(key).split('|'), [a,h]=String(gid).split('@'), g=SCHED.find(x=>x.away===a&&x.home===h)||{}, line=!!(g.fav&&g.spread);
+  if(t==='rb'||t==='wr'||t==='te'||t==='qb') return ((S.rosters[abbr]||[]).find(x=>String(x.id)===String(id))||{}).pos===t.toUpperCase();
+  if(t==='dog') return line && g.fav!==abbr;
+  if(t==='fav') return line && g.fav===abbr;
+  if(t==='home') return abbr===h && !g.neutral;
+  if(t==='road') return abbr===a && !g.neutral;
+  if(t==='div') return NFL_DIV.some(d=>d.includes(a)&&d.includes(h));
+  if(t==='shoot'){ const tt=SCHED.map(x=>x.total).filter(x=>x!=null).sort((x,y)=>y-x); return g.total!=null && tt.length>0 && g.total>=tt[Math.ceil(tt.length/3)-1]; }   // top third of the week
+  return true; }
+// the fun list for the current filter: logged fun bets that fit keep their slots, then the sim's favourites in the band —
+// 1 per game, then a 2nd from the other team (one game: alternate the two teams). Same-game picks get no parlay.
+function pickFun(pool, nPick, realKeys){
+  const F=FUNF, now=Date.now(), on=betOnSet();
+  const games=new Set([...pool.map(c=>c.game), ...SCHED.map(g=>g.away+'@'+g.home)]);
+  if(F.win==='game' && !games.has(F.game)) F.win='all';   // a game from last week
+  const koFor=gid=>koOf(gid)||((pool.find(c=>c.game===gid)||{}).kickoff)||null;
+  const fits=(gid,key,ko)=>funWinHas(F,gid,ko||koFor(gid)) && funThemeHas(F.theme,gid,key);
+  const recent=gid=>{ const k=koFor(gid); return !!k && Date.parse(k)>now-4*3600e3; };   // not a finished game waiting to settle
+  const single=F.win==='game', picks=[], perGame=new Map(), perTeam=new Map();
+  const seat=c=>{ picks.push(c); const t=c.game+'|'+c.abbr; perTeam.set(t,(perTeam.get(t)||0)+1); perGame.set(c.game,(perGame.get(c.game)||0)+1); };
+  for(const b of bets) if(b.fun && !b.legs && b.key && b.result==='pending' && games.has(b.game) && recent(b.game) && picks.length<nPick && fits(b.game,b.key,b.ko)){
+    const cur=pool.find(c=>c.game===b.game && c.key===b.key);   // today's price if your books still have him
+    seat(Object.assign({}, cur||{key:b.key, label:b.player, abbr:String(b.key).split('|')[0], market:'anytime', odds:b.odds, book:b.book, mp:b.modelProb, model:null, mkt:b.mktP??null, bimp:americanToProb(b.odds), game:b.game, kickoff:b.ko||null}, {stake:b.stake, logged:true})); }
+  const opts=pool.filter(c=>Date.parse(c.kickoff)>now && !realKeys.has(c.game+'|'+c.key) && !on.has(c.game+'|'+c.key) && fits(c.game,c.key,c.kickoff)).sort((a,b)=>b.sim-a.sim);
+  for(let pass=1; pass<=(single?nPick:2); pass++) for(const c of opts){ if(picks.length>=nPick) break;
+    if(picks.some(x=>x.game===c.game&&x.key===c.key) || (perTeam.get(c.game+'|'+c.abbr)||0)>=(single?pass:1) || (!single && (perGame.get(c.game)||0)>=pass)) continue;
+    seat(Object.assign({}, c, {stake:FUN_STAKE})); }
+  const fpDone=bets.find(b=>b.fun && b.legs && b.result==='pending' && b.legs.every(l=>games.has(l.game) && recent(l.game) && fits(l.game,l.key,null)));
+  let parlay=null;
+  if(fpDone) parlay={legs:fpDone.legs.map(l=>({game:l.game, key:l.key, name:l.name, abbr:String(l.key).split('|')[0], market:l.market||'anytime'})), D:americanToDec(fpDone.odds), P:fpDone.modelProb||0};
+  else if(!single){ const fpl=[], fpg=new Set();
+    for(const c of picks.slice().sort((a,b)=>b.mp-a.mp)){ if(fpl.length>=FUN_PARLAY_LEGS) break; if(fpg.has(c.game)) continue; fpg.add(c.game); fpl.push(c); }   // the likeliest legs: a fun parlay should cash now and then
+    if(fpl.length>=2) parlay={legs:fpl.map(c=>({game:c.game, key:c.key, name:c.label, abbr:c.abbr, market:'anytime', odds:c.odds, ...(c.fd?{fd:c.fd}:{})})), D:fpl.reduce((a,c)=>a*americanToDec(c.odds),1), P:fpl.reduce((a,c)=>a*c.mp,1)}; }
+  return {picks:picks.map(({key,label,abbr,market,odds,book,mp,model,mkt,mktSrc,bimp,stake,game,kickoff,fd})=>({key,label,abbr,market,odds,book,mp,model,mkt,mktSrc,bimp,stake,game,kickoff,fd,fun:true})),
+    parlay, max:nPick, F:{win:F.win, game:F.game, theme:F.theme}};
+}
+function refun(){ if(!SLATE) return; SLATE.fun=pickFun(SLATE.funPool||[], +$('slateN').value||5, realKeysOf(SLATE)); lsW('nfltd_slate', SLATE); renderSlate(); }
+// ⚡ a fun filter's games that the build didn't price (e.g. Sunday's 1 PM games when the build covered Thursday night)
+async function priceFunGames(list, btn){
+  if(!SLATE || !list.length) return;
+  if(!oddsKey()){ $('oddsCfg').open=true; $('priceSec').scrollIntoView({behavior:'smooth'}); return; }
+  const cost=list.filter(g=>!pxFresh(g.away+'@'+g.home)).length;
+  if(cost && oddsRemaining!=null && oddsRemaining-cost<ODDSCFG.reserve &&
+     !confirm(`This uses ${cost} The Odds API credit${cost>1?'s':''} (1 per game). You have ${oddsRemaining} left and your reserve is ${ODDSCFG.reserve}. Go ahead?`)) return;
+  if(btn){ btn.disabled=true; btn.textContent=`Checking ${list.length} game${list.length>1?'s':''}…`; }
+  try{
+    const injMap=await slateInjuries(), notes=[];
+    SLATE.funPool=SLATE.funPool||[]; SLATE.funGames=SLATE.funGames||{};
+    for(const g of list){ const gid=g.away+'@'+g.home, r=await slateGame(g, injMap); if(r.note){ notes.push(r.note); continue; }
+      SLATE.funPool=SLATE.funPool.filter(c=>c.game!==gid).concat(r.fun.map(funSlim)); SLATE.funGames[gid]=Date.now(); }
+    try{ localStorage.setItem(BOARD_KEY, JSON.stringify(BOARDS)); }catch(e){}
+    lsW('nfltd_slatepx', SLATEPX); SLATE.funNotes=notes; refun();
+  }finally{ oddsStatus(); }
 }
 function renderSlate(){
   const out=$('slateBody'); if(!out||!SLATE) return;
@@ -2502,24 +2568,51 @@ function renderSlate(){
       (P&&!parlayLogged(P.legs,false)?`<button class="statussel" id="slateLogParlay" style="padding:4px 11px">📓 log the parlay</button><button class="statussel" id="slateSlip" style="padding:4px 11px">➕ parlay to slip</button>`:'')+`</div>`+
       `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(SLATE.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd})), 'Open the picks on FanDuel', 'rebuild')}${P?parlayButton(P.legs, 'Put the parlay on FanDuel', 'rebuild', P.D):''}</div>`;
   }
-  // 🎉 fun picks: TD bets for fun, from the price range that lost least on 2025's real prices
-  const F=SLATE.fun;
+  // 🎉 fun picks: TD bets for fun, from the price range that lost least on 2025's real prices — filtered by games / theme
+  const F=SLATE.fun; let funNeed=[];
   if(!F) html+='<div style="margin-top:10px;font-size:13px">🎉 <b>Fun picks</b> are new — hit <b>🎯 Build my TD picks</b> again to see them.</div>';   // a list saved before they existed
-  else if(!F.picks.length) html+='<div class="muted" style="margin-top:10px;font-size:12px">🎉 No fun picks — your books have no anytime prices between +'+FUN_BAND[0]+' and +'+FUN_BAND[1]+' for these games yet.</div>';
-  if(F&&F.picks&&F.picks.length){
-    const FP=F.parlay, cut=n=>Math.round((1-Math.pow(1-FUN_EDGE,n))*100);
+  else {
+    const FF=F.F||{win:'all', game:'', theme:'none'}, now=Date.now(), FG=SLATE.funGames||{}, gidOf=g=>g.away+'@'+g.home;
+    const upG=SCHED.filter(g=>Date.parse(g.kickoff)>now), nWin=w=>upG.filter(g=>funWinHas({win:w},gidOf(g),g.kickoff)).length;
+    const gOpts=upG.slice(); if(FF.win==='game' && !gOpts.some(g=>gidOf(g)===FF.game)){ const g=SCHED.find(x=>gidOf(x)===FF.game); if(g) gOpts.push(g); }
+    const winSel=`<select id="funWin" class="statussel" style="font-size:12px;max-width:100%">`+FUN_WINS.map(([v,l])=>{ const k=nWin(v);
+        return `<option value="${v}"${FF.win===v?' selected':''}${!k&&v!=='all'?' disabled':''}>${l}${v==='all'?'':` (${k?k+' game'+(k>1?'s':''):'none left'})`}</option>`; }).join('')+
+      (gOpts.length?`<optgroup label="One game">${gOpts.map(g=>`<option value="g:${esc(gidOf(g))}"${FF.win==='game'&&FF.game===gidOf(g)?' selected':''}>${esc(fmtKick(g.kickoff)+' · '+fmtGame(gidOf(g)))}</option>`).join('')}</optgroup>`:'')+`</select>`;
+    const themeSel=`<select id="funTheme" class="statussel" style="font-size:12px;max-width:100%">`+FUN_THEMES.map(([v,l])=>`<option value="${v}"${FF.theme===v?' selected':''}>${l}</option>`).join('')+`</select>`;
+    const what=`<b>${esc(funWinLabel(FF))}</b>${FF.theme!=='none'?' · <b>'+esc(funThemeLabel(FF.theme))+'</b>':''}`;
+    // games this filter covers that weren't priced (or whose prices are old) -> one button, never an automatic pull
+    const winUp=upG.filter(g=>funWinHas(FF,gidOf(g),g.kickoff) && (FF.win!=='all' || FG[gidOf(g)])), unp=winUp.filter(g=>!FG[gidOf(g)]), old=winUp.filter(g=>FG[gidOf(g)] && now-FG[gidOf(g)]>45*60e3);
+    funNeed=unp.length?unp:old;
+    const cr=funNeed.filter(g=>!pxFresh(gidOf(g))).length, crTxt=cr?`${cr} credit${cr>1?'s':''}`:'free';
+    const pxBtn=!funNeed.length?'' : unp.length
+      ? `<button class="statussel" id="funPxBtn" style="padding:4px 11px">⚡ Check ${unp.length} more game${unp.length>1?'s':''} for this filter · ${crTxt}</button>`
+      : `<button class="statussel" id="funPxBtn" style="padding:4px 11px">↻ Refresh these prices (${Math.round((now-Math.min(...old.map(g=>FG[gidOf(g)])))/60e3)} min old) · ${crTxt}</button>`;
+    const pxNote=SLATE.funNotes&&SLATE.funNotes.length?`<div class="muted" style="font-size:12px;margin-top:6px">Skipped: ${SLATE.funNotes.map(esc).join(' · ')}</div>`:'';
     html+=`<div style="margin-top:12px;padding:10px 12px;border:1px dashed var(--line2);border-radius:10px">`+
       `<div><b>🎉 Fun picks</b> <span class="muted" style="font-size:12px">— betting TDs anyway? These lose the least</span></div>`+
-      `<div class="muted" style="font-size:12px;line-height:1.5;margin:3px 0 7px">Anytime TDs priced <b>+${FUN_BAND[0]} to +${FUN_BAND[1]}</b> lost about ${Math.round(FUN_EDGE*100)}% of the money bet on them over 2025's real FanDuel prices; +400 to +1500 lost about 20%, and heavy favourites about 11%. This is <b>not an edge</b> — over time you lose a little. Same small stake on each; the sim's favourites in the range go first (that order isn't proven). Fun picks you've already logged stay on this list (✓) and count toward the number shown, so rebuilding never hands you a fresh batch; anyone else in your real picks, bet log or slip is left out, so you never double up (the app only knows bets you've logged or slipped).</div>`;
-    F.picks.forEach(c=>{ html+=`<div class="cpick spick" data-g="${esc(c.game)}" title="open this game"><div class="cp1"><span class="muted" style="min-width:18px">🎉</span>`+
-      `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="muted" style="font-size:12px">${fmtGame(c.game)}</span>${stakeBadge(c,'')}</div>`+
-      `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span>${bkBadge(c.book)} <span class="muted" style="font-size:12px">${c.mkt!=null?'~'+pct(c.mp)+' to score ('+(c.mktSrc==='fd'?'the book\'s own price':'other books')+')':'~'+pct(c.mp)+' to score (<span style="color:var(--warn)">model only</span>)'}</span></div></div>`; });
-    if(FP) html+=`<div style="margin-top:8px;font-size:13px"><b>🎰 Fun parlay</b> ${FP.legs.map(l=>`<b style="color:${teamText(l.abbr)}">${esc(l.name)}</b>`).join(' + ')} <span class="muted" style="font-size:12px">— two of the fun picks above, not new players</span><br>`+
-      `pays <span class="odds">${amStr(decToAmerican(FP.D))}</span> · hits ~${pct(FP.P)} · ${parlayBadge(FP, FUN_PARLAY_STAKE, true, '')} <span class="muted" style="font-size:12px">— a parlay multiplies the house's cut (≈ −${cut(FP.legs.length)}% over time)</span></div>`;
-    html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="statussel" id="funLog" style="padding:4px 11px">📓 log fun picks</button>`+
-      (FP&&!parlayLogged(FP.legs,true)?`<button class="statussel" id="funLogParlay" style="padding:4px 11px">📓 log fun parlay</button>`:'')+`</div>`+
-      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(F.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd})), 'Open fun picks on FanDuel', 'rebuild')}${FP?parlayButton(FP.legs, 'Put fun parlay on FanDuel', 'rebuild', FP.D):''}</div>`+
-      (FP?'':'<div class="muted" style="font-size:12px;margin-top:6px">No fun parlay — it needs picks from two different games'+(SLATE.checked<2?' (only one game on this slate)':'')+'.</div>')+`</div>`;
+      `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:7px 0 4px"><label class="muted" style="font-size:12px;max-width:100%">games ${winSel}</label><label class="muted" style="font-size:12px;max-width:100%">theme ${themeSel}</label></div>`+
+      `<div class="muted" style="font-size:12px;line-height:1.5;margin:3px 0 7px">Anytime TDs priced <b>+${FUN_BAND[0]} to +${FUN_BAND[1]}</b> lost about ${Math.round(FUN_EDGE*100)}% of the money bet on them over 2025's real FanDuel prices — <b>not an edge</b>, just the cheapest TD action. Filters only change <b>who</b> is on the list, not the odds. `+
+      `<details style="display:inline"><summary style="cursor:pointer;display:inline">how they're picked</summary> +400 to +1500 lost about 20% and heavy favourites about 11%. Same small stake on each; the sim's favourites in the range go first (that order isn't proven), one per game, then a second from the other team (one game: the two teams take turns). Fun picks you've already logged stay on the list (✓) and count toward the number shown, so rebuilding never hands you a fresh batch; anyone in your real picks, bet log or slip is left out, so you never double up (the app only knows bets you've logged or slipped).</details></div>`;
+    if(!F.picks.length) html+=`<div class="muted" style="font-size:12px">${winUp.length||FF.win==='all'
+      ? `No anytime prices between +${FUN_BAND[0]} and +${FUN_BAND[1]} fit ${what}${unp.length?` yet — ${unp.length} of its games haven't been checked`:''}.`
+      : `No ${what} games left to kick off this week.`}</div>`;
+    else {
+      const FP=F.parlay, cut=n=>Math.round((1-Math.pow(1-FUN_EDGE,n))*100);
+      html+=`<div class="muted" style="font-size:12px;margin-bottom:3px">${F.picks.length} for ${what}${F.picks.length<F.max?` — only ${F.picks.length} fit${unp.length?' so far':''}`:''}</div>`;
+      F.picks.forEach(c=>{ html+=`<div class="cpick spick" data-g="${esc(c.game)}" title="open this game"><div class="cp1"><span class="muted" style="min-width:18px">🎉</span>`+
+        `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="muted" style="font-size:12px">${fmtGame(c.game)}</span>${stakeBadge(c,'')}</div>`+
+        `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span>${bkBadge(c.book)} <span class="muted" style="font-size:12px">${c.mkt!=null?'~'+pct(c.mp)+' to score ('+(c.mktSrc==='fd'?'the book\'s own price':'other books')+')':'~'+pct(c.mp)+' to score (<span style="color:var(--warn)">model only</span>)'}</span></div></div>`; });
+      if(FP) html+=`<div style="margin-top:8px;font-size:13px"><b>🎰 Fun parlay</b> ${FP.legs.map(l=>`<b style="color:${teamText(l.abbr)}">${esc(l.name)}</b>`).join(' + ')} <span class="muted" style="font-size:12px">— two of the fun picks above, not new players</span><br>`+
+        `pays <span class="odds">${amStr(decToAmerican(FP.D))}</span> · hits ~${pct(FP.P)} · ${parlayBadge(FP, FUN_PARLAY_STAKE, true, '')} <span class="muted" style="font-size:12px">— a parlay multiplies the house's cut (≈ −${cut(FP.legs.length)}% over time)</span></div>`;
+      html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="statussel" id="funLog" style="padding:4px 11px">📓 log fun picks</button>`+
+        (FP&&!parlayLogged(FP.legs,true)?`<button class="statussel" id="funLogParlay" style="padding:4px 11px">📓 log fun parlay</button>`:'')+`</div>`+
+        `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(F.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd})), 'Open fun picks on FanDuel', 'rebuild')}${FP?parlayButton(FP.legs, 'Put fun parlay on FanDuel', 'rebuild', FP.D):''}</div>`+
+        (FP?'':`<div class="muted" style="font-size:12px;margin-top:6px">${FF.win==='game'
+          ? 'No fun parlay for one game — the book prices a same-game parlay itself (its TDs move together), so the app doesn\'t guess one.'
+          : 'No fun parlay — it needs picks from two different games.'}</div>`);
+    }
+    if(pxBtn) html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${pxBtn}</div>`;
+    html+=pxNote+`</div>`;
   }
   out.innerHTML=html+notes;
   const lp=$('slateLog'); if(lp) lp.onclick=()=>{ let n=0; for(const c of SLATE.picks) if(logBetFrom(Object.assign({market:'anytime'},c), c.stake, c.game)) n++; if(n){ saveBets(); renderBets(); } lp.textContent=n?`✓ logged ${n}`:'already logged'; };
@@ -2530,6 +2623,9 @@ function renderSlate(){
   const ls=$('slateSlip'); if(ls) ls.onclick=()=>{ let n=0; for(const l of P.legs) if(!slipHas(l.game,l.key,l.market)){ slip.push(Object.assign({},l)); n++; } if(n){ saveSlip(); renderSlip(); } ls.textContent=n?`✓ added ${n}`:'already in slip'; };
   const fl=$('funLog'); if(fl) fl.onclick=()=>{ let n=0; for(const c of F.picks) if(logBetFrom(Object.assign({market:'anytime', fun:true},c), c.stake, c.game)) n++; if(n){ saveBets(); renderBets(); } fl.textContent=n?`✓ logged ${n}`:'already logged'; };
   const flp=$('funLogParlay'); if(flp) flp.onclick=()=>{ logParlay(F.parlay, FUN_PARLAY_STAKE, 'Fun parlay: ', {fun:true}); flp.textContent='✓ logged'; };
+  const fw=$('funWin'); if(fw) fw.onchange=()=>{ const v=fw.value; if(v.startsWith('g:')){ FUNF.win='game'; FUNF.game=v.slice(2); } else FUNF.win=v; lsW('nfltd_funf', FUNF); refun(); };
+  const ft=$('funTheme'); if(ft) ft.onchange=()=>{ FUNF.theme=ft.value; lsW('nfltd_funf', FUNF); refun(); };
+  const fpx=$('funPxBtn'); if(fpx) fpx.onclick=()=>priceFunGames(funNeed, fpx);
   out.querySelectorAll('.spick').forEach(el=>{ el.onclick=e=>{ if(e.target.closest('button')) return; const [a,h]=el.dataset.g.split('@'); if(!S.teamList.includes(a)||!S.teamList.includes(h)) return;
     $('awaySel').value=a; $('homeSel').value=h; userPicked=true; onMatchupChange(); setTimeout(()=>$('mktSec').scrollIntoView({behavior:'smooth'}), 300); }; });
 }
