@@ -1,0 +1,50 @@
+name: Edge alerts
+
+# Pushes the anytime-TD bets Your card would make to your phone (ntfy) for games kicking off in the next 6 hours.
+# It never places a bet. Costs 1 Odds API credit per game per check; with no game inside the window a run costs nothing.
+# Setup and settings: README.md → "📲 Edge alerts". Script: alerts/watch.mjs.
+on:
+  workflow_dispatch:        # "Run workflow" button on the repo's Actions tab
+    inputs:
+      mode:
+        description: 'test = one test alert (no odds, no credits) · dry = check prices and print, send nothing · live = check and send'
+        type: choice
+        options: [test, dry, live]
+        default: test
+  # THE TIMER IS OFF. To switch it on (after the Odds API credits reset), delete the # at the start of the next 2 lines.
+  # GitHub runs it about every 5 minutes, often a few minutes late.
+  # schedule:
+  #   - cron: '*/5 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: edge-alerts
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            alerts
+            nfl-td-snapshot.json
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check prices and alert
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          ALERT_MODE: ${{ inputs.mode || 'live' }}
+          ALERT_HOURS: '6'
+          ALERT_RESERVE: '1000'
+        run: node alerts/watch.mjs

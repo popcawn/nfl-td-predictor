@@ -130,6 +130,8 @@ See README.md for what the model does and how it was validated.
   NEVER off-board. applyClose() = closeView + write closeOdds/closeEst. Don't raise either share without a new real-price test that wins both halves. Refit: `DUMP_BT=1` build
   (restore shipped files with git checkout) -> `--go` / `--props --go` -> `analyze` / `analyze-props` -> build.
   Raw prices (market_hist/, market_td_*.json, market_props_*.json) and bt_*.json stay local.
+  GOTCHA: `node market-backtest.mjs analyze` REWRITES market_anchor.json and drops its props section (props.w) — after
+  using it just to read numbers, `git checkout -- market_anchor.json` (happened 2026-10-15, caught before commit).
 - 🎉 FUN PICKS (2026-10-05, user wants TD action despite no edge): `buildSlate` also collects every FanDuel anytime price in
   FUN_BAND [+100,+400) (not OUT/DBT, not already a real pick), sorted by the sim's EV only as a tiebreak, 1 per game (2nd
   pass: other team), flat FUN_STAKE 0.5u; fun parlay = the 2 likeliest (mp) from different games, 0.2u. Evidence (2025
@@ -188,6 +190,16 @@ See README.md for what the model does and how it was validated.
   (trimLog is gone). The log still marks the bets the card rule would pick with ★ + suggested stake (planFor/PLANS).
   WEEK TALLY: every week summary has a .wktally line — Spent (every stake, open included) · Won/lost (settled net) · still
   riding · season so far (cumulative spent + net up to that week); the top summary says Spent and Won/lost too.
+- 📲 EDGE ALERTS (2026-10-15, user asked for phone notifications, then "yes" to building it with the timer off):
+  `alerts/watch.mjs` (Node 20, no deps) run by `.github/workflows/alerts.yml` — workflow_dispatch modes test|dry|live, the
+  `schedule:` (*/5) is COMMENTED OUT until the user says to switch it on (credits: ~5K/month at 6 h window). It mirrors
+  the slate's TD rule WITHOUT the sim (TD_W = 0): other books' median implied (app's consensusFrom incl. the <2-books
+  fallback) -> S.marketAnchor.cal -> evalBet/tierOf 'take' -> legConfidence (no weather) -> pickPlays (3/game, 2/team,
+  ¼ Kelly). Keep it in step when those change. Secrets the USER adds: ODDS_API_KEY, NTFY_TOPIC (private ntfy.sh
+  channel), optional SYNC_TOKEN (reads the ☁ Sync gist: bankroll -> $ stakes, open bets -> skipped). Dedupe = polls the
+  ntfy channel's last 12 h (click link + "TD +price" in the title); re-alerts only on a better price. Stops below
+  ALERT_RESERVE (1000) credits. Test without credits: ALERT_MOCK=<{events, odds}> ALERT_MODE=dry (scratch mock maker
+  pattern: fake 6 books, FD/DK generous on a few players). It never places bets — the user was told books ban bots.
 - 💰 BANKROLL $ (2026-10-13): BANK={amt,at,mt} (nfltd_bank, synced + exported). bankNow() = amt + dollar P/L of bets with
   b.st (settled-at, stamped by autoSettle and the result select) > BANK.at; unitUsd() = bankNow()/getBankroll() (the old
   units box is a hidden field = 100, so 1u = 1%). stakeTxt(u) / betStakeTxt(b) render every stake ($ when a bankroll is

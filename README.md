@@ -140,16 +140,37 @@ silently to the baked snapshot when not.
   Each bet shows **⏱ how long before kickoff** it was logged, and *More → Insights → When you bet* compares early-week
   with close-to-kickoff bets (record, ROI, CLV) for props, TDs or everything. The **Parlay picker** is collapsed until you
   open it (it then stays open).
-- **Bet log by game** — each game has its own section (open games first). For open games the log applies the
-  same rule as the card: the best bets read **★ BET** with a suggested stake, the rest **cut**, and **✂ Trim** removes
-  the cuts and sets the stakes in one click.
+- **Bet log by week and game** — each week opens with a money line: **💵 Spent** (every stake, open bets included) ·
+  **Won/lost** (settled) · what's still riding · and the season so far. Inside, each game has its own section (open
+  games first); the open bets the card's rule would pick show **★** with its suggested stake. A logged bet is already
+  placed, so the log never tells you to cut one.
 - **Bet log & CLV** — log any bet (the sim's TD props or your own props), enter the closing line and result;
   it tracks CLV, ROI and a live calibration check (hits the model expected vs hits you got). Re-running the
   sim with the same inputs gives the same numbers (seeded simulation), so a verdict can't flip on noise.
 
+## 📲 Edge alerts (phone)
+A GitHub Action (`.github/workflows/alerts.yml` → `alerts/watch.mjs`) checks your books' anytime-TD prices for games
+kicking off in the next 6 hours and sends the bets **Your card would make** to your phone through
+[ntfy](https://ntfy.sh) (free app, no account). Tap the alert and the bet opens in FanDuel's / DraftKings' slip — you
+check the price and place it yourself. **It never places a bet.**
+
+- **The rule** is the app's: chance = the other books' price (calibrated), the price judged = the best among FanDuel +
+  DraftKings, EV over 3%, the card's confidence, ¼ Kelly, at most 3 per game / 2 per team / 1 per player. Each bet is
+  alerted once (again only if its price gets better). On 2025's real prices this rule went +58% in weeks 1–9 and −14%
+  in weeks 10–18 at closing prices — **unproven**; your CLV says whether it works.
+- **Credits:** 1 per game per check. Every 5 minutes for the 6 hours before each kickoff ≈ 5,000 credits a month; a run
+  with no game in the window costs nothing. It stops if the key drops below 1,000 credits (so the app keeps some).
+- **Setup (once):** in the ntfy app, subscribe to your private channel name. In this repo: *Settings → Secrets and
+  variables → Actions → New repository secret* — `NTFY_TOPIC` (that channel name), `ODDS_API_KEY` (your key) and,
+  optionally, `SYNC_TOKEN` (the app's ☁ Sync token: stakes in dollars from your bankroll, and players you've already
+  logged are skipped). Then *Actions → Edge alerts → Run workflow → test*: your phone should buzz (no credits).
+- **The timer is off.** To switch it on, delete the two `#` in front of `schedule:` and `- cron:` in
+  `.github/workflows/alerts.yml`. `dry` runs check prices and print the alerts in the run's log without sending.
+
 ## Files
 | File | What it is |
 |---|---|
+| `alerts/watch.mjs` | The edge-alert checker (run by `.github/workflows/alerts.yml`). |
 | **`nfl-td-predictor.html`** | The deliverable. Open in any browser. |
 | **`build-nfl-td-snapshot.mjs`** | Node build script: refreshes the data snapshot and runs the backtest. |
 | `build-market-lines.mjs` | Optional: scrapes ESPN's historical anytime-TD boards for the market-universe check. |
