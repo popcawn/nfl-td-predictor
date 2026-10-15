@@ -183,6 +183,11 @@ See README.md for what the model does and how it was validated.
   koStamp(game) at log time (SCHED + CUR_WK), back-filled by autoSettle from ESPN events for older bets (koX = not found).
   Parlay picker = details#parlaySec, collapsed by default; computeParlays() returns early while closed and runs on open;
   open state in nfltd_parlayopen; #jumpNav links open a <details> target.
+- NO "CUT" ON LOGGED BETS (2026-10-15, user: "the cut in logged picks"): a logged bet is already placed, so the log no
+  longer tags bets "cut", shows "N to cut" or a Trim banner, and Your card no longer shows "didn't make the cut / ✂ Trim"
+  (trimLog is gone). The log still marks the bets the card rule would pick with ★ + suggested stake (planFor/PLANS).
+  WEEK TALLY: every week summary has a .wktally line — Spent (every stake, open included) · Won/lost (settled net) · still
+  riding · season so far (cumulative spent + net up to that week); the top summary says Spent and Won/lost too.
 - 💰 BANKROLL $ (2026-10-13): BANK={amt,at,mt} (nfltd_bank, synced + exported). bankNow() = amt + dollar P/L of bets with
   b.st (settled-at, stamped by autoSettle and the result select) > BANK.at; unitUsd() = bankNow()/getBankroll() (the old
   units box is a hidden field = 100, so 1u = 1%). stakeTxt(u) / betStakeTxt(b) render every stake ($ when a bankroll is
