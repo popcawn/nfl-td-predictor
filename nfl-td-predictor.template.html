@@ -1327,6 +1327,8 @@ function computeTopPlays(){
     for(const m of ['anytime','first','last']){ const odds=LAST.bookMap[m+'|DST|'+abbr]; if(!odds) continue;
       add({key:'DST|'+abbr, label:S.teams[abbr].short+' Defense', abbr, market:m, odds, book:bookOfTk(tkFor(curGameId(), m, 'DST|'+abbr, odds)), mp:d[m], mpRaw:d[m], prior:false, role:'defense (pick-6 / fumble return)', cal:1, ref:{dst:true}}); }
   for(const c of propCandidates()){ const e=propEval(c); if(e) cand.push(e); }   // player props (own confidence + verdict rules)
+  // a saved price from a book you've since dropped (BetRivers, 2026-10-16) isn't yours to bet: off the card until a re-pull
+  const myB=myBooks(), gone=[]; for(let i=cand.length-1;i>=0;i--){ const b=cand[i].book; if(b && !myB.includes(b)){ gone.push(cand[i]); cand.splice(i,1); } }
   CANDS=cand;
 
   // this game's options = every price you pasted + whatever is already in your log for it — the same rule
@@ -1390,6 +1392,7 @@ function computeTopPlays(){
       : cardStat('none', 'NO BETS IN THIS GAME', 'nothing clears the bar');
     html+=`<div style="margin-top:4px">Nothing you've priced clears the bar after calibration and sizing — the normal case, since the market is efficient on most props. (If everything's a pass, sanity-check the total/spread up top.)</div>`;
   }
+  if(gone.length) html+=`<div class="muted" style="font-size:12px;margin-top:8px">${gone.length} saved price${gone.length>1?'s are':' is'} from ${esc([...new Set(gone.map(c=>bookName(c.book)))].join(' / '))}, no longer one of your books — left off. <button class="statussel fdpull" style="padding:2px 9px" title="pulls this game again so every box shows your books' prices">⚡ Pull again</button></div>`;
   const other=skipped.filter(s=>!s.c.bet);
   if(other.length){ const seen=new Set();
     const uniq=other.filter(s=>{ const k=s.c.key+'|'+s.c.market; if(seen.has(k)) return false; seen.add(k); return true; });
