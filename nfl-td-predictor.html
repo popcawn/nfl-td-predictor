@@ -190,6 +190,12 @@
   }
   .mktbtn.sm{padding:2px 9px;font-size:12px;border-radius:7px}
   .cpick{padding:6px 0;border-bottom:1px solid var(--line)} .cpick:last-child{border-bottom:none}
+  .cardstat{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;font-weight:900;font-size:15px;letter-spacing:.05em;padding:8px 11px;border-radius:9px;margin:4px 0 9px}
+  .cardstat span{font-weight:500;letter-spacing:0;font-size:12.5px;color:var(--ink2)}
+  .cardstat.done{background:rgba(51,217,134,.12);border:1px solid rgba(51,217,134,.5);color:var(--good)}
+  .cardstat.new{background:rgba(77,163,255,.14);border:1px solid var(--accent);color:var(--accent)}
+  .cardstat.none{background:var(--panel2);border:1px solid var(--line2);color:var(--ink2)}
+  #bestBet label{white-space:nowrap}
   .cp1{display:flex;gap:8px;align-items:center}
   .spick{cursor:pointer} .spick:hover{background:rgba(120,160,220,.06)}
   .cp2{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px;margin:2px 0 0 26px}
@@ -212,7 +218,6 @@
     .mteamsw button.on{border-color:var(--accent);color:var(--ink)}
     .mgrid.one-away>.mteam:nth-child(2), .mgrid.one-home>.mteam:nth-child(1){display:none}
     h2{margin-top:14px}
-    #bestBet label{white-space:nowrap}
   }
 </style>
 </head>
@@ -1250,6 +1255,7 @@ function evalBet(mp, oddsStr){
 // win and lose together). Probabilities are the role-calibrated ones.
 const KELLY_FRAC=0.25, TEAM_CAP=0.04, MIN_STAKE=0.005, MAX_PER_TEAM=2;
 function getBankroll(){ const v=+$('bankroll').value; return v>0?v:100; }
+const cardStat=(cls,big,small)=>`<div class="cardstat ${cls}">${big}${small?` <span>${small}</span>`:''}</div>`;
 let CARD=[];   // current picks, for the table stars and the "log this card" button
 let SKIPWHY=new Map();   // key|market -> why a +EV bet isn't on the card (hover text on "edge" badges)
 function evExplainer(){
@@ -1356,6 +1362,9 @@ function computeTopPlays(){
   if(!cand.length && !logged.length){
     html=`<div class="muted">⚡ Pull odds above (or paste a board, or type prices in the markets) — TD odds or player props — and this picks the best ${maxG} bets in the game and sizes them.</div>`;
   } else if(picks.length){
+    const nNew=unlogged.length, nIn=picks.length-nNew;
+    html+= nNew ? cardStat('new', `🆕 ${nNew} NEW BET${nNew>1?'S':''}`, nIn?`not in your log yet · ${nIn} already logged`:'not in your log yet')
+      : cardStat('done', '✅ NO NEW BETS', `${picks.length>1?'all '+picks.length+' bets on this card are':'the bet on this card is'} already in your log`);
     html+=`<div style="font-size:13px;margin:0 0 2px"><b>Bet ${picks.length===1?'this one':'these '+picks.length}</b> <span class="muted">— best ${picks.length} of ${nEdge} edge${nEdge===1?'':'s'} (max ${maxG}/game, ${MAX_PER_TEAM}/team, 1/player). Outlined boxes = skip.</span></div>`;
     html+='<div>';
     picks.forEach((c,i)=>{ const bimp=c.bimp!=null?c.bimp:1/(oddsDec(c.odds)||2), edge=c.mp-bimp;
@@ -1373,7 +1382,9 @@ function computeTopPlays(){
       `<button class="statussel" id="cardToSlip" style="padding:3px 11px" title="send these picks to the cross-game slip — do this for each game, then let the slip pick the parlay">➕ add to slip</button>`+
       fdButton(picks.map(c=>({game:curGameId(), market:c.market, key:c.key, label:c.label, odds:c.odds, stake:c.stake})), n=>`Open ${n>1?'these '+n:'it'} on FanDuel`)+`</div>`;
   } else {
-    html+=`<div style="margin-top:4px"><b>No bets on this card.</b> Nothing you've priced clears the bar after calibration and sizing — the normal case, since the market is efficient on most props. (If everything's a pass, sanity-check the total/spread up top.)</div>`;
+    html+= logged.length ? cardStat('done', '✅ NO NEW BETS', `you have ${logged.length} open bet${logged.length>1?'s':''} on this game in your log — nothing new clears the bar at today's prices`)
+      : cardStat('none', 'NO BETS IN THIS GAME', 'nothing clears the bar');
+    html+=`<div style="margin-top:4px">Nothing you've priced clears the bar after calibration and sizing — the normal case, since the market is efficient on most props. (If everything's a pass, sanity-check the total/spread up top.)</div>`;
   }
   const other=skipped.filter(s=>!s.c.bet);
   if(other.length){ const seen=new Set();
@@ -2592,6 +2603,10 @@ function renderSlate(){
       : `<span class="vbadge${cls}" style="margin-left:auto;font-size:12px">bet ${u(c.stake)}</span>`; };
   const parlayBadge=(PP,stake,fun,cls)=>parlayLogged(PP.legs, fun) ? '<span class="muted" style="font-size:12px">✓ already bet</span>' : `<span class="vbadge${cls}" style="font-size:12px">bet ${u(stake)}</span>`;
   let html='';
+  { const nNew=SLATE.picks.filter(c=>on.get(c.game+'|'+c.key)!=='log').length, n=SLATE.picks.length;
+    html+= !n ? cardStat('none', 'NO TD BETS TODAY', 'nothing clears the bar')
+      : nNew ? cardStat('new', `🆕 ${nNew} NEW BET${nNew>1?'S':''}`, n-nNew?`${n-nNew} already in your log`:'')
+      : cardStat('done', '✅ NO NEW BETS', `${n>1?'all '+n+' picks are':'the pick is'} already in your log`); }
   if(!SLATE.picks.length) html+=`<div><b>No TD bets worth making</b> across the ${SLATE.checked} game${SLATE.checked>1?'s':''} checked — your books' best prices are at or below what the other books say they're worth. Sitting it out is a win too.${stale}</div>`;
   else {
     html+=`<div style="font-size:13px;margin-bottom:4px"><b>Your ${SLATE.picks.length} TD bet${SLATE.picks.length>1?'s':''} for ${dayName}</b> <span class="muted">— the best of ${SLATE.checked} game${SLATE.checked>1?'s':''}, best price at ${myBooksTxt()}, from ${when}</span>${stale}</div>`;
