@@ -117,6 +117,7 @@ function slipLink(book, o) {   // the app's bookLink() for one outcome
     return m && sel ? `${FD_SLIP}?marketId=${encodeURIComponent(decodeURIComponent(m[1]))}&selectionId=${encodeURIComponent(sel)}` : null; }
   if (book === 'draftkings') return o.sid ? 'https://sportsbook.draftkings.com/?outcomes=' + encodeURIComponent(o.sid) : null;
   if ((book === 'betmgm' || book === 'williamhill_us') && STATE && o.link && o.link.includes('{state}')) return o.link.replace('{state}', STATE);   // the API's link, with your state in it
+  if (book === 'betrivers' && STATE && o.link && o.link.includes('{state}')) return o.link.replace('{state}', STATE).replace('{pickType}', 'single').replace('{wagerAmount}', '');   // best guess, like the app
   return null;
 }
 

@@ -231,8 +231,10 @@ See README.md for what the model does and how it was validated.
   https://sports.{state}.betmgm.com/en/sports?options=<event sid>-<market id>-<option sid>&type=Single (tkOf keeps the options
   token as t.g — older MGM tickets lack it, one re-pull fixes); Caesars = https://sportsbook.caesars.com/us/{state}/bet/betslip?
   selectionIds=<sid>. {state} = ODDSCFG.state (#oddsState, lowercase). needsState(t) -> "📍 Pick your state" button instead of
-  a re-pull. Multi-leg: comma-joined (MGM type=Combo for parlays) — UNVERIFIED like FD/DK. BetRivers links need {pickType}
-  and {wagerAmount}; Fanatics returns no links -> both unlinked.
+  a re-pull. Multi-leg: comma-joined (MGM type=Combo for parlays) — UNVERIFIED like FD/DK. Fanatics returns no links -> "place it in the
+  Fanatics app". BETRIVERS (user said "yes try", same day): link = https://{state}.betrivers.com/?page=sportsbook#event/<t.e>?coupon=
+  single|<sid>|<stake $> — pickType/wagerAmount values are a GUESS (undocumented; Kambi-style coupon). One button per bet
+  (fdButton passes leg.stake -> dollars, rounded like fmtUsd); parlays use "combination". Ask the user whether it worked.
   CREDITS: per-market switches (ODDSCFG.mk, mkOn/pickedMarkets) and freshMs() (20 min <3h to kickoff, 1h <24h, else 3h).
   On 2026-10-13 the 20K plan had 2,180 left: ~11K went to the two one-off backtests, the app itself burned ~850/day
   (9 credits per game opened + history closes at 10/market) — tell the user before adding anything that pulls more.

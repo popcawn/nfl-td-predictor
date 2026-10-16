@@ -292,7 +292,7 @@
             <div>The Odds API key <input id="oddsKeyIn" type="password" placeholder="paste key" autocomplete="off" spellcheck="false" style="width:170px;padding:4px 7px;font-size:12px;background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:7px"> <button class="statussel" id="oddsKeySave" style="padding:2px 9px">save</button> <span id="oddsKeyMsg" class="muted"></span></div>
             <div class="cfgrow"><b>My sportsbooks</b> <span class="muted">— each box shows the best price among these (no extra credits); every other book is "the market"</span><br>
               <label><input type="checkbox" class="bkchk" value="fanduel" checked disabled> FanDuel</label><label><input type="checkbox" class="bkchk" value="draftkings"> DraftKings</label><label><input type="checkbox" class="bkchk" value="betmgm"> BetMGM</label><label><input type="checkbox" class="bkchk" value="williamhill_us"> Caesars</label><label><input type="checkbox" class="bkchk" value="betrivers"> BetRivers</label><label><input type="checkbox" class="bkchk" value="fanatics"> Fanatics</label></div>
-            <div>Your state <select id="oddsState" class="statussel" style="font-size:12px"><option value="">— pick —</option><option value="al">Alabama</option><option value="ak">Alaska</option><option value="az">Arizona</option><option value="ar">Arkansas</option><option value="ca">California</option><option value="co">Colorado</option><option value="ct">Connecticut</option><option value="de">Delaware</option><option value="dc">Washington DC</option><option value="fl">Florida</option><option value="ga">Georgia</option><option value="hi">Hawaii</option><option value="id">Idaho</option><option value="il">Illinois</option><option value="in">Indiana</option><option value="ia">Iowa</option><option value="ks">Kansas</option><option value="ky">Kentucky</option><option value="la">Louisiana</option><option value="me">Maine</option><option value="md">Maryland</option><option value="ma">Massachusetts</option><option value="mi">Michigan</option><option value="mn">Minnesota</option><option value="ms">Mississippi</option><option value="mo">Missouri</option><option value="mt">Montana</option><option value="ne">Nebraska</option><option value="nv">Nevada</option><option value="nh">New Hampshire</option><option value="nj">New Jersey</option><option value="nm">New Mexico</option><option value="ny">New York</option><option value="nc">North Carolina</option><option value="nd">North Dakota</option><option value="oh">Ohio</option><option value="ok">Oklahoma</option><option value="or">Oregon</option><option value="pa">Pennsylvania</option><option value="ri">Rhode Island</option><option value="sc">South Carolina</option><option value="sd">South Dakota</option><option value="tn">Tennessee</option><option value="tx">Texas</option><option value="ut">Utah</option><option value="vt">Vermont</option><option value="va">Virginia</option><option value="wa">Washington</option><option value="wv">West Virginia</option><option value="wi">Wisconsin</option><option value="wy">Wyoming</option></select> <span class="muted">— BetMGM and Caesars put it in their bet-slip links</span></div>
+            <div>Your state <select id="oddsState" class="statussel" style="font-size:12px"><option value="">— pick —</option><option value="al">Alabama</option><option value="ak">Alaska</option><option value="az">Arizona</option><option value="ar">Arkansas</option><option value="ca">California</option><option value="co">Colorado</option><option value="ct">Connecticut</option><option value="de">Delaware</option><option value="dc">Washington DC</option><option value="fl">Florida</option><option value="ga">Georgia</option><option value="hi">Hawaii</option><option value="id">Idaho</option><option value="il">Illinois</option><option value="in">Indiana</option><option value="ia">Iowa</option><option value="ks">Kansas</option><option value="ky">Kentucky</option><option value="la">Louisiana</option><option value="me">Maine</option><option value="md">Maryland</option><option value="ma">Massachusetts</option><option value="mi">Michigan</option><option value="mn">Minnesota</option><option value="ms">Mississippi</option><option value="mo">Missouri</option><option value="mt">Montana</option><option value="ne">Nebraska</option><option value="nv">Nevada</option><option value="nh">New Hampshire</option><option value="nj">New Jersey</option><option value="nm">New Mexico</option><option value="ny">New York</option><option value="nc">North Carolina</option><option value="nd">North Dakota</option><option value="oh">Ohio</option><option value="ok">Oklahoma</option><option value="or">Oregon</option><option value="pa">Pennsylvania</option><option value="ri">Rhode Island</option><option value="sc">South Carolina</option><option value="sd">South Dakota</option><option value="tn">Tennessee</option><option value="tx">Texas</option><option value="ut">Utah</option><option value="vt">Vermont</option><option value="va">Virginia</option><option value="wa">Washington</option><option value="wv">West Virginia</option><option value="wi">Wisconsin</option><option value="wy">Wyoming</option></select> <span class="muted">— BetMGM, Caesars and BetRivers put it in their bet-slip links</span></div>
             <div class="cfgrow"><b>What a pull fetches</b> <span class="muted">— 1 credit each, per game:</span> <b id="oddsCost"></b><br>
               <label><input type="checkbox" class="mkchk" value="player_anytime_td"> Anytime TD</label><label><input type="checkbox" class="mkchk" value="player_1st_td"> 1st TD</label><label><input type="checkbox" class="mkchk" value="player_last_td"> Last TD</label><label><input type="checkbox" class="mkchk" value="player_tds_over"> 2+ TD</label><br>
               <label><input type="checkbox" class="mkchk" value="player_receptions"> Receptions</label><label><input type="checkbox" class="mkchk" value="player_reception_yds"> Rec yds</label><label><input type="checkbox" class="mkchk" value="player_rush_yds"> Rush yds</label><label><input type="checkbox" class="mkchk" value="player_rush_reception_yds"> Rush+rec yds</label><label><input type="checkbox" class="mkchk" value="player_pass_yds"> Pass yds</label></div>
@@ -1371,7 +1371,7 @@ function computeTopPlays(){
       `<span>Total <b>${u(tot)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll) · ${Object.entries(teams).map(([t,v])=>`${S.teams[t].short} ${u(v)}`).join(' · ')}</span>`+
       (unlogged.length?`<button class="statussel" id="logCard" style="padding:3px 11px">📓 log ${unlogged.length===picks.length?'these':'the '+unlogged.length+' not logged yet'}</button>`:`<span>✓ all in your log</span>`)+
       `<button class="statussel" id="cardToSlip" style="padding:3px 11px" title="send these picks to the cross-game slip — do this for each game, then let the slip pick the parlay">➕ add to slip</button>`+
-      fdButton(picks.map(c=>({game:curGameId(), market:c.market, key:c.key, label:c.label, odds:c.odds})), n=>`Open ${n>1?'these '+n:'it'} on FanDuel`)+`</div>`;
+      fdButton(picks.map(c=>({game:curGameId(), market:c.market, key:c.key, label:c.label, odds:c.odds, stake:c.stake})), n=>`Open ${n>1?'these '+n:'it'} on FanDuel`)+`</div>`;
   } else {
     html+=`<div style="margin-top:4px"><b>No bets on this card.</b> Nothing you've priced clears the bar after calibration and sizing — the normal case, since the market is efficient on most props. (If everything's a pass, sanity-check the total/spread up top.)</div>`;
   }
@@ -1616,9 +1616,9 @@ const bookOfTk=t=>t ? (t.b||'fanduel') : '';
 const legSel=l=>l.fd||tkFor(l.game, l.market, l.key, l.odds);
 // a link that opens these tickets in ONE book's bet slip (null if that book has no usable ids)
 const FD_SLIP='https://sportsbook.fanduel.com/addToBetslip';
-const STATE_BOOKS=['betmgm','williamhill_us'];
+const STATE_BOOKS=['betmgm','williamhill_us','betrivers'];
 const needsState=t=>!!t && STATE_BOOKS.includes(bookOfTk(t)) && !ODDSCFG.state;   // ids are there, your state isn't
-function bookLink(book, tks, combo){
+function bookLink(book, tks, combo, usd){
   if(!tks.length) return null;
   const st=String(ODDSCFG.state||'').toLowerCase();
   if(book==='fanduel'){ if(tks.some(x=>!x.m||!x.s)) return null;
@@ -1628,7 +1628,9 @@ function bookLink(book, tks, combo){
   // BetMGM / Caesars, from the API's own one-leg links; joining several legs with commas is a guess, like FanDuel's / DK's
   if(book==='betmgm'){ if(!st || tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sports?options=${tks.map(x=>x.g).join(',')}&type=${combo&&tks.length>1?'Combo':'Single'}`; }
   if(book==='williamhill_us'){ if(!st || tks.some(x=>!x.s)) return null; return `https://sportsbook.caesars.com/us/${st}/bet/betslip?selectionIds=${tks.map(x=>encodeURIComponent(x.s)).join(',')}`; }
-  return null;   // BetRivers wants a stake in its link and Fanatics gives none — open those by hand
+  if(book==='betrivers'){ if(!st || tks.some(x=>!x.s||!x.e)) return null; const amt=usd>0 ? (usd>=20 ? Math.round(usd) : usd>=1 ? Math.round(usd*2)/2 : Math.round(usd*100)/100) : '';   // same rounding as the stake shown (fmtUsd)
+    return `https://${st}.betrivers.com/?page=sportsbook#event/${tks[0].e}?coupon=${combo&&tks.length>1?'combination':'single'}|${tks.map(x=>x.s).join(',')}|${amt}`; }
+  return null;   // Fanatics gives no links — open those by hand
 }
 const linkable=t=>!!t && !!bookLink(bookOfTk(t), [t]);
 // buttons that open these legs in their book's bet slip — one button per book (singles can sit at different books)
@@ -1636,14 +1638,18 @@ function fdButton(legs, label, mode){
   const ok=[], miss=[]; for(const l of legs) (linkable(legSel(l))?ok:miss).push(l);
   const why='not linked yet — these prices were pasted, pulled before links existed, or sit at a book without bet-slip links';
   const stMiss=miss.filter(l=>needsState(legSel(l))), other=miss.filter(l=>!needsState(legSel(l)));
-  const stBtn=stMiss.length ? `<button class="statussel statepick" style="padding:3px 11px" title="BetMGM and Caesars put your state in their bet-slip links — pick it once under odds settings">📍 Pick your state for ${[...new Set(stMiss.map(l=>bookName(bookOfTk(legSel(l)))))].join(' / ')} links</button> ` : '';
+  const stBtn=stMiss.length ? `<button class="statussel statepick" style="padding:3px 11px" title="BetMGM, Caesars and BetRivers put your state in their bet-slip links — pick it once under odds settings">📍 Pick your state for ${[...new Set(stMiss.map(l=>bookName(bookOfTk(legSel(l)))))].join(' / ')} links</button> ` : '';
   if(!ok.length && !stMiss.length){ if(!legs.length) return '';
     return mode==='slip' ? '' :   // the slip shows its own "Get links" button
       mode==='rebuild' ? `<span class="muted" style="font-size:12px">🔗 hit <b>Build my TD picks</b> again for bet-slip links</span>` :
       `<button class="statussel fdpull" style="padding:3px 11px" title="${esc(why)} — pulls this game's prices again">🔗 Get bet-slip link${legs.length>1?'s':''}</button>`; }
-  const by=new Map(); for(const l of ok){ const t=legSel(l), b=bookOfTk(t); (by.get(b)||by.set(b,[]).get(b)).push(t); }
+  const by=new Map(); for(const l of ok){ const t=legSel(l), b=bookOfTk(t); (by.get(b)||by.set(b,[]).get(b)).push({t,l}); }
   let html='';
-  for(const [b,tks] of by){ const txt=String(typeof label==='function'?label(tks.length):label).replace(/FanDuel/g, bookName(b));
+  for(const [b,items] of by){ const tks=items.map(x=>x.t);
+    if(b==='betrivers'){ for(const {t,l} of items){ const k=unitUsd(), usd=l.stake!=null&&k!=null ? l.stake*k : null;
+        html+=`<a class="statussel fdbtn" href="${esc(bookLink(b,[t],false,usd))}" target="_blank" rel="noopener" title="opens BetRivers with this bet${usd?' and a '+fmtUsd(usd)+' stake':''} in the bet slip (BetRivers' link format is a best guess) — check the price and stake there before you bet">📲 BetRivers: ${esc(l.name||l.label||'this bet')}</a> `; }
+      continue; }
+    const txt=String(typeof label==='function'?label(tks.length):label).replace(/FanDuel/g, bookName(b));
     html+=`<a class="statussel fdbtn" href="${esc(bookLink(b,tks))}" target="_blank" rel="noopener" title="opens ${esc(bookName(b))} with ${tks.length===1?'this bet':'these '+tks.length+' bets'} in the bet slip — check the price there before you bet">📲 ${txt}${by.size>1&&typeof label!=='function'?' ('+tks.length+')':''}</a> `; }
   // a price at a book the app can't link (BetRivers, Fanatics …) is still on the board — say where to place it by hand
   const LINKED_BOOKS=['fanduel','draftkings'].concat(STATE_BOOKS), atBook=l=>{ const t=legSel(l), b=t&&bookOfTk(t); return b&&!LINKED_BOOKS.includes(b) ? b : null; };
@@ -2034,7 +2040,8 @@ async function fetchGameOdds(away, home, markets, mustBeUpcoming){
 // an Odds API event-odds body -> the best price among YOUR books for every selection (+ its ticket), each of your books'
 // own board (byBook, for closing lines) and the other books' consensus.
 const tkOf=(b,o)=>{ const t={b, o:fmtAm(o.price)}; if(b==='fanduel'){ const f=fdSelOf(o); if(f){ t.m=f.m; t.s=f.s; } } else if(o.sid) t.s=String(o.sid);
-  if(b==='betmgm'){ const g=/[?&]options=([^&]+)/.exec(o.link||''); if(g) t.g=decodeURIComponent(g[1]); }   // "6:43628-3969167-6360732"
+  if(b==='betmgm'){ const g=/[?&]options=([^&]+)/.exec(o.link||''); if(g) t.g=decodeURIComponent(g[1]); }
+  if(b==='betrivers'){ const e=/#event\/(\d+)/.exec(o.link||''); if(e) t.e=e[1]; }   // "6:43628-3969167-6360732"
   return t; };
 function parseOdds(j){
   const mine=myBooks(), bks=mine.map(k=>(j.bookmakers||[]).find(b=>b.key===k)).filter(Boolean);
@@ -2595,7 +2602,7 @@ function renderSlate(){
     else if(SLATE.picks.length>1) html+=`<div class="muted" style="font-size:12px;margin-top:8px">${new Set(SLATE.picks.map(c=>c.game)).size<2 ? 'No parlay — it needs picks from at least two different games.' : 'No parlay today — combining these doesn\'t beat betting them as singles.'}</div>`;
     html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px"><button class="statussel" id="slateLog" style="padding:4px 11px">📓 log the picks</button>`+
       (P&&!parlayLogged(P.legs,false)?`<button class="statussel" id="slateLogParlay" style="padding:4px 11px">📓 log the parlay</button><button class="statussel" id="slateSlip" style="padding:4px 11px">➕ parlay to slip</button>`:'')+`</div>`+
-      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(SLATE.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd})), 'Open the picks on FanDuel', 'rebuild')}${P?parlayButton(P.legs, 'Put the parlay on FanDuel', 'rebuild', P.D):''}</div>`;
+      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(SLATE.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd, stake:c.stake})), 'Open the picks on FanDuel', 'rebuild')}${P?parlayButton(P.legs, 'Put the parlay on FanDuel', 'rebuild', P.D):''}</div>`;
   }
   // 🎉 fun picks: TD bets for fun, from the price range that lost least on 2025's real prices — filtered by games / theme
   const F=SLATE.fun; let funNeed=[];
@@ -2635,7 +2642,7 @@ function renderSlate(){
         `pays <span class="odds">${amStr(decToAmerican(FP.D))}</span> · hits ~${pct(FP.P)} · ${parlayBadge(FP, FUN_PARLAY_STAKE, true, '')} <span class="muted" style="font-size:12px">— a parlay multiplies the house's cut (≈ −${cut(FP.legs.length)}% over time)</span></div>`;
       html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="statussel" id="funLog" style="padding:4px 11px">📓 log fun picks</button>`+
         (FP&&!parlayLogged(FP.legs,true)?`<button class="statussel" id="funLogParlay" style="padding:4px 11px">📓 log fun parlay</button>`:'')+`</div>`+
-        `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(F.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd})), 'Open fun picks on FanDuel', 'rebuild')}${FP?parlayButton(FP.legs, 'Put fun parlay on FanDuel', 'rebuild', FP.D):''}</div>`+
+        `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(F.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd, stake:c.stake})), 'Open fun picks on FanDuel', 'rebuild')}${FP?parlayButton(FP.legs, 'Put fun parlay on FanDuel', 'rebuild', FP.D):''}</div>`+
         (FP?'':`<div class="muted" style="font-size:12px;margin-top:6px">${FF.win==='game'
           ? 'No fun parlay for one game — the book prices a same-game parlay itself (its TDs move together), so the app doesn\'t guess one.'
           : 'No fun parlay — it needs picks from two different games.'}</div>`);
