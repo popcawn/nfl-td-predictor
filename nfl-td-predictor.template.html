@@ -192,6 +192,10 @@
   .cpick{padding:6px 0;border-bottom:1px solid var(--line)} .cpick:last-child{border-bottom:none}
   .cardstat{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;font-weight:900;font-size:15px;letter-spacing:.05em;padding:8px 11px;border-radius:9px;margin:4px 0 9px}
   .cardstat span{font-weight:500;letter-spacing:0;font-size:12.5px;color:var(--ink2)}
+  .cpick.cnew{background:rgba(77,163,255,.10);border:1px solid rgba(77,163,255,.55);border-left:4px solid var(--accent);border-radius:9px;padding:7px 9px;margin:4px 0}
+  .cpick.cnew:last-child{border-bottom:1px solid rgba(77,163,255,.55)}
+  .cpick.cdone{opacity:.62}
+  .newtag{font-size:10px;font-weight:900;letter-spacing:.07em;color:#04121f;background:var(--accent);border-radius:5px;padding:1px 6px;flex:0 0 auto}
   .cardstat.done{background:rgba(51,217,134,.12);border:1px solid rgba(51,217,134,.5);color:var(--good)}
   .cardstat.new{background:rgba(77,163,255,.14);border:1px solid var(--accent);color:var(--accent)}
   .cardstat.none{background:var(--panel2);border:1px solid var(--line2);color:var(--ink2)}
@@ -1370,8 +1374,8 @@ function computeTopPlays(){
     picks.forEach((c,i)=>{ const bimp=c.bimp!=null?c.bimp:1/(oddsDec(c.odds)||2), edge=c.mp-bimp;
       const inLog=c.bet?` <span class="muted" style="font-size:12px" title="already in your bet log">✓ in log${Math.abs((+c.bet.stake||0)-c.stake)>0.05?` at ${betStakeTxt(c.bet)}`:''}${isPropMkt(c.bet.market)&&c.bet.cur&&c.bet.cur.l!=null&&c.bet.cur.l!==+c.bet.market.split('|')[3]?` · line now ${c.bet.cur.l}`:''}</span>`:'';
       const why=`model ${pct(c.mp)} vs book ${pct(bimp)} · edge ${edge>=0?'+':''}${(edge*100).toFixed(1)} pts${c.role?' · '+c.role:''}${c.cal&&c.cal<1?' · calibrated ×'+c.cal.toFixed(2):''}${c.capped?' · scaled to the team cap':''}`;
-      html+=`<div class="cpick" title="${esc(why)}"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
-      `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="vbadge vb-take" style="font-size:12px;margin-left:auto">bet ${u(c.stake)}</span></div>`+
+      html+=`<div class="cpick ${c.bet?'cdone':'cnew'}" title="${esc(why)}"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
+      `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b>${c.bet?'':'<span class="newtag">NEW</span>'}<span class="vbadge vb-take" style="font-size:12px;margin-left:auto">bet ${u(c.stake)}</span></div>`+
       `<div class="cp2">${mktLabel(c.market)} <span class="odds">${esc(c.odds)}</span>${bkBadge(c.book)} ${confBadge(c.conf)}${inLog} <span class="muted" style="font-size:12px" title="${c.mkt!=null?esc('model '+pct(c.model)+' · '+(c.mktSrc==='fd'?'the book\'s own price, cut removed (no other book priced it) ':'other books (fair) ')+pct(c.mkt)+' → blended '+pct(c.mp)):'No other-book prices for this bet — the model alone lost to the books in the 2025 real-price test. ⚡ Pull odds to check it against the market.'}">${c.mkt!=null?(c.mktSrc==='fd'?'own ':'mkt ')+pct(c.mkt)+' · model '+pct(c.model)+' → ':'<span style="color:var(--warn)">model only</span> · '}${pct(c.mp)} vs ${pct(bimp)} (${edge>=0?'+':''}${(edge*100).toFixed(1)})</span></div></div>`; });
     html+='</div>';
     const teams={}; picks.forEach(c=>{ teams[c.abbr]=(teams[c.abbr]||0)+c.stake; });
@@ -2610,8 +2614,8 @@ function renderSlate(){
   if(!SLATE.picks.length) html+=`<div><b>No TD bets worth making</b> across the ${SLATE.checked} game${SLATE.checked>1?'s':''} checked — your books' best prices are at or below what the other books say they're worth. Sitting it out is a win too.${stale}</div>`;
   else {
     html+=`<div style="font-size:13px;margin-bottom:4px"><b>Your ${SLATE.picks.length} TD bet${SLATE.picks.length>1?'s':''} for ${dayName}</b> <span class="muted">— the best of ${SLATE.checked} game${SLATE.checked>1?'s':''}, best price at ${myBooksTxt()}, from ${when}</span>${stale}</div>`;
-    SLATE.picks.forEach((c,i)=>{ html+=`<div class="cpick spick" data-g="${esc(c.game)}" title="open this game"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
-      `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="muted" style="font-size:12px">${fmtGame(c.game)}</span>${stakeBadge(c,' vb-take')}</div>`+
+    SLATE.picks.forEach((c,i)=>{ const isNew=on.get(c.game+'|'+c.key)!=='log'; html+=`<div class="cpick spick ${isNew?'cnew':'cdone'}" data-g="${esc(c.game)}" title="open this game"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
+      `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b>${isNew?'<span class="newtag">NEW</span>':''}<span class="muted" style="font-size:12px">${fmtGame(c.game)}</span>${stakeBadge(c,' vb-take')}</div>`+
       `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span>${bkBadge(c.book)} ${confBadge(c.conf)} <span class="muted" style="font-size:12px">${c.mkt!=null?(c.mktSrc==='fd'?'own ':'mkt ')+pct(c.mkt)+' · model '+pct(c.model)+' → ':'<span style="color:var(--warn)">model only</span> · '}${pct(c.mp)} vs ${pct(c.bimp)}</span></div></div>`; });
     const tot=SLATE.picks.reduce((a,c)=>a+c.stake,0)+(P?slateParlayStake(P,bank):0);
     html+=`<div class="muted" style="font-size:12px;margin-top:5px">Whole day <b>${u(tot)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll, parlay included — capped at ${SLATE_CAP*100}%)</div>`;
@@ -2655,8 +2659,8 @@ function renderSlate(){
     else {
       const FP=F.parlay, cut=n=>Math.round((1-Math.pow(1-FUN_EDGE,n))*100);
       html+=`<div class="muted" style="font-size:12px;margin-bottom:3px">${F.picks.length} for ${what}${F.picks.length<F.max?` — only ${F.picks.length} fit${unp.length?' so far':''}`:''}</div>`;
-      F.picks.forEach(c=>{ html+=`<div class="cpick spick" data-g="${esc(c.game)}" title="open this game"><div class="cp1"><span class="muted" style="min-width:18px">🎉</span>`+
-        `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="muted" style="font-size:12px">${fmtGame(c.game)}</span>${stakeBadge(c,'')}</div>`+
+      F.picks.forEach(c=>{ const isNew=on.get(c.game+'|'+c.key)!=='log'; html+=`<div class="cpick spick ${isNew?'cnew':'cdone'}" data-g="${esc(c.game)}" title="open this game"><div class="cp1"><span class="muted" style="min-width:18px">🎉</span>`+
+        `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b>${isNew?'<span class="newtag">NEW</span>':''}<span class="muted" style="font-size:12px">${fmtGame(c.game)}</span>${stakeBadge(c,'')}</div>`+
         `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span>${bkBadge(c.book)} <span class="muted" style="font-size:12px">${c.mkt!=null?'~'+pct(c.mp)+' to score ('+(c.mktSrc==='fd'?'the book\'s own price':'other books')+')':'~'+pct(c.mp)+' to score (<span style="color:var(--warn)">model only</span>)'}</span></div></div>`; });
       if(FP) html+=`<div style="margin-top:8px;font-size:13px"><b>🎰 Fun parlay</b> ${FP.legs.map(l=>`<b style="color:${teamText(l.abbr)}">${esc(l.name)}</b>`).join(' + ')} <span class="muted" style="font-size:12px">— two of the fun picks above, not new players</span><br>`+
         `pays <span class="odds">${amStr(decToAmerican(FP.D))}</span> · hits ~${pct(FP.P)} · ${parlayBadge(FP, FUN_PARLAY_STAKE, true, '')} <span class="muted" style="font-size:12px">— a parlay multiplies the house's cut (≈ −${cut(FP.legs.length)}% over time)</span></div>`;
