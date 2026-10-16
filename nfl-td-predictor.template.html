@@ -1617,6 +1617,7 @@ const legSel=l=>l.fd||tkFor(l.game, l.market, l.key, l.odds);
 // a link that opens these tickets in ONE book's bet slip (null if that book has no usable ids)
 const FD_SLIP='https://sportsbook.fanduel.com/addToBetslip';
 const STATE_BOOKS=['betmgm','williamhill_us','betrivers'];
+const BOOK_HOME={fanatics:'https://sportsbook.fanatics.com/'};   // no bet-slip link exists for these: open the book, find the bet
 const needsState=t=>!!t && STATE_BOOKS.includes(bookOfTk(t)) && !ODDSCFG.state;   // ids are there, your state isn't
 function bookLink(book, tks, combo, usd){
   if(!tks.length) return null;
@@ -1653,10 +1654,14 @@ function fdButton(legs, label, mode){
     html+=`<a class="statussel fdbtn" href="${esc(bookLink(b,tks))}" target="_blank" rel="noopener" title="opens ${esc(bookName(b))} with ${tks.length===1?'this bet':'these '+tks.length+' bets'} in the bet slip — check the price there before you bet">📲 ${txt}${by.size>1&&typeof label!=='function'?' ('+tks.length+')':''}</a> `; }
   // a price at a book the app can't link (BetRivers, Fanatics …) is still on the board — say where to place it by hand
   const LINKED_BOOKS=['fanduel','draftkings'].concat(STATE_BOOKS), atBook=l=>{ const t=legSel(l), b=t&&bookOfTk(t); return b&&!LINKED_BOOKS.includes(b) ? b : null; };
-  const byHand=other.filter(atBook), unk=other.filter(l=>!atBook(l)), hb=[...new Set(byHand.map(atBook))].map(bookName).join(' / ');
-  return html+stBtn+
-    (byHand.length?`<span class="muted" style="font-size:12px" title="${esc(byHand.map(l=>l.name||l.label).join(', ')+' — '+hb+' has no bet-slip link the app can build; the bet is still there')}">+ ${byHand.length} at ${esc(hb)} — place ${byHand.length>1?'those':'it'} in the ${esc(hb)} app</span> `:'')+
-    (unk.length?`<span class="muted" style="font-size:12px" title="${esc(why+': '+unk.map(l=>l.name||l.label).join(', '))}">+ ${unk.length} not linked</span>`:''); }
+  const byHand=other.filter(atBook), unk=other.filter(l=>!atBook(l));
+  const nm=L=>L.map(l=>l.name||l.label).join(', ');
+  const homeBtns=[...new Set(byHand.map(atBook))].filter(b=>BOOK_HOME[b]).map(b=>{ const L=byHand.filter(l=>atBook(l)===b);
+    return `<a class="statussel fdbtn" href="${BOOK_HOME[b]}" target="_blank" rel="noopener" title="${esc(bookName(b))} gives no bet-slip link — this opens ${esc(bookName(b))}; find the bet there">🔎 ${esc(bookName(b))}: find ${esc(nm(L))}</a> `; }).join('');
+  const rest=byHand.filter(l=>!BOOK_HOME[atBook(l)]), hb=[...new Set(rest.map(atBook))].map(bookName).join(' / ');
+  return html+stBtn+homeBtns+
+    (rest.length?`<span class="muted" style="font-size:12px" title="${esc(nm(rest)+' — '+hb+' has no bet-slip link the app can build; the bet is still there')}">+ ${rest.length} at ${esc(hb)} — place ${rest.length>1?'those':'it'} in the ${esc(hb)} app</span> `:'')+
+    (unk.length?`<span class="muted" style="font-size:12px" title="${esc(why+': '+nm(unk))}">+ ${unk.length} not linked</span>`:''); }
 // a PARLAY has to live at one book: the one of yours that prices every leg and pays the most for the combination
 function parlayAt(legs){
   const tks=legs.map(legSel); if(!tks.length || tks.some(t=>!t)) return null; let best=null;
@@ -1668,7 +1673,7 @@ function parlayButton(legs, label, mode, D0){
   const pa=parlayAt(legs); if(!pa) return fdButton(legs, label, mode);
   const href=bookLink(pa.book, pa.tks, true), txt=label.replace(/FanDuel/g, bookName(pa.book));
   const pays=D0 && Math.abs(pa.D/D0-1)>0.004 ? ` <span class="muted" style="font-size:12px" title="a parlay has to sit at one book — this is the best single book for these legs">at ${esc(bookName(pa.book))} it pays <span class="odds">${amStr(decToAmerican(pa.D))}</span></span>` : '';
-  return (href ? `<a class="statussel fdbtn" href="${esc(href)}" target="_blank" rel="noopener" title="opens ${esc(bookName(pa.book))} with these ${legs.length} legs in the bet slip — check the price there before you bet">📲 ${txt}</a>` : `<span class="muted" style="font-size:12px">bet it at ${esc(bookName(pa.book))}</span>`)+pays; }
+  return (href ? `<a class="statussel fdbtn" href="${esc(href)}" target="_blank" rel="noopener" title="opens ${esc(bookName(pa.book))} with these ${legs.length} legs in the bet slip — check the price there before you bet">📲 ${txt}</a>` : BOOK_HOME[pa.book] ? `<a class="statussel fdbtn" href="${BOOK_HOME[pa.book]}" target="_blank" rel="noopener" title="${esc(bookName(pa.book))} gives no bet-slip link — build the parlay there">🔎 Build it on ${esc(bookName(pa.book))}</a>` : `<span class="muted" style="font-size:12px">bet it at ${esc(bookName(pa.book))}</span>`)+pays; }
 // slip legs with no ticket (pasted, or added before links existed): pull just the markets they need, once, and attach
 // the ids — 1 credit per market per game, never for games that have kicked off
 const marketOA=m=>isPropMkt(m) ? Object.keys(OA_PROP).find(x=>OA_PROP[x]===m.split('|')[1]) : Object.keys(OA_TD).find(x=>OA_TD[x]===m);

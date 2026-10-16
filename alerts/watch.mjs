@@ -35,6 +35,7 @@ const ODDS_API = 'https://api.the-odds-api.com/v4/sports/americanfootball_nfl';
 const FD_SLIP = 'https://sportsbook.fanduel.com/addToBetslip';
 const BOOK_NAMES = { fanduel: 'FanDuel', draftkings: 'DraftKings', betmgm: 'BetMGM', williamhill_us: 'Caesars', espnbet: 'ESPN BET', fanatics: 'Fanatics', betrivers: 'BetRivers' };
 const bookName = b => BOOK_NAMES[b] || b;
+const BOOK_HOME = { fanatics: 'https://sportsbook.fanatics.com/' };   // no bet-slip link from the API: open the book
 const log = (...a) => console.log(...a);
 
 // ---- the app's helpers, copied ----
@@ -236,7 +237,8 @@ async function main() {
       message: `The other books (${c.nOth}) have him around ${fmtAm(probToAm(c.ip))}; fair chance ${pct(c.mp)} → EV +${(c.ev * 100).toFixed(0)}%.\n` +
         `Bet ${stake}. ${S.teams[a].short} @ ${S.teams[h].short}, ${etTime(c.ko)}.\nCheck the price before you place it — it can move.`,
       tags: c.link ? ['football'] : ['football', id], priority: 4,
-      ...(c.link ? { click: c.link, actions: [{ action: 'view', label: `Open in ${book}`, url: c.link, clear: true }] } : {})
+      ...(c.link ? { click: c.link, actions: [{ action: 'view', label: `Open in ${book}`, url: c.link, clear: true }] }
+        : BOOK_HOME[c.book] ? { actions: [{ action: 'view', label: `Open ${book} (find him)`, url: BOOK_HOME[c.book], clear: true }] } : {})
     });
     n++; log(`alert: ${c.name} ${fmtAm(c.price)} ${book} · EV +${(c.ev * 100).toFixed(1)}% · ${c.stake}u`);
   }

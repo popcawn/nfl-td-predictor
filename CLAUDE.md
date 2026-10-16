@@ -235,6 +235,9 @@ See README.md for what the model does and how it was validated.
   Fanatics app". BETRIVERS (user said "yes try", same day): link = https://{state}.betrivers.com/?page=sportsbook#event/<t.e>?coupon=
   single|<sid>|<stake $> — pickType/wagerAmount values are a GUESS (undocumented; Kambi-style coupon). One button per bet
   (fdButton passes leg.stake -> dollars, rounded like fmtUsd); parlays use "combination". Ask the user whether it worked.
+  FANATICS: the API gives NO links (only sids) and no format is documented anywhere (searched 2026-10-16) -> BOOK_HOME
+  fallback (the API guide's own last resort): "🔎 Fanatics: find <player>" opens sportsbook.fanatics.com; parlays "Build it on
+  Fanatics". us2-region books (theScore/ESPN BET, Hard Rock, Fliff, Bally, betPARX) are NOT pulled: regions=us,us2 doubles credits.
   CREDITS: per-market switches (ODDSCFG.mk, mkOn/pickedMarkets) and freshMs() (20 min <3h to kickoff, 1h <24h, else 3h).
   On 2026-10-13 the 20K plan had 2,180 left: ~11K went to the two one-off backtests, the app itself burned ~850/day
   (9 credits per game opened + history closes at 10/market) — tell the user before adding anything that pulls more.
