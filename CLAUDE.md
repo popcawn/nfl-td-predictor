@@ -232,9 +232,9 @@ See README.md for what the model does and how it was validated.
   token as t.g — older MGM tickets lack it, one re-pull fixes); Caesars = https://sportsbook.caesars.com/us/{state}/bet/betslip?
   selectionIds=<sid>. {state} = ODDSCFG.state (#oddsState, lowercase). needsState(t) -> "📍 Pick your state" button instead of
   a re-pull. Multi-leg: comma-joined (MGM type=Combo for parlays) — UNVERIFIED like FD/DK. Fanatics returns no links -> "place it in the
-  Fanatics app". BETRIVERS (user said "yes try", same day): link = https://{state}.betrivers.com/?page=sportsbook#event/<t.e>?coupon=
-  single|<sid>|<stake $> — pickType/wagerAmount values are a GUESS (undocumented; Kambi-style coupon). One button per bet
-  (fdButton passes leg.stake -> dollars, rounded like fmtUsd); parlays use "combination". Ask the user whether it worked.
+  Fanatics app". BETRIVERS: built a guessed link, then REMOVED the same day (user: "not available
+  in my state") — BOOK_CHOICES (the selectable books) leaves it out, so a saved config listing it is ignored; BetRivers still
+  counts in the other-books consensus.
   FANATICS: the API gives NO links (only sids) and no format is documented anywhere (searched 2026-10-16) -> BOOK_HOME
   fallback (the API guide's own last resort): "🔎 Fanatics: find <player>" opens sportsbook.fanatics.com; parlays "Build it on
   Fanatics". us2-region books (theScore/ESPN BET, Hard Rock, Fliff, Bally, betPARX) are NOT pulled: regions=us,us2 doubles credits.
