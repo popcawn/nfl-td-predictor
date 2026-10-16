@@ -126,6 +126,8 @@
   details.gamegrp{border:1px solid var(--line2);border-radius:10px;margin:0 0 10px;background:var(--panel2)}
   details.gamegrp>summary{cursor:pointer;padding:9px 12px;font-size:14px}
   details.gamegrp[open]>summary{border-bottom:1px solid var(--line2)}
+  details.gamegrp.curgame{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent);background:rgba(77,163,255,.08)}
+  details.gamegrp.curgame>summary::after{content:"📍 on screen";margin-left:8px;font-size:11px;font-weight:800;letter-spacing:.04em;color:var(--accent)}
   .grpbody{padding:6px 10px 10px}
   .logsum{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin-bottom:10px;padding:9px 12px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;font-size:13px}
   details.weekgrp{margin:0 0 6px}
@@ -1398,7 +1400,7 @@ function computeTopPlays(){
     const uniq=other.filter(s=>{ const k=s.c.key+'|'+s.c.market; if(seen.has(k)) return false; seen.add(k); return true; });
     html+=`<details class="muted" style="margin-top:7px;font-size:12px;line-height:1.55"><summary style="cursor:pointer"><b>Left off (${uniq.length})</b> — why the other edges aren't on the card</summary>`+
       uniq.slice(0,10).map(s=>`${esc(s.c.label)} ${mktLabel(s.c.market)} <span class="odds">${esc(s.c.odds)}</span> — ${s.why}`).join(' · ')+(uniq.length>10?' · <a href="#mktSec" class="seeall">see all</a>':'')+'</details>'; }
-  el.innerHTML=html+evExplainer();
+  el.innerHTML=html+evExplainer(); markLogGame();
   const lc=$('logCard'); if(lc) lc.onclick=logCard;
   const cs=$('cardToSlip'); if(cs) cs.onclick=cardToSlip;
   decorateMarkets(); renderBoard(); tabCounts();   // same ★ BET / edge marks on every price box
@@ -1599,6 +1601,7 @@ let slip=[]; let slipLegCache=[];
 function loadSlip(){ try{ const s=localStorage.getItem('nfltd_slip'); if(s) slip=JSON.parse(s)||[]; }catch(e){ slip=[]; } if(!Array.isArray(slip)) slip=[]; }
 function saveSlip(){ stampChanges(slip, slipSnap, legKey, TOMB.slip); slipSnap=snapOf(slip, legKey); saveTomb(); try{ localStorage.setItem('nfltd_slip', JSON.stringify(slip)); }catch(e){} syncSoon(); try{ if(SLATE) renderSlate(); }catch(e){} }
 function curGameId(){ return LAST ? LAST.away+'@'+LAST.home : null; }
+function markLogGame(){ const g=curGameId(); document.querySelectorAll('#betBody details.gamegrp').forEach(d=>d.classList.toggle('curgame', !!g && String(d.dataset.k||'').startsWith(g+'#'))); }
 function fmtGame(g){ const [a,h]=String(g).split('@'); const sh=x=>S.teams[x]?(S.teams[x].short||x):x; return sh(a)+' @ '+sh(h); }
 // current game's priced legs for one market, best confidence-adjusted Kelly first (players + defenses)
 function priceableLegs(market){
@@ -2794,7 +2797,7 @@ function renderBets(){
     }
     html+='</div></details>';
   });
-  body.innerHTML=html;
+  body.innerHTML=html; markLogGame();
 
   // ---- insights (under More): the scoreboard, and results by how long before kickoff you bet
   if(!ins) return;
