@@ -1645,7 +1645,12 @@ function fdButton(legs, label, mode){
   let html='';
   for(const [b,tks] of by){ const txt=String(typeof label==='function'?label(tks.length):label).replace(/FanDuel/g, bookName(b));
     html+=`<a class="statussel fdbtn" href="${esc(bookLink(b,tks))}" target="_blank" rel="noopener" title="opens ${esc(bookName(b))} with ${tks.length===1?'this bet':'these '+tks.length+' bets'} in the bet slip — check the price there before you bet">📲 ${txt}${by.size>1&&typeof label!=='function'?' ('+tks.length+')':''}</a> `; }
-  return html+stBtn+(other.length?`<span class="muted" style="font-size:12px" title="${esc(why+': '+other.map(l=>l.name||l.label).join(', '))}">+ ${other.length} not linked</span>`:''); }
+  // a price at a book the app can't link (BetRivers, Fanatics …) is still on the board — say where to place it by hand
+  const LINKED_BOOKS=['fanduel','draftkings'].concat(STATE_BOOKS), atBook=l=>{ const t=legSel(l), b=t&&bookOfTk(t); return b&&!LINKED_BOOKS.includes(b) ? b : null; };
+  const byHand=other.filter(atBook), unk=other.filter(l=>!atBook(l)), hb=[...new Set(byHand.map(atBook))].map(bookName).join(' / ');
+  return html+stBtn+
+    (byHand.length?`<span class="muted" style="font-size:12px" title="${esc(byHand.map(l=>l.name||l.label).join(', ')+' — '+hb+' has no bet-slip link the app can build; the bet is still there')}">+ ${byHand.length} at ${esc(hb)} — place ${byHand.length>1?'those':'it'} in the ${esc(hb)} app</span> `:'')+
+    (unk.length?`<span class="muted" style="font-size:12px" title="${esc(why+': '+unk.map(l=>l.name||l.label).join(', '))}">+ ${unk.length} not linked</span>`:''); }
 // a PARLAY has to live at one book: the one of yours that prices every leg and pays the most for the combination
 function parlayAt(legs){
   const tks=legs.map(legSel); if(!tks.length || tks.some(t=>!t)) return null; let best=null;
