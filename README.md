@@ -148,6 +148,11 @@ silently to the baked snapshot when not.
   it tracks CLV, ROI and a live calibration check (hits the model expected vs hits you got). Re-running the
   sim with the same inputs gives the same numbers (seeded simulation), so a verdict can't flip on noise.
 
+## On a phone
+A tab bar at the bottom shows one thing at a time: **🎯 Picks** (My TD picks), **🏈 Game** (pick a game, ⚡ Pull, Your
+card, markets one team at a time), **📓 Bets** (bankroll, slip, bet log) and **⋯ More** (model accuracy, team profiles,
+notes). Tapping a pick opens its game. Teams, line and weather are filled in for you; ✏️ edits them.
+
 ## 📲 Edge alerts (phone)
 A GitHub Action (`.github/workflows/alerts.yml` → `alerts/watch.mjs`) checks your books' anytime-TD prices for games
 kicking off in the next 6 hours and sends the bets **Your card would make** to your phone through

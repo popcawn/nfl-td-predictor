@@ -194,6 +194,26 @@
   .spick{cursor:pointer} .spick:hover{background:rgba(120,160,220,.06)}
   .cp2{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px;margin:2px 0 0 26px}
   footer{color:var(--ink3);font-size:12px;margin-top:30px;border-top:1px solid var(--line);padding-top:14px}
+  /* phones: one tab at a time (sections carry data-m = picks|game|bets|more, set by tagMobile()) */
+  .mtabbar,.mobonly,.mteamsw{display:none}
+  @media(max-width:760px){
+    .wrap{padding-top:12px;padding-bottom:84px}
+    h1{font-size:19px} .sub{display:none} .ctl label .muted{display:none}
+    #jumpNav{display:none}
+    .mtabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;background:rgba(12,16,23,.97);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-top:1px solid var(--line);padding:5px 4px calc(5px + env(safe-area-inset-bottom))}
+    .mtabbar button{flex:1;background:none;border:none;color:var(--ink3);font-size:11px;font-weight:800;padding:3px 0;display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;font-family:inherit}
+    .mtabbar button span{font-size:19px;line-height:1.1}
+    .mtabbar button.on{color:var(--accent)}
+    body[data-mtab="picks"] [data-m]:not([data-m="picks"]),body[data-mtab="game"] [data-m]:not([data-m="game"]),body[data-mtab="bets"] [data-m]:not([data-m="bets"]),body[data-mtab="more"] [data-m]:not([data-m="more"]){display:none!important}
+    .mobonly{display:inline-block}
+    body:not(.ctlopen) .ctlrow, body:not(.ctlopen) .weather{display:none}
+    .mteamsw{display:flex;gap:6px;margin:0 0 8px}
+    .mteamsw button{flex:1;padding:6px 8px;border-radius:9px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
+    .mteamsw button.on{border-color:var(--accent);color:var(--ink)}
+    .mgrid.one-away>.mteam:nth-child(2), .mgrid.one-home>.mteam:nth-child(1){display:none}
+    h2{margin-top:14px}
+    #bestBet label{white-space:nowrap}
+  }
 </style>
 </head>
 <body>
@@ -214,6 +234,7 @@
     <div class="ctl" style="margin-bottom:4px">
       <label>This week's games <span class="muted" style="text-transform:none;letter-spacing:0">— one click sets both teams, the line and the stadium</span></label>
       <select id="gameSel"></select>
+      <button class="statussel mobonly" id="ctlToggle" style="margin-top:7px;padding:4px 10px;font-size:12px">✏️ teams · line · weather</button>
     </div>
     <div class="ctlrow">
       <div class="ctl"><label>Away team</label><div class="teampick"><img id="awayLogo" alt=""><select id="awaySel"></select></div></div>
@@ -276,13 +297,14 @@
               <label><input type="checkbox" class="mkchk" value="player_receptions"> Receptions</label><label><input type="checkbox" class="mkchk" value="player_reception_yds"> Rec yds</label><label><input type="checkbox" class="mkchk" value="player_rush_yds"> Rush yds</label><label><input type="checkbox" class="mkchk" value="player_rush_reception_yds"> Rush+rec yds</label><label><input type="checkbox" class="mkchk" value="player_pass_yds"> Pass yds</label></div>
             <label><input type="checkbox" id="oddsAuto"> Pull automatically when I open a game <span class="muted">(only if its prices are stale: 20 min old inside 3 hours of kickoff, 1 hour on game day, 3 hours earlier in the week)</span></label>
             <div>Auto-pulls stop below <input id="oddsReserve" type="number" min="0" step="10" style="width:70px;padding:3px 6px;font-size:12px"> credits <span class="muted">(left for other apps on the same key, e.g. the UFC scanner)</span></div>
-            <div class="muted">Pulls take every US book's prices (same credits): each box shows the best price among <b>your</b> books (tagged FD / DK …), and each bet's chance starts from the other books' consensus. On every 2025 game's real prices the books beat the model — anytime TD and receiving / rushing yards — so TD chances <i>are</i> the consensus and props move only 10% toward the model. A bet with no other-book price says <b>model only</b>. See Your card ("mkt · model →"). The key is saved in this browser only, never in the site's code. Prices come from FanDuel via The Odds API; the free plan has 500 credits a month. Pasting still works and overrides anything.</div>
+            <div class="muted">Pulls take every US book's prices (same credits): each box shows the best price among <b>your</b> books (tagged FD / DK …), and each bet's chance starts from the other books' consensus. On every 2025 game's real prices the books beat the model — anytime TD and receiving / rushing yards — so TD chances <i>are</i> the consensus and props move only 10% toward the model. A bet with no other-book price says <b>model only</b>. See Your card ("mkt · model →"). The key is saved in this browser only, never in the site's code. Credits reset on the 1st of each month. Pasting a board (free) still works and overrides anything.</div>
           </div>
         </details>
       </div>
+      <details id="pasteBox"><summary class="muted" style="cursor:pointer;font-size:12.5px">📋 Paste a FanDuel board instead <span style="opacity:.8">— free, no credits</span></summary>
       <textarea id="oddsPaste" rows="3" spellcheck="false"
         placeholder="Paste any FanDuel board — TD scorers or player props — then Apply (Ctrl+Enter). One market at a time; the prices stay with this game."
-        style="width:100%;background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:10px;padding:9px;font-family:var(--mono);font-size:13px;resize:vertical"></textarea>
+        style="margin-top:6px;width:100%;background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:10px;padding:9px;font-family:var(--mono);font-size:13px;resize:vertical"></textarea>
       <div class="mktrow" style="margin-top:7px;gap:5px">
         <button class="btn" id="applyOdds" style="padding:6px 16px;font-size:13px">Apply</button>
         <button class="btn sec" id="clearOdds" style="padding:6px 12px;font-size:13px">Clear all</button>
@@ -292,6 +314,7 @@
       <div class="mktrow" style="margin-top:6px;font-size:12px">Props pasted without their header are
         <select id="propDefault" class="statussel" style="font-size:12px" title="a prop board with no market line (e.g. no 'Receiving Yards') is read as this market"><option value="auto">detected from the lines</option><option value="rec">Receptions</option><option value="recyd">Receiving yds</option><option value="ryd">Rushing yds</option><option value="rryd">Rush + rec yds</option><option value="pyd">Passing yds</option></select>
       </div>
+      </details>
       <div id="oddsMsg" class="legend" style="margin-top:6px"></div>
       <div id="pricedChips" class="mktrow" style="margin-top:6px"></div>
     </div>
@@ -448,7 +471,7 @@
         <div class="logsub"><b>Automatic</b>
           <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:12px">
             <label class="muted" title="once a game is final, ESPN's box score settles every pending bet on it (win / loss / void if he didn't play) — free; results you set by hand are never changed"><input type="checkbox" id="autoSettleChk"> 🤖 settle from box scores</label>
-            <label class="muted" title="Close is filled from FanDuel: live if the app is open in the 15 min before kickoff (1 credit per market), otherwise from The Odds API's history after kickoff — FanDuel 5 min before kickoff (paid plan, 10 credits per market)"><input type="checkbox" id="autoCloseChk"> ⚡ fill closing lines <span class="muted">(after kickoff: 10 credits per bet type per game)</span></label>
+            <label class="muted" title="while the app is open in the 15 minutes before a kickoff, Close is filled from your book's live price — 1 credit per bet type per game"><input type="checkbox" id="autoCloseChk"> ⚡ closing lines before kickoff <span class="muted">(1 credit per bet type, app open)</span></label><label class="muted" title="for games you didn't have the app open for: after kickoff, Close comes from The Odds API's price history (your book 5 min before kickoff) — 10 credits per bet type per game"><input type="checkbox" id="autoHistChk"> + after kickoff from history <span class="muted">(10 credits per bet type per game)</span></label>
           </div>
         </div>
         <div class="logsub" id="closeBox"><b>Closing lines by hand</b> <span class="muted" style="font-size:12px">— only if the automatic fill missed one</span>
@@ -481,6 +504,7 @@
   </div>
 
   <footer id="footer"></footer>
+  <nav class="mtabbar" id="mtabbar"><button data-t="picks"><span>🎯</span>Picks</button><button data-t="game"><span>🏈</span>Game</button><button data-t="bets"><span>📓</span>Bets</button><button data-t="more"><span>⋯</span>More</button></nav>
 </div>
 
 <script>
@@ -1098,6 +1122,7 @@ function renderDST(){}
 function renderProps(){}
 function computeEV(){ computeTopPlays(); }
 function computeDstEV(){ computeTopPlays(); }
+let MTEAM='away';   // phones show one team's markets at a time
 function renderMarkets(){
   if(!LAST) return;
   const grid=$('mktGrid'), all=MTAB==='all';
@@ -1106,7 +1131,8 @@ function renderMarkets(){
   const {away,home,imp}=LAST, isTD=MTAB==='td';
   const col=(abbr, roster, exp, impPts)=>`<div class="mteam" style="--tc:${teamColor(abbr)}"><div class="mthead">${logo(abbr)?`<img src="${logo(abbr)}">`:''}<b style="color:${teamText(abbr)}">${S.teams[abbr].name}</b><span class="muted" style="font-size:12px;margin-left:auto">implied ${impPts.toFixed(1)} · ${exp.expOff.toFixed(2)} exp TD</span></div>`+
     (isTD?tdRows(abbr, roster):propRows(abbr, roster, MTAB))+`</div>`;
-  grid.innerHTML=`<div class="mgrid">${col(away, LAST.awayR, LAST.awayExp, imp.away)}${col(home, LAST.homeR, LAST.homeExp, imp.home)}</div>`;
+  const sw=t=>`<button data-t="${t}"${MTEAM===t?' class="on"':''}>${S.teams[t==='away'?away:home].short}</button>`;
+  grid.innerHTML=`<div class="mteamsw">${sw('away')}${sw('home')}</div><div class="mgrid one-${MTEAM}">${col(away, LAST.awayR, LAST.awayExp, imp.away)}${col(home, LAST.homeR, LAST.homeExp, imp.home)}</div>`;
   $('propNote').style.display=isTD?'none':''; if(!isTD) propNote();
   decorateMarkets();
 }
@@ -1327,7 +1353,7 @@ function computeTopPlays(){
   const u=stakeTxt, maxG=maxPerGame(), nEdge=opts.filter(o=>o.rk>0).length;
   let html='';
   if(!cand.length && !logged.length){
-    html=`<div class="muted">Paste a board above (or type prices in the tables) — TD odds or player props — and this picks the best ${maxG} bets in the game and sizes them.</div>`;
+    html=`<div class="muted">⚡ Pull odds above (or paste a board, or type prices in the markets) — TD odds or player props — and this picks the best ${maxG} bets in the game and sizes them.</div>`;
   } else if(picks.length){
     html+=`<div style="font-size:13px;margin:0 0 2px"><b>Bet ${picks.length===1?'this one':'these '+picks.length}</b> <span class="muted">— best ${picks.length} of ${nEdge} edge${nEdge===1?'':'s'} (max ${maxG}/game, ${MAX_PER_TEAM}/team, 1/player). Outlined boxes = skip.</span></div>`;
     html+='<div>';
@@ -2201,7 +2227,7 @@ async function pullCloses(){
 const ESPN_SUM='https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=';
 const ESPN_CORE='https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/events/';
 const HIST_API='https://api.the-odds-api.com/v4/historical/sports/americanfootball_nfl';
-let AUTO=Object.assign({settle:true, close:true}, lsJ('nfltd_auto',{}));
+let AUTO=Object.assign({settle:true, close:true, hist:false}, lsJ('nfltd_auto',{}));   // hist: after-kickoff closes cost 10 credits per bet type — opt-in since 2026-10-16
 let CLOSED=(c=>{ const old=Date.now()-21*86400e3; for(const k of Object.keys(c)) if(!(c[k].t>old)) delete c[k]; return c; })(lsJ('nfltd_closed',{}));
 let AUTO_NOTE='', autoBusy=false, autoLast=0;
 const evCache=new Map();   // ESPN event id -> parsed final (finals don't change)
@@ -2266,10 +2292,10 @@ function legResult(R, l){
   return {r:null, why:'settle by hand'};
 }
 async function autoSettle(manual){
-  if(autoBusy || (!manual && (!AUTO.settle && !AUTO.close))) return;
+  if(autoBusy || (!manual && (!AUTO.settle && !AUTO.hist))) return;
   if(!manual && Date.now()-autoLast<10*60e3) return;
   const pend=AUTO.settle||manual ? bets.filter(b=>b.result==='pending' && ((b.game && b.key && b.market!=='custom') || (b.legs&&b.legs.length))) : [];
-  const noClose=AUTO.close ? bets.filter(b=>b.game && b.key && b.market!=='custom' && !b.closeOdds && Date.now()-(Date.parse(b.ts)||0)<14*86400e3) : [];
+  const noClose=AUTO.hist ? bets.filter(b=>b.game && b.key && b.market!=='custom' && !b.closeOdds && Date.now()-(Date.parse(b.ts)||0)<14*86400e3) : [];
   const noKo=bets.filter(b=>!b.ko && !b.koX && (b.game || (b.legs&&b.legs.length)) && Date.now()-(Date.parse(b.ts)||0)<28*86400e3);   // logged before bets carried a kickoff
   if(!pend.length && !noClose.length && !noKo.length){ if(manual){ AUTO_NOTE='🤖 no open bets to settle'; renderAutoNote(); } return; }
   autoBusy=true; autoLast=Date.now(); if(manual){ AUTO_NOTE='🤖 checking ESPN…'; renderAutoNote(); }
@@ -2291,7 +2317,7 @@ async function autoSettle(manual){
       b.result=r; b.auto=txt; b.st=Date.now(); delete b.autoNote; settled++; changed=true;
     }
     if(changed){ saveBets(); renderBets(); }
-    const closeTxt=AUTO.close ? await autoHistCloses(evs) : '';
+    const closeTxt=AUTO.hist ? await autoHistCloses(evs) : '';
     AUTO_NOTE=[settled?`🤖 settled <b>${settled}</b> bet${settled>1?'s':''} from ESPN's final box scores`:'',
       byHand?`<span style="color:var(--warn)">${byHand} to settle by hand</span> (✋ — hover for why)`:'', closeTxt].filter(Boolean).join(' · ')
       || (manual?'🤖 nothing to do yet — no open bet\'s game is final, and every started game has its Close':'');
@@ -2420,7 +2446,7 @@ async function slateGame(g, injMap){
 const realKeysOf=SL=>new Set(((SL&&SL.picks)||[]).map(c=>c.game+'|'+c.key));
 async function buildSlate(){
   const out=$('slateBody'), btn=$('slateBtn'), scope=$('slateScope').value, nPick=+$('slateN').value||5;
-  if(!oddsKey()){ out.innerHTML=`The picks need FanDuel's prices — add your The Odds API key once under <b>Price this game → odds settings</b>.`; $('oddsCfg').open=true; $('priceSec').scrollIntoView({behavior:'smooth'}); return; }
+  if(!oddsKey()){ out.innerHTML=`The picks need FanDuel's prices — add your The Odds API key once under <b>Price this game → odds settings</b>.`; $('oddsCfg').open=true; goTo('priceSec'); return; }
   const now=Date.now(), up=SCHED.filter(g=>new Date(g.kickoff).getTime()>now);
   if(!up.length){ out.textContent='No upcoming games on this week\'s slate.'; return; }
   const day=iso=>new Date(iso).toDateString(), games=scope==='week'?up:up.filter(g=>day(g.kickoff)===day(up[0].kickoff));
@@ -2511,7 +2537,7 @@ function refun(){ if(!SLATE) return; SLATE.fun=pickFun(SLATE.funPool||[], +$('sl
 // ⚡ a fun filter's games that the build didn't price (e.g. Sunday's 1 PM games when the build covered Thursday night)
 async function priceFunGames(list, btn){
   if(!SLATE || !list.length) return;
-  if(!oddsKey()){ $('oddsCfg').open=true; $('priceSec').scrollIntoView({behavior:'smooth'}); return; }
+  if(!oddsKey()){ $('oddsCfg').open=true; goTo('priceSec'); return; }
   const cost=list.filter(g=>!pxFresh(g.away+'@'+g.home)).length;
   if(cost && oddsRemaining!=null && oddsRemaining-cost<ODDSCFG.reserve &&
      !confirm(`This uses ${cost} The Odds API credit${cost>1?'s':''} (1 per game). You have ${oddsRemaining} left and your reserve is ${ODDSCFG.reserve}. Go ahead?`)) return;
@@ -2614,7 +2640,7 @@ function renderSlate(){
   const ft=$('funTheme'); if(ft) ft.onchange=()=>{ FUNF.theme=ft.value; lsW('nfltd_funf', FUNF); refun(); };
   const fpx=$('funPxBtn'); if(fpx) fpx.onclick=()=>priceFunGames(funNeed, fpx);
   out.querySelectorAll('.spick').forEach(el=>{ el.onclick=e=>{ if(e.target.closest('button')) return; const [a,h]=el.dataset.g.split('@'); if(!S.teamList.includes(a)||!S.teamList.includes(h)) return;
-    $('awaySel').value=a; $('homeSel').value=h; userPicked=true; onMatchupChange(); setTimeout(()=>$('mktSec').scrollIntoView({behavior:'smooth'}), 300); }; });
+    $('awaySel').value=a; $('homeSel').value=h; userPicked=true; onMatchupChange(); setTimeout(()=>goTo('mktSec'), 300); }; });
 }
 function exportData(){
   const data={app:'nfl-td-predictor', version:1, exportedAt:new Date().toISOString(), bets, slip, bankroll:getBankroll(), bank:BANK};
@@ -2696,7 +2722,7 @@ function renderBets(){
     for(const grp of G){
       const plan=grp.gm&&grp.pend?planFor(grp.gm):null, planOf=new Map(), ga=agg(grp.rs), key=grp.gm+'#'+ws;
       if(plan){ plan.picks.forEach(c=>planOf.set(c.bet.id,{keep:true, stake:c.stake})); plan.skipped.forEach(s=>planOf.set(s.c.bet.id,{keep:false, why:s.why})); PLANS.set(grp.gm, plan); }
-      const open=LOGOPEN.has(key)?LOGOPEN.get(key):grp.pend>0;
+      const open=LOGOPEN.has(key)?LOGOPEN.get(key):false;   // games start collapsed (user, 2026-10-16)
       html+=`<details class="gamegrp" data-k="${esc(key)}"${open?' open':''}><summary><b>${grp.gm?fmtGame(grp.gm):'Parlays &amp; custom bets'}</b> <span class="muted">· ${ga.n} bet${ga.n>1?'s':''}${ga.open?` · ${ga.open} open`:''}${ga.w+ga.l?` · ${rec(ga)}`:''}</span>`+
         `${ga.w+ga.l?` <b class="${g(ga.net)}">${mny(ga.net)}</b>`:''}</summary><div class="grpbody">`;
       html+=`<div style="overflow-x:auto"><table style="margin-top:0"><thead><tr>${head}</tr></thead><tbody>`;
@@ -3127,6 +3153,22 @@ $('findParlays').onclick=computeParlays;
 // the picker stays collapsed until you use it; once opened it stays open on your next visit
 $('parlaySec').open=!!lsJ('nfltd_parlayopen', false);
 $('parlaySec').addEventListener('toggle', ()=>{ lsW('nfltd_parlayopen', $('parlaySec').open); if($('parlaySec').open) computeParlays(); });
+// ---- phones: tabs. tagMobile() marks each section with the tab it lives in; on a wide screen the marks do nothing.
+const isPhone=()=>matchMedia('(max-width:760px)').matches;
+function showTab(t, keepScroll){ document.body.dataset.mtab=t; document.querySelectorAll('#mtabbar button').forEach(b=>b.classList.toggle('on', b.dataset.t===t)); lsW('nfltd_mtab', t); if(!keepScroll && isPhone()) window.scrollTo(0,0); }
+function goTo(id){ const el=$(id); if(!el) return; const h=el.closest('[data-m]'); if(h && isPhone() && document.body.dataset.mtab!==h.dataset.m) showTab(h.dataset.m, true); el.scrollIntoView({behavior:'smooth'}); }
+(function tagMobile(){
+  const tag=(el,t)=>{ if(el) el.dataset.m=t; }, pair=(id,t)=>{ const h=$(id); tag(h,t); if(h) tag(h.nextElementSibling,t); };
+  tag($('calBox'),'more'); tag(document.querySelector('.wrap > .panel'),'game');
+  pair('bankSec','bets'); pair('priceSec','game'); pair('cardSec','game'); pair('slateSec','picks'); pair('mktSec','game');
+  tag($('tottSec'),'more'); tag($('parlaySec'),'game'); pair('slipSec','bets'); pair('logSec','bets');
+  pair('corrNote','more'); tag($('corrNote'),'more'); tag($('footer'),'more');
+  showTab(lsJ('nfltd_mtab','picks'), true);
+})();
+$('mtabbar').addEventListener('click', e=>{ const b=e.target.closest('button[data-t]'); if(b) showTab(b.dataset.t); });
+$('ctlToggle').onclick=()=>document.body.classList.toggle('ctlopen');
+$('mktGrid').addEventListener('click', e=>{ const b=e.target.closest('.mteamsw button[data-t]'); if(!b) return; MTEAM=b.dataset.t;
+  const g=$('mktGrid').querySelector('.mgrid'); if(g) g.className='mgrid one-'+MTEAM; $('mktGrid').querySelectorAll('.mteamsw button').forEach(x=>x.classList.toggle('on', x.dataset.t===MTEAM)); });
 $('jumpNav').addEventListener('click', e=>{ const a=e.target.closest('a[href^="#"]'); if(!a) return; const t=document.getElementById(a.getAttribute('href').slice(1)); if(t&&t.tagName==='DETAILS') t.open=true; });
 $('parlayLegs').onchange=computeParlays;
 $('parlayMix').onchange=computeParlays;
@@ -3191,7 +3233,8 @@ loadSlip(); renderSlip();       // restore the cross-game slip from a previous v
 loadBets(); for(const b of bets) if(/^line moved/.test(b.offBoard||'')) delete b.offBoard;   // moved lines are tracked as CLV now, not "off FanDuel"
 renderBets();       // restore the bet log + CLV history
 renderSlate();   // last picks you built (marked stale after 45 min) — after the log + slip load, so it can mark players already bet
-$('autoSettleChk').checked=AUTO.settle; $('autoCloseChk').checked=AUTO.close;
+$('autoSettleChk').checked=AUTO.settle; $('autoCloseChk').checked=AUTO.close; $('autoHistChk').checked=AUTO.hist;
+$('autoHistChk').onchange=e=>{ AUTO.hist=e.target.checked; lsW('nfltd_auto', AUTO); };
 $('autoSettleChk').onchange=e=>{ AUTO.settle=e.target.checked; lsW('nfltd_auto', AUTO); };
 $('autoCloseChk').onchange=e=>{ AUTO.close=e.target.checked; lsW('nfltd_auto', AUTO); };
 $('autoNow').onclick=()=>autoSettle(true);

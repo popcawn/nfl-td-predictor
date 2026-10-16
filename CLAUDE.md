@@ -200,6 +200,17 @@ See README.md for what the model does and how it was validated.
   ntfy channel's last 12 h (click link + "TD +price" in the title); re-alerts only on a better price. Stops below
   ALERT_RESERVE (1000) credits. Test without credits: ALERT_MOCK=<{events, odds}> ALERT_MODE=dry (scratch mock maker
   pattern: fake 6 books, FD/DK generous on a few players). It never places bets — the user was told books ban bots.
+- PHONE LAYOUT (2026-10-16, user: "too much scrolling and information on phone screen"): at <=760px a fixed bottom tab bar
+  (#mtabbar: Picks · Game · Bets · More) shows one tab at a time. tagMobile() (JS, at startup) sets data-m on each section
+  (h2 + its next sibling via pair()); CSS hides [data-m] not matching body[data-mtab]; desktop ignores the marks. Picks =
+  My TD picks; Game = game picker + Price + Your card + Markets + Parlay picker; Bets = Bankroll + Slip + Bet log; More =
+  model accuracy, team profiles, notes, footer. NEW SECTIONS NEED A data-m TAG or they show on every phone tab. goTo(id)
+  switches to the target's tab before scrolling (use it instead of scrollIntoView for cross-section jumps). Phones also:
+  jump bar hidden, team/line/weather inputs behind ✏️ (#ctlToggle, body.ctlopen), Markets one team at a time (MTEAM,
+  .mteamsw, .mgrid.one-away|one-home). Tab kept in nfltd_mtab (default picks).
+  Same day: bet-log GAMES start collapsed; the paste box is a collapsed details#pasteBox (⚡ Pull is the main path, paste
+  = free fallback); closing lines split — AUTO.close (live, <15 min to kickoff, 1 credit/bet type) stays on, AUTO.hist
+  (after kickoff from history, 10 credits/bet type) is OPT-IN (#autoHistChk), to save credits.
 - 💰 BANKROLL $ (2026-10-13): BANK={amt,at,mt} (nfltd_bank, synced + exported). bankNow() = amt + dollar P/L of bets with
   b.st (settled-at, stamped by autoSettle and the result select) > BANK.at; unitUsd() = bankNow()/getBankroll() (the old
   units box is a hidden field = 100, so 1u = 1%). stakeTxt(u) / betStakeTxt(b) render every stake ($ when a bankroll is
