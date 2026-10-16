@@ -292,6 +292,7 @@
             <div>The Odds API key <input id="oddsKeyIn" type="password" placeholder="paste key" autocomplete="off" spellcheck="false" style="width:170px;padding:4px 7px;font-size:12px;background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:7px"> <button class="statussel" id="oddsKeySave" style="padding:2px 9px">save</button> <span id="oddsKeyMsg" class="muted"></span></div>
             <div class="cfgrow"><b>My sportsbooks</b> <span class="muted">— each box shows the best price among these (no extra credits); every other book is "the market"</span><br>
               <label><input type="checkbox" class="bkchk" value="fanduel" checked disabled> FanDuel</label><label><input type="checkbox" class="bkchk" value="draftkings"> DraftKings</label><label><input type="checkbox" class="bkchk" value="betmgm"> BetMGM</label><label><input type="checkbox" class="bkchk" value="williamhill_us"> Caesars</label><label><input type="checkbox" class="bkchk" value="betrivers"> BetRivers</label><label><input type="checkbox" class="bkchk" value="fanatics"> Fanatics</label></div>
+            <div>Your state <select id="oddsState" class="statussel" style="font-size:12px"><option value="">— pick —</option><option value="al">Alabama</option><option value="ak">Alaska</option><option value="az">Arizona</option><option value="ar">Arkansas</option><option value="ca">California</option><option value="co">Colorado</option><option value="ct">Connecticut</option><option value="de">Delaware</option><option value="dc">Washington DC</option><option value="fl">Florida</option><option value="ga">Georgia</option><option value="hi">Hawaii</option><option value="id">Idaho</option><option value="il">Illinois</option><option value="in">Indiana</option><option value="ia">Iowa</option><option value="ks">Kansas</option><option value="ky">Kentucky</option><option value="la">Louisiana</option><option value="me">Maine</option><option value="md">Maryland</option><option value="ma">Massachusetts</option><option value="mi">Michigan</option><option value="mn">Minnesota</option><option value="ms">Mississippi</option><option value="mo">Missouri</option><option value="mt">Montana</option><option value="ne">Nebraska</option><option value="nv">Nevada</option><option value="nh">New Hampshire</option><option value="nj">New Jersey</option><option value="nm">New Mexico</option><option value="ny">New York</option><option value="nc">North Carolina</option><option value="nd">North Dakota</option><option value="oh">Ohio</option><option value="ok">Oklahoma</option><option value="or">Oregon</option><option value="pa">Pennsylvania</option><option value="ri">Rhode Island</option><option value="sc">South Carolina</option><option value="sd">South Dakota</option><option value="tn">Tennessee</option><option value="tx">Texas</option><option value="ut">Utah</option><option value="vt">Vermont</option><option value="va">Virginia</option><option value="wa">Washington</option><option value="wv">West Virginia</option><option value="wi">Wisconsin</option><option value="wy">Wyoming</option></select> <span class="muted">— BetMGM and Caesars put it in their bet-slip links</span></div>
             <div class="cfgrow"><b>What a pull fetches</b> <span class="muted">— 1 credit each, per game:</span> <b id="oddsCost"></b><br>
               <label><input type="checkbox" class="mkchk" value="player_anytime_td"> Anytime TD</label><label><input type="checkbox" class="mkchk" value="player_1st_td"> 1st TD</label><label><input type="checkbox" class="mkchk" value="player_last_td"> Last TD</label><label><input type="checkbox" class="mkchk" value="player_tds_over"> 2+ TD</label><br>
               <label><input type="checkbox" class="mkchk" value="player_receptions"> Receptions</label><label><input type="checkbox" class="mkchk" value="player_reception_yds"> Rec yds</label><label><input type="checkbox" class="mkchk" value="player_rush_yds"> Rush yds</label><label><input type="checkbox" class="mkchk" value="player_rush_reception_yds"> Rush+rec yds</label><label><input type="checkbox" class="mkchk" value="player_pass_yds"> Pass yds</label></div>
@@ -1615,20 +1616,28 @@ const bookOfTk=t=>t ? (t.b||'fanduel') : '';
 const legSel=l=>l.fd||tkFor(l.game, l.market, l.key, l.odds);
 // a link that opens these tickets in ONE book's bet slip (null if that book has no usable ids)
 const FD_SLIP='https://sportsbook.fanduel.com/addToBetslip';
-function bookLink(book, tks){
+const STATE_BOOKS=['betmgm','williamhill_us'];
+const needsState=t=>!!t && STATE_BOOKS.includes(bookOfTk(t)) && !ODDSCFG.state;   // ids are there, your state isn't
+function bookLink(book, tks, combo){
   if(!tks.length) return null;
+  const st=String(ODDSCFG.state||'').toLowerCase();
   if(book==='fanduel'){ if(tks.some(x=>!x.m||!x.s)) return null;
     return tks.length===1 ? `${FD_SLIP}?marketId=${encodeURIComponent(tks[0].m)}&selectionId=${encodeURIComponent(tks[0].s)}`
       : FD_SLIP+'?'+tks.map((x,i)=>`marketId[${i}]=${encodeURIComponent(x.m)}&selectionId[${i}]=${encodeURIComponent(x.s)}`).join('&'); }
   if(book==='draftkings'){ if(tks.some(x=>!x.s)) return null; return 'https://sportsbook.draftkings.com/?outcomes='+tks.map(x=>encodeURIComponent(x.s)).join('+'); }
-  return null;   // the other books' links need your state in them — open those by hand
+  // BetMGM / Caesars, from the API's own one-leg links; joining several legs with commas is a guess, like FanDuel's / DK's
+  if(book==='betmgm'){ if(!st || tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sports?options=${tks.map(x=>x.g).join(',')}&type=${combo&&tks.length>1?'Combo':'Single'}`; }
+  if(book==='williamhill_us'){ if(!st || tks.some(x=>!x.s)) return null; return `https://sportsbook.caesars.com/us/${st}/bet/betslip?selectionIds=${tks.map(x=>encodeURIComponent(x.s)).join(',')}`; }
+  return null;   // BetRivers wants a stake in its link and Fanatics gives none — open those by hand
 }
 const linkable=t=>!!t && !!bookLink(bookOfTk(t), [t]);
 // buttons that open these legs in their book's bet slip — one button per book (singles can sit at different books)
 function fdButton(legs, label, mode){
   const ok=[], miss=[]; for(const l of legs) (linkable(legSel(l))?ok:miss).push(l);
   const why='not linked yet — these prices were pasted, pulled before links existed, or sit at a book without bet-slip links';
-  if(!ok.length){ if(!legs.length) return '';
+  const stMiss=miss.filter(l=>needsState(legSel(l))), other=miss.filter(l=>!needsState(legSel(l)));
+  const stBtn=stMiss.length ? `<button class="statussel statepick" style="padding:3px 11px" title="BetMGM and Caesars put your state in their bet-slip links — pick it once under odds settings">📍 Pick your state for ${[...new Set(stMiss.map(l=>bookName(bookOfTk(legSel(l)))))].join(' / ')} links</button> ` : '';
+  if(!ok.length && !stMiss.length){ if(!legs.length) return '';
     return mode==='slip' ? '' :   // the slip shows its own "Get links" button
       mode==='rebuild' ? `<span class="muted" style="font-size:12px">🔗 hit <b>Build my TD picks</b> again for bet-slip links</span>` :
       `<button class="statussel fdpull" style="padding:3px 11px" title="${esc(why)} — pulls this game's prices again">🔗 Get bet-slip link${legs.length>1?'s':''}</button>`; }
@@ -1636,7 +1645,7 @@ function fdButton(legs, label, mode){
   let html='';
   for(const [b,tks] of by){ const txt=String(typeof label==='function'?label(tks.length):label).replace(/FanDuel/g, bookName(b));
     html+=`<a class="statussel fdbtn" href="${esc(bookLink(b,tks))}" target="_blank" rel="noopener" title="opens ${esc(bookName(b))} with ${tks.length===1?'this bet':'these '+tks.length+' bets'} in the bet slip — check the price there before you bet">📲 ${txt}${by.size>1&&typeof label!=='function'?' ('+tks.length+')':''}</a> `; }
-  return html+(miss.length?`<span class="muted" style="font-size:12px" title="${esc(why+': '+miss.map(l=>l.name||l.label).join(', '))}">+ ${miss.length} not linked</span>`:''); }
+  return html+stBtn+(other.length?`<span class="muted" style="font-size:12px" title="${esc(why+': '+other.map(l=>l.name||l.label).join(', '))}">+ ${other.length} not linked</span>`:''); }
 // a PARLAY has to live at one book: the one of yours that prices every leg and pays the most for the combination
 function parlayAt(legs){
   const tks=legs.map(legSel); if(!tks.length || tks.some(t=>!t)) return null; let best=null;
@@ -1646,13 +1655,13 @@ function parlayAt(legs){
 // the parlay's button + what it really pays at that book (D0 = the product of each leg's best price, which may mix books)
 function parlayButton(legs, label, mode, D0){
   const pa=parlayAt(legs); if(!pa) return fdButton(legs, label, mode);
-  const href=bookLink(pa.book, pa.tks), txt=label.replace(/FanDuel/g, bookName(pa.book));
+  const href=bookLink(pa.book, pa.tks, true), txt=label.replace(/FanDuel/g, bookName(pa.book));
   const pays=D0 && Math.abs(pa.D/D0-1)>0.004 ? ` <span class="muted" style="font-size:12px" title="a parlay has to sit at one book — this is the best single book for these legs">at ${esc(bookName(pa.book))} it pays <span class="odds">${amStr(decToAmerican(pa.D))}</span></span>` : '';
   return (href ? `<a class="statussel fdbtn" href="${esc(href)}" target="_blank" rel="noopener" title="opens ${esc(bookName(pa.book))} with these ${legs.length} legs in the bet slip — check the price there before you bet">📲 ${txt}</a>` : `<span class="muted" style="font-size:12px">bet it at ${esc(bookName(pa.book))}</span>`)+pays; }
 // slip legs with no ticket (pasted, or added before links existed): pull just the markets they need, once, and attach
 // the ids — 1 credit per market per game, never for games that have kicked off
 const marketOA=m=>isPropMkt(m) ? Object.keys(OA_PROP).find(x=>OA_PROP[x]===m.split('|')[1]) : Object.keys(OA_TD).find(x=>OA_TD[x]===m);
-const slipUnlinked=()=>slip.filter(l=>l.game && l.market!=='custom' && !linkable(legSel(l)) && !(l.kickoff && Date.now()>new Date(l.kickoff).getTime()) && marketOA(l.market));
+const slipUnlinked=()=>slip.filter(l=>l.game && l.market!=='custom' && !linkable(legSel(l)) && !needsState(legSel(l)) && !(l.kickoff && Date.now()>new Date(l.kickoff).getTime()) && marketOA(l.market));
 function slipLinkPlan(){ const by=new Map(); for(const l of slipUnlinked()){ const g=by.get(l.game)||by.set(l.game,{legs:[], mk:new Set()}).get(l.game); g.legs.push(l); g.mk.add(marketOA(l.market)); } return by; }
 let SLIP_LINK_NOTE='';
 async function linkSlipLegs(){
@@ -2019,7 +2028,9 @@ async function fetchGameOdds(away, home, markets, mustBeUpcoming){
 }
 // an Odds API event-odds body -> the best price among YOUR books for every selection (+ its ticket), each of your books'
 // own board (byBook, for closing lines) and the other books' consensus.
-const tkOf=(b,o)=>{ const t={b, o:fmtAm(o.price)}; if(b==='fanduel'){ const f=fdSelOf(o); if(f){ t.m=f.m; t.s=f.s; } } else if(o.sid) t.s=String(o.sid); return t; };
+const tkOf=(b,o)=>{ const t={b, o:fmtAm(o.price)}; if(b==='fanduel'){ const f=fdSelOf(o); if(f){ t.m=f.m; t.s=f.s; } } else if(o.sid) t.s=String(o.sid);
+  if(b==='betmgm'){ const g=/[?&]options=([^&]+)/.exec(o.link||''); if(g) t.g=decodeURIComponent(g[1]); }   // "6:43628-3969167-6360732"
+  return t; };
 function parseOdds(j){
   const mine=myBooks(), bks=mine.map(k=>(j.bookmakers||[]).find(b=>b.key===k)).filter(Boolean);
   const out={td:{}, props:{}, propsX:{}, byBook:{}, cons:consensusFrom(j.bookmakers||[]), books:(j.bookmakers||[]).map(b=>b.key), mine:bks.map(b=>b.key)};
@@ -3194,9 +3205,12 @@ bkBoxes.forEach(c=>{ c.checked=myBooks().includes(c.value); }); mkBoxes.forEach(
 const showOddsCost=()=>{ const n=pickedMarkets().length; $('oddsCost').textContent=n+' credit'+(n===1?'':'s'); };
 const saveOddsCfg=()=>{ const mk={}; mkBoxes.forEach(c=>{ mk[c.value]=c.checked; });
   ODDSCFG={td:mkBoxes.some(c=>OA_TD[c.value]&&c.checked), props:mkBoxes.some(c=>OA_PROP[c.value]&&c.checked), mk, books:bkBoxes.filter(c=>c.checked).map(c=>c.value),
-    auto:$('oddsAuto').checked, reserve:Math.max(0,+$('oddsReserve').value||0)};
+    auto:$('oddsAuto').checked, reserve:Math.max(0,+$('oddsReserve').value||0), state:$('oddsState').value||''};
   lsW('nfltd_oddscfg', ODDSCFG); showOddsCost(); };
+$('oddsState').value=ODDSCFG.state||'';
 bkBoxes.concat(mkBoxes, [$('oddsAuto'), $('oddsReserve')]).forEach(el=>el.addEventListener('change', saveOddsCfg));
+$('oddsState').addEventListener('change', ()=>{ saveOddsCfg(); if(LAST) computeTopPlays(); renderSlip(); try{ if(SLATE) renderSlate(); }catch(e){} });
+document.addEventListener('click', e=>{ const b=e.target.closest&&e.target.closest('.statepick'); if(!b) return; $('oddsCfg').open=true; goTo('priceSec'); setTimeout(()=>$('oddsState').focus(), 400); });
 showOddsCost();
 $('oddsKeyMsg').textContent=oddsKey()?'saved ✓':'';
 $('oddsKeySave').onclick=()=>{ const v=$('oddsKeyIn').value.trim(); try{ if(v) localStorage.setItem('nfltd_oddskey', v); else localStorage.removeItem('nfltd_oddskey'); }catch(e){}

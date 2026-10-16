@@ -19,6 +19,7 @@
 //   ALERT_BOOKS   your books (default fanduel,draftkings)
 //   ALERT_RESERVE stop pulling when the key has fewer credits left than this (default 1000 — the app needs some too)
 //   ALERT_MAX     at most this many alerts per run (default 6)
+//   ALERT_STATE   your state, e.g. nj — BetMGM and Caesars put it in their bet-slip links (repo variable ALERT_STATE)
 //   ALERT_MOCK    a JSON file {events:[...], odds:{eventId: body}} to test without credits or network to The Odds API
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,7 +30,7 @@ const env = process.env, MODE = (env.ALERT_MODE || 'live').trim().toLowerCase();
 const HOURS = +env.ALERT_HOURS || 6, RESERVE = env.ALERT_RESERVE != null && env.ALERT_RESERVE !== '' ? +env.ALERT_RESERVE : 1000;
 const MAX_ALERTS = +env.ALERT_MAX || 6;
 const BOOKS = (env.ALERT_BOOKS || 'fanduel,draftkings').split(',').map(s => s.trim()).filter(Boolean);
-const NTFY = 'https://ntfy.sh', TOPIC = (env.NTFY_TOPIC || '').trim();
+const NTFY = 'https://ntfy.sh', TOPIC = (env.NTFY_TOPIC || '').trim(), STATE = (env.ALERT_STATE || '').trim().toLowerCase();
 const ODDS_API = 'https://api.the-odds-api.com/v4/sports/americanfootball_nfl';
 const FD_SLIP = 'https://sportsbook.fanduel.com/addToBetslip';
 const BOOK_NAMES = { fanduel: 'FanDuel', draftkings: 'DraftKings', betmgm: 'BetMGM', williamhill_us: 'Caesars', espnbet: 'ESPN BET', fanatics: 'Fanatics', betrivers: 'BetRivers' };
@@ -115,6 +116,7 @@ function slipLink(book, o) {   // the app's bookLink() for one outcome
   if (book === 'fanduel') { const m = o.link && /marketId[^=]*=([^&]+)/.exec(o.link), sel = o.sid || ((/selectionId[^=]*=([^&]+)/.exec(o.link || '') || [])[1]);
     return m && sel ? `${FD_SLIP}?marketId=${encodeURIComponent(decodeURIComponent(m[1]))}&selectionId=${encodeURIComponent(sel)}` : null; }
   if (book === 'draftkings') return o.sid ? 'https://sportsbook.draftkings.com/?outcomes=' + encodeURIComponent(o.sid) : null;
+  if ((book === 'betmgm' || book === 'williamhill_us') && STATE && o.link && o.link.includes('{state}')) return o.link.replace('{state}', STATE);   // the API's link, with your state in it
   return null;
 }
 

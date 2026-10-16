@@ -168,7 +168,7 @@ check the price and place it yourself. **It never places a bet.**
 - **Setup (once):** in the ntfy app, subscribe to your private channel name. In this repo: *Settings → Secrets and
   variables → Actions → New repository secret* — `NTFY_TOPIC` (that channel name), `ODDS_API_KEY` (your key) and,
   optionally, `SYNC_TOKEN` (the app's ☁ Sync token: stakes in dollars from your bankroll, and players you've already
-  logged are skipped). Then *Actions → Edge alerts → Run workflow → test*: your phone should buzz (no credits).
+  logged are skipped). Then *Actions → Edge alerts → Run workflow → test*: your phone should buzz (no credits). For BetMGM / Caesars links add a repository **variable** `ALERT_STATE` (e.g. `nj`).
 - **The timer is off.** To switch it on, delete the two `#` in front of `schedule:` and `- cron:` in
   `.github/workflows/alerts.yml`. `dry` runs check prices and print the alerts in the run's log without sending.
 

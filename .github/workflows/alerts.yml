@@ -47,4 +47,5 @@ jobs:
           ALERT_MODE: ${{ inputs.mode || 'live' }}
           ALERT_HOURS: '6'
           ALERT_RESERVE: '1000'
+          ALERT_STATE: ${{ vars.ALERT_STATE }}
         run: node alerts/watch.mjs
