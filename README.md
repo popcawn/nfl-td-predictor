@@ -24,6 +24,11 @@ silently to the baked snapshot when not.
   `git clone https://github.com/popcawn/nfl-td-predictor.git`. Run `git pull` before each session (the refresh bot
   commits data twice a week). `CLAUDE.md` carries the project notes for Claude Code on any machine.
 
+## One site, one pot
+The NFL, NBA and NHL simulators are one site: the 🏈 · 🏀 · 🏒 switcher at the top moves between them, and they share
+**one bankroll** — a bet settled in any sport moves it, and every stake is a % of it. ☁ Sync (set up once in the NFL
+app) keeps all three sports' bets the same on every device.
+
 ## Using it
 - **This week's games** — one dropdown sets both teams, the line and the stadium. The app opens on the next
   game to kick off. If you pick two teams by hand the wrong way round, it warns you and offers a one-click flip

@@ -206,6 +206,12 @@
   .spick{cursor:pointer} .spick:hover{background:rgba(120,160,220,.06)}
   .cp2{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px;margin:2px 0 0 26px}
   footer{color:var(--ink3);font-size:12px;margin-top:30px;border-top:1px solid var(--line);padding-top:14px}
+  /* sport switcher (one site, one pot: NFL · NBA · NHL) */
+  .sportbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 12px}
+  .sportbar a{padding:5px 13px;border-radius:999px;border:1px solid var(--line2);color:var(--ink2);text-decoration:none;font-weight:800;font-size:13px;background:var(--panel2)}
+  .sportbar a.on{background:var(--accent);color:#04121f;border-color:var(--accent)}
+  .sportbar .pot{margin-left:auto;font-size:13px;color:var(--ink2)} .sportbar .pot b{color:var(--ink)}
+
   /* phones: one tab at a time (sections carry data-m = picks|game|bets|more, set by tagMobile()) */
   .mtabbar,.mobonly,.mteamsw{display:none}
   @media(max-width:760px){
@@ -229,6 +235,7 @@
 </head>
 <body>
 <div class="wrap">
+  <nav class="sportbar" id="sportBar"><a href="../nfl-td-predictor/" class="on">🏈 NFL</a><a href="../nba-prop-predictor/">🏀 NBA</a><a href="../nhl-prop-predictor/">🏒 NHL</a><span class="pot" id="potChip"></span></nav>
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
     <div>
       <h1>🏈 NFL Anytime-TD Simulator</h1>
@@ -2008,10 +2015,16 @@ const lsW=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} 
 // BANK.amt = what the user says is in the account at BANK.at. From then on every settled bet (b.st = when it settled) adds
 // its dollar P/L, so the bankroll — and every stake, since stakes are a % of it — grows or shrinks by itself. 1 unit is
 // always 1% of the bankroll NOW (getBankroll() units = 100%). A bet keeps the dollars staked when it was logged (b.usd).
+// ---------- ONE POT (2026-10-16, user: "combine all into one sim … one pot"): the NFL, NBA and NHL apps share one bankroll —
+// nfltd_bank = {amt, at, mt} in this site's storage (the apps are one site, so one browser storage). Every sport's bets
+// settled after `at` move it; each app keeps its own bet list (nfltd_bets / nbap_bets / nhlp_bets).
+const ME='nfl', SPORT_BETS={nfl:'nfltd_bets', nba:'nbap_bets', nhl:'nhlp_bets'}, SPORT_LBL={nfl:'NFL', nba:'NBA', nhl:'NHL'};
+const otherBets=()=>Object.entries(SPORT_BETS).filter(([k])=>k!==ME).flatMap(([k,key])=>(lsJ(key,[])||[]).map(b=>Object.assign({},b,{sport:k})));
+const allBets=()=>bets.map(b=>Object.assign({},b,{sport:ME})).concat(otherBets());
 let BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {}));
 const betUsd=b=>b.usd!=null ? +b.usd : (BANK.amt ? (+b.stake||0)*BANK.amt/getBankroll() : null);   // older bets: at the starting unit
 const betPlUsd=b=>{ const u=betUsd(b); if(u==null) return null; const d=oddsDec(b.odds)||1; return b.result==='win'?u*(d-1):b.result==='loss'?-u:b.result==='push'?0:null; };
-function bankNow(){ if(!BANK.amt) return null; let x=BANK.amt; for(const b of bets) if(b.st>BANK.at){ const p=betPlUsd(b); if(p!=null) x+=p; } return Math.max(0,x); }
+function bankNow(){ if(!BANK.amt) return null; let x=BANK.amt; for(const b of allBets()) if(b.st>BANK.at){ const p=betPlUsd(b); if(p!=null) x+=p; } return Math.max(0,x); }   // every sport's settled bets
 const unitUsd=()=>{ const n=bankNow(); return n!=null ? n/getBankroll() : null; };
 const fmtUsd=x=>{ const a=Math.abs(x); return (x<0?'−':'')+'$'+(a>=20?Math.round(a).toLocaleString():a>=1?(Math.round(a*2)/2).toFixed(Math.round(a*2)%2?2:0):a.toFixed(2)); };
 // a stake for display: dollars when a bankroll is set, units otherwise
@@ -2022,12 +2035,17 @@ function renderBank(){
   const inp=$('bankUsd'); if(!inp) return; const now=bankNow();
   if(document.activeElement!==inp) inp.value=now!=null ? Math.round(now*100)/100 : '';
   const bs=$('betStake'); if(bs) bs.placeholder=now!=null?'stake $':'stake 1';
-  if(now==null){ $('bankNow').textContent=''; $('bankNote').innerHTML='Type what\'s in your betting account and every stake on this page turns into dollars. From then on it grows or shrinks by itself as your bets settle.'; return; }
-  const done=bets.filter(b=>b.st>BANK.at && betPlUsd(b)!=null), d=now-BANK.amt, open=bets.filter(b=>b.result==='pending'), risk=open.reduce((a,b)=>a+(betUsd(b)||0),0);
+  if(now==null){ $('bankNow').textContent=''; $('bankNote').innerHTML='Type what\'s in your betting account and every stake on this page turns into dollars. From then on it grows or shrinks by itself as your bets settle.'; renderPotChip(null, 0); return; }
+  const AB=allBets(), done=AB.filter(b=>b.st>BANK.at && betPlUsd(b)!=null), d=now-BANK.amt, open=AB.filter(b=>b.result==='pending'), risk=open.reduce((a,b)=>a+(betUsd(b)||0),0);
+  const bySport=Object.keys(SPORT_LBL).map(k=>{ const L=done.filter(b=>b.sport===k); return L.length?`${SPORT_LBL[k]} ${(x=>(x>=0?'+':'')+fmtUsd(x))(L.reduce((a,b)=>a+betPlUsd(b),0))}`:''; }).filter(Boolean).join(' · ');
   const since=new Date(BANK.at).toLocaleDateString([], {month:'short', day:'numeric'});
-  $('bankNow').innerHTML=done.length ? `<b class="${d>0?'ev-pos':d<0?'ev-neg':''}">${d>=0?'+':''}${fmtUsd(d)}</b> <span class="muted">since ${since} · ${done.length} settled bet${done.length>1?'s':''} (started ${fmtUsd(BANK.amt)})</span>` : `<span class="muted">set ${since}</span>`;
-  $('bankNote').innerHTML=`1 unit = 1% = <b>${fmtUsd(unitUsd())}</b>. Every stake on the page is in dollars and scales as this grows.${open.length?` <b>${fmtUsd(risk)}</b> is riding on ${open.length} open bet${open.length>1?'s':''}.`:''} Deposited or withdrew? Just type the new balance.`;
+  $('bankNow').innerHTML=done.length ? `<b class="${d>0?'ev-pos':d<0?'ev-neg':''}">${d>=0?'+':''}${fmtUsd(d)}</b> <span class="muted">since ${since} · ${done.length} settled bet${done.length>1?'s':''} (started ${fmtUsd(BANK.amt)})${bySport.includes(' · ')||!bySport.startsWith('NFL')?' — '+bySport:''}</span>` : `<span class="muted">set ${since}</span>`;
+  renderPotChip(now, open.length);
+  $('bankNote').innerHTML=`<b>One pot</b> for 🏈 🏀 🏒 — 1 unit = 1% = <b>${fmtUsd(unitUsd())}</b>. Every stake is in dollars and scales as this grows.${open.length?` <b>${fmtUsd(risk)}</b> is riding on ${open.length} open bet${open.length>1?'s':''}.`:''} Deposited or withdrew? Just type the new balance.`;
 }
+function renderPotChip(now, nOpen){ const c=$('potChip'); if(c) c.innerHTML=now!=null?`💰 <b>${fmtUsd(now)}</b>${nOpen?` · ${nOpen} open`:''}`:'<span class="muted">💰 set your bankroll</span>'; }
+// another app (NBA / NHL) in another tab changed the pot or its bets -> redraw
+window.addEventListener('storage', e=>{ if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderBank(); try{ if(LAST) computeTopPlays(); renderSlip(); renderBets(); }catch(err){} } else if(e.key==='nbap_bets'||e.key==='nhlp_bets') renderBank(); });
 function setBank(v){ BANK = v>0 ? {amt:+(+v).toFixed(2), at:Date.now(), mt:Date.now()} : {amt:null, at:0, mt:Date.now()}; lsW('nfltd_bank', BANK); syncSoon(); if(LAST) computeTopPlays(); renderSlip(); renderBets(); try{ if(SLATE) renderSlate(); }catch(e){} }
 let ODDSCFG=Object.assign({td:true, props:true, auto:true, reserve:150}, lsJ('nfltd_oddscfg',{}));
 let PULLED=(p=>{ const old=Date.now()-2*86400e3; for(const k of Object.keys(p)) if(!(p[k]>old)) delete p[k]; return p; })(lsJ('nfltd_pulled',{}));
