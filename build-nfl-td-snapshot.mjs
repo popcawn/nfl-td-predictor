@@ -1310,7 +1310,10 @@ async function parseSeason(season) {
     let logo64 = null;
     if (!process.env.SKIP_LOGOS) {
       const href = (t.logos && t.logos[0] && t.logos[0].href) || `https://a.espncdn.com/i/teamlogos/nfl/500/${t.abbreviation.toLowerCase()}.png`;
-      const b64 = curlBase64(href);
+      // 80 px is plenty (the app shows logos at 22-40 px): the 500 px originals were 1.8 MB of the page and slowed every
+      // switch into the NFL app; ESPN's image combiner resizes them (~4 KB each), else fall back to the original
+      const small = `https://a.espncdn.com/combiner/i?img=${encodeURIComponent(new URL(href).pathname)}&h=80&w=80`;
+      const b64 = curlBase64(small) || curlBase64(href);
       if (b64) logo64 = 'data:image/png;base64,' + b64;
     }
     teamsOut[abbr] = {

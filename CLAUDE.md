@@ -72,6 +72,12 @@ See README.md for what the model does and how it was validated.
   flashed a page between sports). Cross-document view transitions (`@view-transition`, the top bar held by
   `view-transition-name`), a speculation-rules PREFETCH on hover (prefetch only — prerender would run the page's JS and
   could spend odds credits), and `sims_chip` (the last pot boxes, shown instantly before the live render).
+- First paint waits for the app to draw itself: `<link rel="expect" href="#sims-ready" blocking="render">` in the head and
+  `<i id="sims-ready" hidden>` right AFTER the main script (keep it last in body), so a sport switch fades from one finished
+  page to the next instead of showing a half-drawn one.
+- NFL page weight: the snapshot embedded 32 team logos at 500 px (1.8 MB of a 2.9 MB page — the user still saw a flash going
+  NBA -> NFL). The build now embeds 80 px logos from ESPN's image combiner (~4 KB each; the app shows them at 22-40 px):
+  page ~0.86 MB. Don't embed full-size images in the snapshot.
 
 ## The user
 - Bets FanDuel props, pastes boards in FanDuel's stacked format, builds cross-game parlays.
