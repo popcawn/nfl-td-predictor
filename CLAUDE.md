@@ -56,6 +56,18 @@ See README.md for what the model does and how it was validated.
   `passT` per sim; the picker's joint = product of each leg's own probability x the sim's correlation lift
   (legVec/jointOf), so TD-only combos equal the old role-calibrated joint.
 
+## Look (2026-10-19, user: "its a little dark. Modernize the site … markets in the background … just a pull odds and the bets across all games with click-to-open links" → "light default, apply it to all three")
+- One look for all three apps (+ the front door): light theme by default, 🌙 dim (`sims_theme` in localStorage — one setting for the
+  whole site; a head script sets it before first paint). Fonts: Inter (text), Space Grotesk (headings), JetBrains Mono (odds,
+  money) from Google Fonts; base 16px. Colors are CSS variables redefined under `:root[data-theme="dim"]` — never hardcode a
+  dark-only color (team names as text go through teamText(), which is theme-aware).
+- Sticky top bar (`#topbar`): brand → popcawn.github.io, sport pills, the pot as stat boxes (renderPotChip: bankroll ·
+  this week = every sport's bets settled since Monday · bets · open · this game), light/dim button, then the tabs (`#dtabs`).
+  Phones keep the bottom bar (`#mtabbar`); showTab() keeps both in step. Sticky offsets use --navh = top bar height.
+- Tabs at EVERY width now (sections carry data-m): picks = ⚡ Bets (Pull all games hero + week cards, then My TD picks), game = 🏈 the open game (controls, markets; Price + Your card in the side column ≥1200px), bets = 📓 Bet log (slip + log; bankroll beside), more = ⋯ (model accuracy, team profiles, notes). The jump bar is hidden; goTo() switches to the section's tab.
+- The first tab is a big pull button (.hero) and the bets as cards (betCard(): name, market, price + book, Bet $, chance bar
+  vs the price's chance, EV, an Open-on-<book> link). The internals (pulls, card rules, staking, log) did not change.
+
 ## The user
 - Bets FanDuel props, pastes boards in FanDuel's stacked format, builds cross-game parlays.
 - Wants a clear answer to "what do I bet": the **Your card** panel (Kelly-ranked, ¼-Kelly, team caps) is the
@@ -224,8 +236,9 @@ See README.md for what the model does and how it was validated.
   ALERT_RESERVE (1000) credits. Test without credits: ALERT_MOCK=<{events, odds}> ALERT_MODE=dry (scratch mock maker
   pattern: fake 6 books, FD/DK generous on a few players). It never places bets — the user was told books ban bots.
 - PHONE LAYOUT (2026-10-16, user: "too much scrolling and information on phone screen"): at <=760px a fixed bottom tab bar
-  (#mtabbar: Picks · Game · Bets · More) shows one tab at a time. tagMobile() (JS, at startup) sets data-m on each section
-  (h2 + its next sibling via pair()); CSS hides [data-m] not matching body[data-mtab]; desktop ignores the marks. Picks =
+  (#mtabbar: Bets · Game · Log · More — data-t picks · game · bets · more) shows one tab at a time; since 2026-10-19 the
+  tabs work at EVERY width (desktop: #dtabs in the top bar — see "Look"). tagMobile() (JS, at startup) sets data-m on each
+  section (h2 + its next sibling via pair()); CSS hides [data-m] not matching body[data-mtab]. Picks = Pull all games +
   My TD picks; Game = game picker + Price + Your card + Markets + Parlay picker; Bets = Bankroll + Slip + Bet log; More =
   model accuracy, team profiles, notes, footer. NEW SECTIONS NEED A data-m TAG or they show on every phone tab. goTo(id)
   switches to the target's tab before scrolling (use it instead of scrollIntoView for cross-section jumps). Phones also:
