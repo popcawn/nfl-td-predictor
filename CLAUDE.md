@@ -99,6 +99,16 @@ See README.md for what the model does and how it was validated.
 - NBA / NHL bet log = the NFL layout: weeks (Mon→Sun) with the money line (spent · won/lost · still riding · season so
   far) -> nights (collapsed; tonight's marked 📍) -> bets.
 
+- ⚡ PULL ALL GAMES (2026-10-19, user: "adopt the NHL sim pull … all games remaining that week"): #weekSec / pullAllGames() — every
+  game still to kick off × pickedMarkets (a game pulled within freshMs reuses BOARDS), each priced by gameOptions() (the card's
+  candidate + pickPlays rule, extracted from computeTopPlays — Your card = gameOptions() then drawn) on a temporary LAST built
+  from simGame (its own injuries + forecast: CTX_BADWX / CTX_WIND feed confFor / propConfidence) and fillBoard(L, d, gid) (the
+  pull into any game's maps; fillGameFromOdds = fillBoard(LAST…) + screen). WEEK (nfltd_week) = picks across games ->
+  renderWeek (status line, grouped by game, NEW tags, log + open links). LAST is always restored in finally.
+  Same day: parlay picker prices each combo at ONE book (parlayAt; legs shown at that book's prices) + 📲 Open link;
+  bet log: P/L pill per week (no "season so far"), CLV red when negative, a prop line that moved AGAINST the bet red, "≈ price
+  at your line" inline; 🏆 best sportsbook (all sports) in the summary + Insights table; top bar = pot · bets · open · $ on this game.
+
 ## Gotchas
 - In Git Bash, `node -e "..."` containing JS template-literal backticks gets mangled by command substitution —
   use the Edit tool or put the script in a file. `python` may be a Store stub that hangs.
