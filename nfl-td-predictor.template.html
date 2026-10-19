@@ -5,10 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PROP SIM</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%232f6fe4'/%3E%3Cstop offset='1' stop-color='%236a55f0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3C/svg%3E">
-<script type="speculationrules">{"prefetch":[{"source":"document","where":{"selector_matches":".sportbar a, a.sport, a.brand"},"eagerness":"moderate"}]}</script>
+<script type="speculationrules">{"prerender":[{"source":"document","where":{"selector_matches":".sportbar a:not(.on), a.sport"},"eagerness":"moderate"}],"prefetch":[{"source":"document","where":{"selector_matches":"a.brand"},"eagerness":"moderate"}]}</script>
 <link rel="expect" href="#sims-ready" blocking="render">   <!-- first paint waits for the app to draw itself: switching sports fades from one finished page to the next -->
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/spacegrotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/jetbrainsmono-latin.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  @font-face{font-family:Inter;src:url(/fonts/inter-latin.woff2) format("woff2");font-weight:100 900;font-display:optional}
+  @font-face{font-family:"Space Grotesk";src:url(/fonts/spacegrotesk-latin.woff2) format("woff2");font-weight:300 700;font-display:optional}
+  @font-face{font-family:"JetBrains Mono";src:url(/fonts/jetbrainsmono-latin.woff2) format("woff2");font-weight:100 800;font-display:optional}
+</style>
 <script>try{ if(localStorage.getItem('sims_theme')==='dim') document.documentElement.dataset.theme='dim'; }catch(e){}</script>
 <style>
   :root{
@@ -375,10 +381,10 @@
   .weekwrap{margin-top:2px}
   #calBox{margin-top:6px}
 
-  /* switching sports: no redirect page, the top bar stays put and the page cross-fades (Chrome / Edge) */
+  /* switching sports: no redirect page; the page you leave stays on screen until the next one is fully drawn, then they
+     swap in one frame (no fade: a cross-fade showed both pages at once) — Chrome / Edge */
   @view-transition{navigation:auto}
-  .topbar{view-transition-name:topbar}
-  ::view-transition-old(root),::view-transition-new(root){animation-duration:.16s}
+  ::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none}
 </style>
 </head>
 <body>
@@ -2266,7 +2272,10 @@ const abbrByTeamName=name=>{ const n=String(name||'').toLowerCase(), nick=n.spli
 const fdSelOf=o=>{ const m=o&&o.link&&/marketId[^=]*=([^&]+)/.exec(o.link), sel=o&&(o.sid||((/selectionId[^=]*=([^&]+)/.exec(o.link||'')||[])[1]));
   return m&&sel ? {m:decodeURIComponent(m[1]), s:String(sel)} : null; };
 // FanDuel's prices for one game, normalised: {td:{anytime:[{name,price}],...}, props:{recyd:[{name,side,line,price}],...}}
-async function fetchGameOdds(away, home, markets, mustBeUpcoming){
+// a page built in the background (you pointed at its sport button) shows itself but spends nothing — no odds pulls,
+// settling or sync — until you actually open it
+function opened(){ return document.prerendering?new Promise(r=>document.addEventListener('prerenderingchange', r, {once:true})):Promise.resolve(); }
+async function fetchGameOdds(away, home, markets, mustBeUpcoming){ await opened();
   const key=oddsKey(); if(!key) throw oddsFail('nokey');
   const ev=(await oddsEventsList(key)).find(e=>abbrByTeamName(e.away_team)===away && abbrByTeamName(e.home_team)===home);
   if(!ev) throw oddsFail('noevent');
@@ -3598,8 +3607,8 @@ $('autoHistChk').onchange=e=>{ AUTO.hist=e.target.checked; lsW('nfltd_auto', AUT
 $('autoSettleChk').onchange=e=>{ AUTO.settle=e.target.checked; lsW('nfltd_auto', AUTO); };
 $('autoCloseChk').onchange=e=>{ AUTO.close=e.target.checked; lsW('nfltd_auto', AUTO); };
 $('autoNow').onclick=()=>autoSettle(true);
-setTimeout(()=>autoSettle(false), 5000);
-setInterval(()=>{ autoLiveCloses(); autoSettle(false); }, 5*60e3);
+opened().then(()=>setTimeout(()=>autoSettle(false), 5000));
+setInterval(()=>{ if(document.prerendering) return; autoLiveCloses(); autoSettle(false); }, 5*60e3);
 betSnap=snapOf(bets, betKey); slipSnap=snapOf(slip, legKey); syncStatus();
 // sync wiring: pull on load, when the tab comes back, and every 90 s while visible
 $('syncBtn').onclick=()=>{ const b=$('syncBox'); b.style.display=b.style.display==='none'?'':'none'; syncStatus(); };
@@ -3610,7 +3619,9 @@ $('syncOff').onclick=()=>{ if(SYNC.token && confirm('Stop syncing on this PC? Yo
 const syncIfStale=()=>{ if(SYNC.token && document.visibilityState==='visible' && Date.now()-(SYNC.last||0)>20e3) syncNow(); };
 document.addEventListener('visibilitychange', syncIfStale); window.addEventListener('focus', syncIfStale);
 setInterval(()=>{ if(SYNC.token && document.visibilityState==='visible') syncNow(); }, 90e3);
-if(SYNC.token) syncNow();
+opened().then(()=>{ if(SYNC.token) syncNow(); });
+// opened after being built in the background: catch up on the pot and the week list
+document.addEventListener('prerenderingchange', ()=>{ try{ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderBank(); renderWeek(); }catch(e){} });
 setLine(); run(); setWeather(); // auto-fill line, sim, then stadium + live weather
 refreshLive();                  // then overlay today's ESPN line + injury status
 refreshSlate();                 // and swap in the live slate (next week's once this week's games are final)

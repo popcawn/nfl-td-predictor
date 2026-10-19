@@ -69,9 +69,16 @@ See README.md for what the model does and how it was validated.
   vs the price's chance, EV, an Open-on-<book> link). The internals (pulls, card rules, staking, log) did not change.
 - Name: PROP SIM (tab title, brand, front door; user 2026-10-19). Switching sports must feel seamless: links go STRAIGHT to
   `<repo>/<repo>.html` — never the folder (its index.html is only a redirect for old links/bookmarks, and linking it
-  flashed a page between sports). Cross-document view transitions (`@view-transition`, the top bar held by
-  `view-transition-name`), a speculation-rules PREFETCH on hover (prefetch only — prerender would run the page's JS and
-  could spend odds credits), and `sims_chip` (the last pot boxes, shown instantly before the live render).
+  flashed a page between sports). How a switch works (recorded frame by frame in a throwaway headless Chrome, 2026-10-19 — the user still saw a flash
+  NBA -> NFL): `@view-transition{navigation:auto}` with NO animation (a 160 ms cross-fade showed both pages at once) and
+  no separate top-bar layer (its see-through background let the old tabs show for a frame), so the page you leave stays
+  on screen until the next is fully drawn, then they swap in one frame (~100 ms into NFL). Speculation rules PRERENDER
+  the other sports on hover; `opened()` holds everything that spends or writes (odds pulls — NFL fetchGameOdds, NBA/NHL
+  apiGet — settling, closes, gist sync) until the page is actually opened. `sims_chip` = the last pot boxes, shown
+  instantly. Fonts are self-hosted on popcawn.github.io/fonts (preloaded, `font-display: optional` — no late re-draw of
+  the text). NBA / NHL also open with the last slate + injuries this browser saw (`*_slate`, `*_inj`), refreshed from
+  ESPN a moment later, so the date line and tonight's bets don't pop in. Test harness idea: Chrome --headless=new +
+  CDP Page.startScreencast, with a normal user agent (ESPN doesn't answer HeadlessChrome).
 - First paint waits for the app to draw itself: `<link rel="expect" href="#sims-ready" blocking="render">` in the head and
   `<i id="sims-ready" hidden>` right AFTER the main script (keep it last in body), so a sport switch fades from one finished
   page to the next instead of showing a half-drawn one.
