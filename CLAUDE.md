@@ -67,6 +67,11 @@ See README.md for what the model does and how it was validated.
 - Tabs at EVERY width now (sections carry data-m): picks = ⚡ Bets (Pull all games hero + week cards, then My TD picks), game = 🏈 the open game (controls, markets; Price + Your card in the side column ≥1200px), bets = 📓 Bet log (slip + log; bankroll beside), more = ⋯ (model accuracy, team profiles, notes). The jump bar is hidden; goTo() switches to the section's tab.
 - The first tab is a big pull button (.hero) and the bets as cards (betCard(): name, market, price + book, Bet $, chance bar
   vs the price's chance, EV, an Open-on-<book> link). The internals (pulls, card rules, staking, log) did not change.
+- Name: PROP SIM (tab title, brand, front door; user 2026-10-19). Switching sports must feel seamless: links go STRAIGHT to
+  `<repo>/<repo>.html` — never the folder (its index.html is only a redirect for old links/bookmarks, and linking it
+  flashed a page between sports). Cross-document view transitions (`@view-transition`, the top bar held by
+  `view-transition-name`), a speculation-rules PREFETCH on hover (prefetch only — prerender would run the page's JS and
+  could spend odds credits), and `sims_chip` (the last pot boxes, shown instantly before the live render).
 
 ## The user
 - Bets FanDuel props, pastes boards in FanDuel's stacked format, builds cross-game parlays.
