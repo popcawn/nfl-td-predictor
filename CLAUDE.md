@@ -105,6 +105,11 @@ See README.md for what the model does and how it was validated.
   its rank in `rk`), so "log every edge, then ✂ Trim" and "paste everything, read the card" give the same answer.
   Card picks show "★ BET x.xu"; other +EV rows a neutral "edge" badge with the reason on hover (SKIPWHY). Background:
   the user read every green TAKE as "bet it" and logged 13 bets / 22.6u on one game.
+- ONE BET PER PLAYER PER STAT (2026-10-20, user: "the line got bet up but i rather not take the same stat for the same
+  player" — A.J. Brown rec yds under 70.5 logged, then under 71.5 at BetMGM showed as NEW): `heldSameStat(game, c)` —
+  a pending prop on the same player and stat (`statOf()` = 'P|recyd', any side or line) keeps that stat. It is off the
+  card's options and listed under "Left off" ("you already bet … — one bet per stat"), dropped from the ⚡ week list, and
+  logBetFrom() refuses it. TD markets (anytime / 1st / last / 2+) are each their own stat, as before.
 - Layout (sportsbook): `.book` grid = `.bmain` (Markets panel, teams, parlays, slip, log) + `.bslip` sticky sidebar
   (paste box + Your card) at ≥1200px. Markets = renderMarkets(): tabs MTAB ('all' = ★ Priced board, 'td', or a prop stat),
   two team columns (container query on .bmain), price boxes .mcell; decorateMarkets() recolours boxes from CANDS/CARD

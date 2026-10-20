@@ -1497,9 +1497,15 @@ function planFor(game){ const L=pendingFor(game).filter(b=>!b.offBoard); if(!L.l
   return pickPlays(L.map(b=>({key:b.key, label:b.player, abbr:teamOfKey(b.key), market:b.market, odds:b.odds, mp:b.modelProb, rk:betRank(b), bet:b}))); }
 function sugStake(c){ return Math.max(0.1, Math.round(KELLY_FRAC*(c.kelly||c.rk||0)*getBankroll()*10)/10); }
 // the one place a priced bet is written into the log (keeps its rank so the log can pick the best later)
+// a prop's stat without side or line ('P|recyd'); TD markets are their own stat
+function statOf(m){ return typeof m==='string'&&m.startsWith('P|') ? m.split('|').slice(0,2).join('|') : m; }
+// one bet per player per stat (user, 2026-10-20: "i rather not take the same stat for the same player"): once a prop is in
+// your log, the same player's stat at a new line (the line got bet up) or on the other side is never another bet
+function heldSameStat(game, c){ if(!isPropMkt(c.market)) return null;
+  return bets.find(b=>b.result==='pending' && b.game===game && b.key===c.key && b.market!==c.market && statOf(b.market)===statOf(c.market))||null; }
 function logBetFrom(c, stake, gameIn){
   const game=gameIn||curGameId();
-  if(bets.some(b=>b.game===game && b.key===c.key && b.market===c.market && b.result==='pending')) return false;
+  if(bets.some(b=>b.game===game && b.key===c.key && b.market===c.market && b.result==='pending') || heldSameStat(game, c)) return false;
   bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), ...koStamp(game), ...usdStamp(stake), ...(c.book?{book:c.book}:{}), game, key:c.key, player:c.label, market:c.market, odds:c.odds,
     modelProb:+(+c.mp).toFixed(4), ...(c.fun?{fun:true}:{}), ...(c.model!=null?{rawP:+(+c.model).toFixed(4)}:{}), ...(c.mkt!=null?{mktP:+(+c.mkt).toFixed(4)}:{}), rk:+(c.kelly!=null?c.kelly:(c.rk||0)).toFixed(5), cf:c.conf?c.conf.score:null, ...(c.prop?{pmu:+c.prop.mu.toFixed(3)}:{}),
     stake:+(+stake).toFixed(1), closeOdds:'', result:'pending'});
@@ -1534,7 +1540,7 @@ function gameOptions(){
     const beats=(a,b)=>{ const la=mine.has(a.key+'|'+a.market), lb=mine.has(b.key+'|'+b.market); return la!==lb ? la : a.ev>b.ev; };
     for(const c of cand){ delete c.dup; delete c.also; const g=side(c); if(g && (!best.has(g) || beats(c, best.get(g)))) best.set(g, c); }
     for(const c of cand){ const g=side(c), b=g&&best.get(g); if(b && b!==c){ c.dup={book:b.book, market:b.market, odds:b.odds, held:mine.has(b.key+'|'+b.market)}; (b.also=b.also||[]).push({book:c.book, market:c.market, odds:c.odds}); } } }   // plain summaries: no object cycles
-  const opts=cand.filter(c=>c.tier==='take'&&!c.dup).map(c=>Object.assign({}, c, {rk:c.kelly, bet:logged.find(b=>b.key===c.key&&b.market===c.market)||null}));
+  const opts=cand.filter(c=>c.tier==='take'&&!c.dup&&!heldSameStat(game, c)).map(c=>Object.assign({}, c, {rk:c.kelly, bet:logged.find(b=>b.key===c.key&&b.market===c.market)||null}));
   const offBoard=[];
   for(const b of logged){
     if(opts.some(o=>o.key===b.key&&o.market===b.market)) continue;
@@ -1545,6 +1551,7 @@ function gameOptions(){
   }
   const {picks, skipped}=pickPlays(opts);
   skipped.push(...offBoard);
+  for(const c of cand){ const h=c.tier==='take'&&!c.dup&&heldSameStat(game, c); if(h) skipped.push({c, why:`you already bet ${mktLabel(h.market)} ${h.odds} on him — one bet per stat`}); }
   for(const c of cand) if(c.dup && c.tier==='take') skipped.push({c, why:c.dup.held ? `you already hold this bet${c.dup.book?' at '+bookName(c.dup.book):''}: ${mktLabel(c.dup.market)} ${c.dup.odds}` : `the same bet is better at ${bookName(c.dup.book)||'the other line'}: ${mktLabel(c.dup.market)} ${c.dup.odds}`});
   return {cand, gone, logged, opts, picks, skipped};
 }
@@ -2878,7 +2885,7 @@ function renderWeek(){
   if(cost) cost.innerHTML=`≈ <b>${left.length*mk}</b> credits · ${left.length} game${left.length===1?'':'s'} × ${mk} market${mk===1?'':'s'}<br>a game pulled in the last hour is free${oddsRemaining!=null?`<br>${Number(oddsRemaining).toLocaleString()} credits left`:''}`;
   const tt=$('weekTitle'); if(tt) tt.textContent=left.length?`This week · ${left.length} game${left.length===1?'':'s'} left`:'No games left this week';
   if(!WEEK) return;
-  const age=Math.round((now-WEEK.at)/60e3), P=WEEK.picks.filter(c=>!c.kickoff||Date.parse(c.kickoff)>now);   // kicked-off games drop out
+  const age=Math.round((now-WEEK.at)/60e3), P=WEEK.picks.filter(c=>(!c.kickoff||Date.parse(c.kickoff)>now) && !heldSameStat(c.game, c));   // kicked-off games drop out; so does a stat you already bet
   const isNew=c=>!bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&b.market===c.market), NEW=P.filter(isNew), nNew=NEW.length, tot=NEW.reduce((a,c)=>a+c.stake,0);
   let h= !P.length ? cardStat('none','NO BETS THIS WEEK','nothing at your books clears the bar') : nNew ? cardStat('new',`🆕 ${nNew} NEW BET${nNew>1?'S':''}`, `${stakeTxt(tot)} · ${(tot/getBankroll()*100).toFixed(1)}% of bankroll${P.length-nNew?` · ${P.length-nNew} already in your log`:''}`) : cardStat('done','✅ NO NEW BETS',`${P.length>1?'all '+P.length+' are':'it\'s'} already in your log`);
   h+=`<div class="muted" style="font-size:13px;margin:-2px 0 8px">${WEEK.n} game${WEEK.n===1?'':'s'} checked ${age<1?'just now':age<60?age+' min ago':Math.round(age/60)+' h ago'}${age>60?' — <span style="color:var(--warn)">pull again for fresh prices</span>':''} · each game's bets are exactly what its card says · tap a bet to open its game</div>`;
