@@ -336,6 +336,8 @@
   .bacts .statussel,.bacts .ss{padding:9px 15px!important;font-size:14px;border-radius:11px}
   .bgame{display:flex;align-items:center;gap:10px;margin:18px 0 9px;font-size:12.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3)}
   .bgame:after{content:"";flex:1;height:1px;background:var(--line2)}
+  .bgame:after{order:1} .bgame .bgo{order:2;text-transform:none;letter-spacing:0;font-weight:600;display:flex;gap:6px;flex-wrap:wrap}
+  .bgame .bgo .statussel,.bgame .bgo .ss{font-size:13px;padding:5px 12px!important}
   .bcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px;margin-top:10px}
   .bgame+.bcards{margin-top:0}
   .bcard{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:13px 15px 12px 19px;box-shadow:var(--shadow);overflow:hidden;transition:transform .12s ease,border-color .12s ease}
@@ -2889,13 +2891,19 @@ function renderWeek(){
   const isNew=c=>!bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&b.market===c.market), NEW=P.filter(isNew), nNew=NEW.length, tot=NEW.reduce((a,c)=>a+c.stake,0);
   let h= !P.length ? cardStat('none','NO BETS THIS WEEK','nothing at your books clears the bar') : nNew ? cardStat('new',`🆕 ${nNew} NEW BET${nNew>1?'S':''}`, `${stakeTxt(tot)} · ${(tot/getBankroll()*100).toFixed(1)}% of bankroll${P.length-nNew?` · ${P.length-nNew} already in your log`:''}`) : cardStat('done','✅ NO NEW BETS',`${P.length>1?'all '+P.length+' are':'it\'s'} already in your log`);
   h+=`<div class="muted" style="font-size:13px;margin:-2px 0 8px">${WEEK.n} game${WEEK.n===1?'':'s'} checked ${age<1?'just now':age<60?age+' min ago':Math.round(age/60)+' h ago'}${age>60?' — <span style="color:var(--warn)">pull again for fresh prices</span>':''} · each game's bets are exactly what its card says · tap a bet to open its game</div>`;
-  if(nNew) h+=`<div class="bacts"><button class="statussel" id="weekLog">📓 Log the ${nNew} new</button>${fdButton(NEW.map(c=>({game:c.game, market:c.market, key:c.key, label:c.label, odds:c.odds, stake:c.stake})), n=>`Open ${n>1?'these '+n:'it'} on FanDuel`)}</div>`;
+  if(nNew) h+=`<div class="bacts"><button class="statussel" id="weekLog">📓 Log the ${nNew} new</button></div>`;
   // only new bets are drawn (user, 2026-10-21: "logged bets shouldnt be shown. Only new bets") — the log has the rest
-  const byG=new Map(); for(const c of NEW) (byG.get(c.game)||byG.set(c.game,[]).get(c.game)).push(c);
-  for(const [g,L] of byG){ h+=`<div class="bgame">${fmtGame(g)} · ${fmtKick(L[0].kickoff)}</div><div class="bcards">`+L.map(c=>{ const nw=true;
-      return betCard({nw, cls:'spick', attrs:`data-g="${esc(g)}" title="open this game"`, tc:teamColor(c.abbr), name:c.label, mkt:mktLabel(c.market), sub:esc(c.abbr), odds:c.odds, book:c.book, stake:c.stake,
+  // one grid per sportsbook (user, 2026-10-21: "doesnt need to stacked. or even seperated by game … if anything seperate
+  // by book"): each book's bets fill the rows under one button that opens them all there; each card names its game
+  const BOOKS=['fanduel','draftkings','betmgm','williamhill_us','fanatics'], ord=b=>{ const i=BOOKS.indexOf(b); return i<0?99:i; }, byB=new Map();
+  for(const c of NEW){ const b=c.book||'fanduel'; (byB.get(b)||byB.set(b,[]).get(b)).push(c); }
+  const leg=c=>({game:c.game, market:c.market, key:c.key, label:c.label, odds:c.odds, stake:c.stake});
+  const openAt=(b, legs, label)=>fdButton(legs, label, 'slip') || (BOOK_HOME[b]?`<a class="statussel fdbtn" href="${BOOK_HOME[b]}" target="_blank" rel="noopener" title="${esc(bookName(b))} gives no bet-slip link — find the bet there">🔎 Open ${esc(bookName(b))}</a>`:'');
+  for(const [b,L] of [...byB].sort((x,y)=>ord(x[0])-ord(y[0]))){ const st=L.reduce((a,c)=>a+c.stake,0);
+    h+=`<div class="bgame">${esc(bookName(b))} · ${L.length} bet${L.length>1?'s':''} · ${stakeTxt(st)}${L.length>1?`<span class="bgo">${openAt(b, L.map(leg), n=>`Open all ${n} on FanDuel`)}</span>`:''}</div><div class="bcards">`+L.map(c=>{ const g=c.game;
+      return betCard({nw:true, cls:'spick', attrs:`data-g="${esc(g)}" title="open this game"`, tc:teamColor(c.abbr), name:c.label, mkt:mktLabel(c.market), sub:`${esc(g.replace('@',' @ '))} · ${fmtKick(c.kickoff)}`, odds:c.odds, book:c.book, stake:c.stake,
         conf:c.conf?confBadge(c.conf):'', mp:c.mp, bimp:c.bimp, ev:c.ev, note:c.mkt==null?'<span style="color:var(--warn)">model only — no other book prices it</span>':'',
-        link:nw?fdButton([{game:c.game, market:c.market, key:c.key, label:c.label, odds:c.odds, stake:c.stake}], 'Open on FanDuel', 'slip'):''}); }).join('')+'</div>'; }
+        link:openAt(c.book, [leg(c)], 'Open on FanDuel')}); }).join('')+'</div>'; }
   if(WEEK.notes&&WEEK.notes.length) h+=`<div class="muted" style="font-size:12px;margin-top:10px">Skipped: ${WEEK.notes.map(esc).join(' · ')}</div>`;
   out.innerHTML=h;
   const wl=$('weekLog'); if(wl) wl.onclick=()=>{ let n=0; for(const c of NEW) if(logBetFrom(Object.assign({}, c), c.stake, c.game)) n++; if(n){ saveBets(); renderBets(); } renderWeek(); };
