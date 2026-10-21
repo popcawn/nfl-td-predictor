@@ -2242,7 +2242,9 @@ const unitUsd=()=>{ const n=bankNow(); return n!=null ? n/getBankroll() : null; 
 const fmtUsd=x=>{ const a=Math.abs(x); return (x<0?'−':'')+'$'+(a>=20?Math.round(a).toLocaleString():a>=1?(Math.round(a*2)/2).toFixed(Math.round(a*2)%2?2:0):a.toFixed(2)); };
 // a stake for display: dollars when a bankroll is set, units otherwise
 const stakeTxt=u=>{ const k=unitUsd(); return k!=null ? fmtUsd(u*k) : (Math.round(u*10)/10).toFixed(1)+'u'; };
-const betStakeTxt=b=>BANK.amt&&betUsd(b)!=null ? fmtUsd(betUsd(b)) : b.stake+'u';
+// a logged stake as it was bet: the usual $ format when it is a round amount, else to the cent (a hand-typed $2.37 stays $2.37)
+const exactUsd=x=>Math.abs(roundUsd(x)-x)<0.005 ? fmtUsd(x) : '$'+x.toFixed(2);
+const betStakeTxt=b=>BANK.amt&&betUsd(b)!=null ? exactUsd(+betUsd(b)) : b.stake+'u';
 // a stake in dollars exactly as the app shows it (whole $ from $20, half-dollars from $1, cents below) — what you actually bet,
 // so the log's P/L and "To win" match your book
 const roundUsd=x=>{ const a=Math.abs(x); return a>=20?Math.round(a):a>=1?Math.round(a*2)/2:Math.round(a*100)/100; };
@@ -3655,7 +3657,14 @@ $('maxGame').onchange=()=>{ try{ localStorage.setItem('nfltd_maxgame',$('maxGame
 $('simBtn').onclick=run;
 [['total','change'],['spread','change'],['favSel','change'],['outdoor','change'],['wind','change']].forEach(([id,ev])=> $(id).addEventListener(ev,maybeSim));
 loadSlip(); renderSlip();       // restore the cross-game slip from a previous visit
-loadBets(); for(const b of bets) if(/^line moved/.test(b.offBoard||'')) delete b.offBoard;   // moved lines are tracked as CLV now, not "off FanDuel"
+loadBets();
+// one-time (2026-10-21): bets logged before stakes were "logged as shown" kept the unrounded amount (the card said $2, the
+// log kept $1.97 — the user: "a 2 bet at +100 wins $2 not 1.97"). They bet what the card showed, so round those stakes to it;
+// P/L, To win and the pot then match the book. Each change is stamped so ☁ Sync carries it to the other devices.
+if(!lsJ('nfltd_usdround', false)){ const now=Date.now(); let n=0;
+  for(const b of bets) if(b.usd!=null && (b.book||b.legs||b.mktP!=null||b.rawP!=null||b.fun)){ const r=roundUsd(+b.usd); if(r!==+b.usd){ b.usd=r; b.mt=now; n++; } }
+  if(n) lsW('nfltd_bets', bets); lsW('nfltd_usdround', true); }
+for(const b of bets) if(/^line moved/.test(b.offBoard||'')) delete b.offBoard;   // moved lines are tracked as CLV now, not "off FanDuel"
 renderBets();       // restore the bet log + CLV history
 try{ renderWeek(); }catch(e){}
 renderSlate();   // last picks you built (marked stale after 45 min) — after the log + slip load, so it can mark players already bet
