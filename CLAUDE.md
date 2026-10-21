@@ -109,6 +109,8 @@ See README.md for what the model does and how it was validated.
 - PARLAYS: FANDUEL / DRAFTKINGS ONLY (user, 2026-10-21: "betmgm is weird with their parlay rules … straight bets are ok to be
   used from betmgm. im only referring to parlay picks"): PARLAY_BOOKS / parlayBooks() in parlayAt() — the parlay picker and the
   TD picks' parlay of the day. Straight bets (TD and props) still use every one of your books, BetMGM included.
+- Bet log tables FIT their column — no sideways scroll bar (user, 2026-10-21: "remove the scroll bar"): table.logtbl lets the bet
+  and the close / CLV cell wrap (odds, stake, result, P/L stay on one line). Don't put white-space:nowrap back on those cells.
 
 ## The user
 - Bets FanDuel props, pastes boards in FanDuel's stacked format, builds cross-game parlays.

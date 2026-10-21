@@ -365,6 +365,9 @@
   .bcwhy b{font-family:var(--mono);font-weight:600;color:var(--ink2)}
   .bcwhy b.ev-pos{color:var(--good)}
   .bclink{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  /* the bet log fits its column — no sideways scroll bar (user, 2026-10-21): the bet and the close / CLV text wrap */
+  table.logtbl td{white-space:normal} table.logtbl td.l{min-width:170px}
+  table.logtbl td.odds,table.logtbl td:nth-last-child(-n+4){white-space:nowrap}
   .bclink .statussel,.bclink .ss{font-size:13px;padding:5px 11px!important}
   .unlog:hover{color:var(--bad)!important;border-color:var(--bad)!important;font-size:0!important} .unlog:hover::after{content:"✕ remove";font-size:12px}
   .bclink .bskip{color:var(--ink3)} .bclink .bskip:hover{color:var(--bad);border-color:var(--bad)}
@@ -3124,7 +3127,7 @@ function renderBets(){
       const open=LOGOPEN.has(key)?LOGOPEN.get(key):false;   // games start collapsed (user, 2026-10-16)
       html+=`<details class="gamegrp" data-k="${esc(key)}"${open?' open':''}><summary><b>${grp.gm?fmtGame(grp.gm):'Parlays &amp; custom bets'}</b> <span class="muted">· ${ga.n} bet${ga.n>1?'s':''}${ga.open?` · ${ga.open} open`:''}${ga.w+ga.l?` · ${rec(ga)}`:''}</span>`+
         `${ga.w+ga.l?` <b class="${g(ga.net)}">${mny(ga.net)}</b>`:''}</summary><div class="grpbody">`;
-      html+=`<div style="overflow-x:auto"><table style="margin-top:0"><thead><tr>${head}</tr></thead><tbody>`;
+      html+=`<div style="overflow-x:auto"><table class="logtbl" style="margin-top:0"><thead><tr>${head}</tr></thead><tbody>`;
       grp.rs.forEach(({b,dec,clv,live,pl})=>{ const P=planOf.get(b.id), lh=leadH(b), mine=isPropMkt(b.market)?+b.market.split('|')[3]:null;
         const moved=mine!=null && b.cur && b.cur.l!=null && b.cur.l!==mine, arrow=moved?(b.cur.l<mine?'▼':'▲')+b.cur.l+' ':'';
         const tags=[ b.fun?'<span title="a fun pick">🎉</span>':'',
@@ -3139,7 +3142,7 @@ function renderBets(){
           : moved ? ` <span style="font-size:12px" title="FanDuel moved the line to ${b.cur.l} (${esc(b.cur.o||'')})">${arrowH}</span>` : '';
         html+=`<tr${P&&P.keep?' class="rowtake"':''}><td class="l"><b${b.modelProb!=null?` title="chance when logged: ${pct(b.modelProb)}"`:''}>${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)}</span> ${tags}</td>`+
           `<td class="odds">${esc(b.odds)}${b.book&&myBooks().length>1?bkBadge(b.book):''}</td>`+
-          `<td style="white-space:nowrap"><input class="bookin betclose" data-id="${b.id}" value="${(b.closeOdds||'').replace(/"/g,'&quot;')}" placeholder="close" style="width:62px">${clvTxt}</td>`+
+          `<td><input class="bookin betclose" data-id="${b.id}" value="${(b.closeOdds||'').replace(/"/g,'&quot;')}" placeholder="close" style="width:62px">${clvTxt}</td>`+
           `<td title="${b.stake}u">${betStakeTxt(b)}</td>`+
           `<td style="white-space:nowrap"><select class="statussel betres" data-id="${b.id}">${['pending','win','loss','push'].map(s=>`<option ${s===b.result?'selected':''}>${s}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc('auto-settled from ESPN: '+b.auto)}">🤖</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
           `<td class="${pl!=null?g(pl):''}">${pl==null?'—':usdOn?mny(pl):sgn(pl.toFixed(2))}</td>`+
