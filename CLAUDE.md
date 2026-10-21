@@ -106,6 +106,10 @@ See README.md for what the model does and how it was validated.
 - NO CAPS (user, 2026-10-21: "no cap" → "no cap on nhl or nba either"): no week cap on ⚡ Pull all games and no day cap on
   the TD picks (SLATE_CAP removed). Bets are still sized one by one (¼ Kelly, MAX_PER_TEAM, 4% team cap); the TD-picks
   parlay stays ≤ 1%. Don't re-add a total cap unless the user asks.
+- TD BETS + PARLAYS: FANDUEL / DRAFTKINGS ONLY (user, 2026-10-21: "use fanduel or draftkings for td bets. betmgm is weird with their
+  parlay rules"): TD_BOOKS / tdBooks(). parseOdds keeps TD prices only from FD/DK (other books still feed the consensus), a saved
+  TD price from another book is "gone" until a re-pull, the TD picks choose between FD and DK, and parlayAt() prices parlays
+  only there. Props may still be bet at BetMGM / Caesars / Fanatics as singles.
 
 ## The user
 - Bets FanDuel props, pastes boards in FanDuel's stacked format, builds cross-game parlays.
