@@ -2668,7 +2668,7 @@ async function autoLiveCloses(){
 // per game, reused if pulled in the last 20 min), the SAME simulation as the game view (simGame) and the SAME picking
 // rule as Your card (pickPlays). Then only the best few across all games are kept, with a day-wide stake cap, and the
 // slip optimizer picks one parlay from them. Built for "too many options": the answer is a short list, not a table.
-const SLATE_CAP=0.15, SLATE_PARLAY=0.01;   // a whole day (singles + the parlay) stakes at most 15% of bankroll; the parlay at most 1%
+const SLATE_PARLAY=0.01;   // the parlay stakes at most 1% of bankroll. No day cap on the singles (user, 2026-10-21: "no cap").
 const slateParlayStake=(P,bank)=>Math.max(0.1, Math.round(Math.min(0.25*kellyFrac(P.P,P.D), SLATE_PARLAY)*bank*10)/10);   // it rides on the same legs as the singles
 // 🎉 FUN PICKS — TD bets for fun, when you'd bet them anyway. On 2025's real prices (every FanDuel anytime price, players
 // who played, market-backtest data): +100..+400 lost ~5% (wks 1-9 -1/-2%, 10-18 -9/-8%), +400..+1500 ~20% in BOTH halves,
@@ -2743,22 +2743,28 @@ async function buildSlate(){
      !confirm(`This uses ${cost} The Odds API credit${cost>1?'s':''} (1 per game). You have ${oddsRemaining} left and your reserve is ${ODDSCFG.reserve}. Go ahead?`)) return;
   btn.disabled=true; out.innerHTML=`<span class="muted">Checking ${games.length} game${games.length>1?'s':''} — injuries, lines, weather, FanDuel prices…</span>`;
   try{
-    const injMap=await slateInjuries(), all=[], notes=[], fun=[], funGames={};
+    const injMap=await slateInjuries(), perGame=[], notes=[], fun=[], funGames={};
     for(const g of games){ const r=await slateGame(g, injMap); if(r.note){ notes.push(r.note); continue; }
       funGames[g.away+'@'+g.home]=Date.now(); fun.push(...r.fun);
-      all.push(...pickPlays(r.cands).picks); }   // per game: same rule as Your card
+      perGame.push(r.cands); }
     try{ localStorage.setItem(BOARD_KEY, JSON.stringify(BOARDS)); }catch(e){}
     lsW('nfltd_slatepx', SLATEPX);
-    all.sort((a,b)=>b.rk-a.rk);
-    const picks=all.slice(0,nPick), bank=getBankroll();
+    // ONE book for the whole list (user, 2026-10-21: "this selection of bets should all come from one book … decide which
+    // book based on best prices"): every candidate is re-priced at each of your books, the same rule as Your card picks
+    // each game's bets there, and the book whose best N add up to the most (confidence-adjusted Kelly) wins
+    const atBook=(c,B)=>{ const t=c.fd&&(c.fd.b===B?c.fd:(c.fd.alt&&c.fd.alt[B])); if(!t||!t.o) return null; const r=evalBet(c.mp, t.o);
+      if(!r||tierOf(c.mp,r.edge,r.ev,false)!=='take') return null; const k=r.edge>0?c.conf.score*r.edge/(1-r.bimp):0;
+      return Object.assign({}, c, {odds:t.o, book:B, fd:Object.assign({}, t, c.fd.alt?{alt:c.fd.alt}:{}), ev:r.ev, edge:r.edge, bimp:r.bimp, kelly:k, rk:k}); };
+    let top=null;
+    for(const B of myBooks()){ const all=[]; for(const C of perGame) all.push(...pickPlays(C.map(c=>atBook(c,B)).filter(Boolean)).picks);   // per game: same rule as Your card
+      all.sort((a,b)=>b.rk-a.rk); const P=all.slice(0,nPick), score=P.reduce((a,c)=>a+c.rk,0); if(P.length&&(!top||score>top.score)) top={B, picks:P, score}; }
+    const picks=top?top.picks:[], bank=getBankroll();
     const legs=picks.map(c=>({game:c.game, key:c.key, name:c.label, abbr:c.abbr, market:'anytime', mp:+c.mp.toFixed(4), odds:c.odds, conf:c.conf, ctx:'', kickoff:c.kickoff, ...(c.fd?{fd:c.fd}:{})}));
     const {best}=bestParlay(legs.map(legView));
-    const room=SLATE_CAP*bank-(best?slateParlayStake(best,bank):0), tot=picks.reduce((a,c)=>a+c.stake,0);
-    if(tot>room) picks.forEach(c=>{ c.stake=Math.floor(c.stake*room/tot*10)/10; });   // floor: the whole day never tops the cap
     // fun options from games a fun filter priced earlier (not re-checked by this build) stay until kickoff
     for(const c of ((SLATE&&SLATE.funPool)||[])) if(!funGames[c.game] && Date.parse(c.kickoff)>now) fun.push(c);
     for(const [gid,t] of Object.entries((SLATE&&SLATE.funGames)||{})) if(!funGames[gid] && SCHED.some(g=>g.away+'@'+g.home===gid && Date.parse(g.kickoff)>now)) funGames[gid]=t;
-    SLATE={at:Date.now(), day:games[0].kickoff, checked:games.length, notes, funPool:fun.map(funSlim), funGames, fun:null,
+    SLATE={at:Date.now(), day:games[0].kickoff, checked:games.length, notes, book:top?top.B:null, funPool:fun.map(funSlim), funGames, fun:null,
       picks:picks.map(({key,label,abbr,market,odds,book,mp,model,mkt,mktSrc,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev,fd})=>({key,label,abbr,market,odds,book,mp,model,mkt,mktSrc,bimp,conf,stake,game,kickoff,kelly,rk,edge,ev,fd})),
       parlay:best?{legs:best.legs.map(v=>v.l), P:best.P, D:best.D}:null};
     SLATE.fun=pickFun(SLATE.funPool, nPick, realKeysOf(SLATE));
@@ -2949,12 +2955,12 @@ function renderSlate(){
       : cardStat('done', '✅ NO NEW BETS', `${n>1?'all '+n+' picks are':'the pick is'} already in your log`); }
   if(!SLATE.picks.length) html+=`<div><b>No TD bets worth making</b> across the ${SLATE.checked} game${SLATE.checked>1?'s':''} checked — your books' best prices are at or below what the other books say they're worth. Sitting it out is a win too.${stale}</div>`;
   else {
-    html+=`<div style="font-size:13px;margin-bottom:4px"><b>Your ${SLATE.picks.length} TD bet${SLATE.picks.length>1?'s':''} for ${dayName}</b> <span class="muted">— the best of ${SLATE.checked} game${SLATE.checked>1?'s':''}, best price at ${myBooksTxt()}, from ${when}</span>${stale}</div>`;
+    html+=`<div style="font-size:13px;margin-bottom:4px"><b>Your ${SLATE.picks.length} TD bet${SLATE.picks.length>1?'s':''} for ${dayName}</b> <span class="muted">— the best of ${SLATE.checked} game${SLATE.checked>1?'s':''}, ${SLATE.book?`all at <b>${esc(bookName(SLATE.book))}</b> (the book with the best prices for these)`:'best price at '+myBooksTxt()}, from ${when}</span>${stale}</div>`;
     SLATE.picks.forEach((c,i)=>{ html+=`<div class="cpick spick" data-g="${esc(c.game)}" title="open this game"><div class="cp1"><span class="${i===0?'star':'muted'}" style="min-width:18px;font-weight:800">${i===0?'★':(i+1)+'.'}</span>`+
       `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="muted" style="font-size:12px">${fmtGame(c.game)}</span>${stakeBadge(c,' vb-take')}</div>`+
       `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span>${bkBadge(c.book)} ${confBadge(c.conf)} <span class="muted" style="font-size:12px">${c.mkt!=null?(c.mktSrc==='fd'?'own ':'mkt ')+pct(c.mkt)+' · model '+pct(c.model)+' → ':'<span style="color:var(--warn)">model only</span> · '}${pct(c.mp)} vs ${pct(c.bimp)}</span></div></div>`; });
     const tot=SLATE.picks.reduce((a,c)=>a+c.stake,0)+(P?slateParlayStake(P,bank):0);
-    html+=`<div class="muted" style="font-size:12px;margin-top:5px">Whole day <b>${u(tot)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll, parlay included — capped at ${SLATE_CAP*100}%)</div>`;
+    html+=`<div class="muted" style="font-size:12px;margin-top:5px">Whole day <b>${u(tot)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll, parlay included)</div>`;
     if(P){ const stake=slateParlayStake(P,bank);
       html+=`<div style="margin-top:9px;padding:9px 11px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px">`+
         `<b>🎰 Parlay of the day</b> <span class="muted" style="font-size:12px">— ${P.legs.length} legs, different games · <b>the same players as the bets above</b> (it adds to them, it isn't new players)</span><div style="margin-top:3px">${P.legs.map(l=>`<b style="color:${teamText(l.abbr)}">${esc(l.name)}</b>`).join(' + ')}</div>`+

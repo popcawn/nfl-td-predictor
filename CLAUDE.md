@@ -100,6 +100,12 @@ See README.md for what the model does and how it was validated.
   "k is not defined". Put notes on their own line above.
 - Priced list: the ✓ on a logged bet takes it back OUT of the log (user, 2026-10-21: "i cant remove a logged bet") — hover
   reads "✕ remove", a confirm names the bet, then it is deleted like the bet log's ✕ (a sync tombstone, so other devices drop it).
+- 🎯 TD picks at ONE book (user, 2026-10-21: "this selection of bets should all come from one book … decide which book based
+  on best prices"): buildSlate re-prices every candidate at each of your books (the ticket's alt map), runs pickPlays per game
+  there, and keeps the book whose best N add up to the most conf-adjusted Kelly (SLATE.book; header "all at <book>").
+- NO CAPS (user, 2026-10-21: "no cap" → "no cap on nhl or nba either"): no week cap on ⚡ Pull all games and no day cap on
+  the TD picks (SLATE_CAP removed). Bets are still sized one by one (¼ Kelly, MAX_PER_TEAM, 4% team cap); the TD-picks
+  parlay stays ≤ 1%. Don't re-add a total cap unless the user asks.
 
 ## The user
 - Bets FanDuel props, pastes boards in FanDuel's stacked format, builds cross-game parlays.
