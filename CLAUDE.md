@@ -95,6 +95,9 @@ See README.md for what the model does and how it was validated.
   game|player|stat, kept 4 days NBA/NHL, 8 NFL) — the bet stays hidden through re-pulls; "↩ Bring back" under the list undoes
   it. floorPrice() = the worst price that still passes the card's rule (EV > 3%; NBA/NHL also 1.5 points of edge), shown
   as "bet at +110 or better" so the user can compare with the slip. NFL: Your card on the game tab ignores skips.
+- GOTCHA (2026-10-21): many functions here are ONE line. Never add a // comment in the middle of a line — everything after it
+  is commented out. A note added after logBet's first check hid `const k=unitUsd();` and every 📓 log button threw
+  "k is not defined". Put notes on their own line above.
 
 ## The user
 - Bets FanDuel props, pastes boards in FanDuel's stacked format, builds cross-game parlays.
