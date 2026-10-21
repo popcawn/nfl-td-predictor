@@ -1534,7 +1534,7 @@ function gameOptions(){
       add({key:'DST|'+abbr, label:S.teams[abbr].short+' Defense', abbr, market:m, odds, book:bookOfTk(tkFor(curGameId(), m, 'DST|'+abbr, odds)), mp:d[m], mpRaw:d[m], prior:false, role:'defense (pick-6 / fumble return)', cal:1, ref:{dst:true}}); }
   for(const c of propCandidates()){ const e=propEval(c); if(e) cand.push(e); }   // player props (own confidence + verdict rules)
   // a saved price from a book you've since dropped (BetRivers, 2026-10-16) isn't yours to bet: off the card until a re-pull
-  const myB=myBooks(), gone=[]; for(let i=cand.length-1;i>=0;i--){ const b=cand[i].book; if(b && (!myB.includes(b) || (!isPropMkt(cand[i].market) && !TD_BOOKS.includes(b)))){ gone.push(cand[i]); cand.splice(i,1); } }
+  const myB=myBooks(), gone=[]; for(let i=cand.length-1;i>=0;i--){ const b=cand[i].book; if(b && !myB.includes(b)){ gone.push(cand[i]); cand.splice(i,1); } }
 
   // this game's options = every price you pasted + whatever is already in your log for it — the same rule
   // then picks the best, so logging as you go and pasting everything first end in the same answer
@@ -1898,8 +1898,8 @@ function fdButton(legs, label, mode){
 // a PARLAY has to live at one book: the one of yours that prices every leg and pays the most for the combination
 function parlayAt(legs){
   const tks=legs.map(legSel); if(!tks.length || tks.some(t=>!t)) return null; let best=null;
-  // parlays: FanDuel / DraftKings only (TD_BOOKS)
-  for(const b of tdBooks()){ const ts=tks.map(t=>bookOfTk(t)===b ? t : (t.alt&&t.alt[b])||null); if(ts.some(t=>!t||!t.o)) continue;
+  // parlays: FanDuel / DraftKings only (PARLAY_BOOKS)
+  for(const b of parlayBooks()){ const ts=tks.map(t=>bookOfTk(t)===b ? t : (t.alt&&t.alt[b])||null); if(ts.some(t=>!t||!t.o)) continue;
     const D=ts.reduce((a,t)=>a*(oddsDec(t.o)||1),1); if(!best||D>best.D) best={book:b, D, tks:ts}; }
   return best; }
 // the parlay's button + what it really pays at that book (D0 = the product of each leg's best price, which may mix books)
@@ -2304,9 +2304,9 @@ async function fetchGameOdds(away, home, markets, mustBeUpcoming){ await opened(
 const tkOf=(b,o)=>{ const t={b, o:fmtAm(o.price)}; if(b==='fanduel'){ const f=fdSelOf(o); if(f){ t.m=f.m; t.s=f.s; } } else if(o.sid) t.s=String(o.sid);
   if(b==='betmgm'){ const g=/[?&]options=([^&]+)/.exec(o.link||''); if(g) t.g=decodeURIComponent(g[1]); }   // "6:43628-3969167-6360732"
   return t; };
-// TD bets and parlays only at FanDuel / DraftKings (user, 2026-10-21: "use fanduel or draftkings for td bets. betmgm is weird
-// with their parlay rules"): TD prices from your other books still count as the market, but are never a bet
-const TD_BOOKS=['fanduel','draftkings'], tdBooks=()=>myBooks().filter(b=>TD_BOOKS.includes(b));
+// parlays only at FanDuel / DraftKings (user, 2026-10-21: "betmgm is weird with their parlay rules … straight bets are ok to be
+// used from betmgm. im only referring to parlay picks"): single bets still use every one of your books
+const PARLAY_BOOKS=['fanduel','draftkings'], parlayBooks=()=>myBooks().filter(b=>PARLAY_BOOKS.includes(b));
 function parseOdds(j){
   const mine=myBooks(), bks=mine.map(k=>(j.bookmakers||[]).find(b=>b.key===k)).filter(Boolean);
   const out={td:{}, props:{}, propsX:{}, byBook:{}, cons:consensusFrom(j.bookmakers||[]), books:(j.bookmakers||[]).map(b=>b.key), mine:bks.map(b=>b.key)};
@@ -2325,7 +2325,7 @@ function parseOdds(j){
   // TD: your best price (a higher American number always pays more; ties go to the book listed first). The ticket also
   // remembers your other books' prices (alt) so a parlay can be priced at one book.
   const withAlt=arr=>Object.assign({}, arr[0].tk, arr.length>1?{alt:Object.fromEntries(arr.map(x=>[x.b, x.tk]))}:{});
-  for(const [mk,N] of Object.entries(tdAll)) for(const [name,all] of Object.entries(N)){ const arr=all.filter(x=>TD_BOOKS.includes(x.b)); if(!arr.length) continue; arr.sort((x,y)=>(y.price-x.price)||(rank(x)-rank(y)));
+  for(const [mk,N] of Object.entries(tdAll)) for(const [name,arr] of Object.entries(N)){ arr.sort((x,y)=>(y.price-x.price)||(rank(x)-rank(y)));
     (out.td[mk]=out.td[mk]||[]).push({name, price:arr[0].price, fd:withAlt(arr)}); }
   // props: each book's main line = its most balanced over/under. The box shows FanDuel's line when it lists the player
   // (else your first book that does) with your best price per side AT THAT LINE; a book with a different line becomes
@@ -2760,7 +2760,7 @@ async function buildSlate(){
       if(!r||tierOf(c.mp,r.edge,r.ev,false)!=='take') return null; const k=r.edge>0?c.conf.score*r.edge/(1-r.bimp):0;
       return Object.assign({}, c, {odds:t.o, book:B, fd:Object.assign({}, t, c.fd.alt?{alt:c.fd.alt}:{}), ev:r.ev, edge:r.edge, bimp:r.bimp, kelly:k, rk:k}); };
     let top=null;
-    for(const B of tdBooks()){ const all=[]; for(const C of perGame) all.push(...pickPlays(C.map(c=>atBook(c,B)).filter(Boolean)).picks);   // per game: same rule as Your card
+    for(const B of myBooks()){ const all=[]; for(const C of perGame) all.push(...pickPlays(C.map(c=>atBook(c,B)).filter(Boolean)).picks);   // per game: same rule as Your card
       all.sort((a,b)=>b.rk-a.rk); const P=all.slice(0,nPick), score=P.reduce((a,c)=>a+c.rk,0); if(P.length&&(!top||score>top.score)) top={B, picks:P, score}; }
     const picks=top?top.picks:[], bank=getBankroll();
     const legs=picks.map(c=>({game:c.game, key:c.key, name:c.label, abbr:c.abbr, market:'anytime', mp:+c.mp.toFixed(4), odds:c.odds, conf:c.conf, ctx:'', kickoff:c.kickoff, ...(c.fd?{fd:c.fd}:{})}));
