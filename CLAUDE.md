@@ -98,6 +98,8 @@ See README.md for what the model does and how it was validated.
 - GOTCHA (2026-10-21): many functions here are ONE line. Never add a // comment in the middle of a line — everything after it
   is commented out. A note added after logBet's first check hid `const k=unitUsd();` and every 📓 log button threw
   "k is not defined". Put notes on their own line above.
+- Priced list: the ✓ on a logged bet takes it back OUT of the log (user, 2026-10-21: "i cant remove a logged bet") — hover
+  reads "✕ remove", a confirm names the bet, then it is deleted like the bet log's ✕ (a sync tombstone, so other devices drop it).
 
 ## The user
 - Bets FanDuel props, pastes boards in FanDuel's stacked format, builds cross-game parlays.

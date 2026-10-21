@@ -366,6 +366,7 @@
   .bcwhy b.ev-pos{color:var(--good)}
   .bclink{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
   .bclink .statussel,.bclink .ss{font-size:13px;padding:5px 11px!important}
+  .unlog:hover{color:var(--bad)!important;border-color:var(--bad)!important;font-size:0!important} .unlog:hover::after{content:"✕ remove";font-size:12px}
   .bclink .bskip{color:var(--ink3)} .bclink .bskip:hover{color:var(--bad);border-color:var(--bad)}
   .bcfloor{margin-left:auto;font-size:12.5px;color:var(--ink3);white-space:nowrap} .bcfloor b{font-family:var(--mono);color:var(--ink2)}
   .skipnote{margin-top:14px;font-size:13px;color:var(--ink3);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -1637,7 +1638,7 @@ function renderBoard(){
       `<td class="${c.ev>0&&c.tier==='take'?'ev-pos':c.ev>0?'ev-dart':'ev-neg'}">${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}%</td>`+
       `<td class="confcol">${confBadge(c.conf)}</td>`+
       `<td class="verdict">${verdict}</td>`+
-      `<td style="white-space:nowrap"><button class="statussel" data-act="log" data-i="${i}" title="${isLogged?'already in your bet log':'log this bet'}" style="padding:1px 7px${isLogged?';color:var(--good)':''}" ${isLogged?'disabled':''}>${isLogged?'✓':'📓'}</button> <button class="statussel" data-act="slip" data-i="${i}" title="add to the cross-game slip" style="padding:1px 7px">➕</button></td></tr>`; }).join('');
+      `<td style="white-space:nowrap"><button class="statussel${isLogged?' unlog':''}" data-act="${isLogged?'unlog':'log'}" data-i="${i}" title="${isLogged?'in your bet log — click to take it out':'log this bet'}" style="padding:1px 7px${isLogged?';color:var(--good)':''}">${isLogged?'✓':'📓'}</button> <button class="statussel" data-act="slip" data-i="${i}" title="add to the cross-game slip" style="padding:1px 7px">➕</button></td></tr>`; }).join('');
 }
 // star the card's picks in the table so both views agree
 const betBadge=c=>`<span class="vbadge vb-take" title="${esc('On Your card: bet '+mktLabel(c.market)+' '+c.odds+' for '+stakeTxt(c.stake))}">★ BET ${stakeTxt(c.stake)}</span>`;
@@ -3532,6 +3533,8 @@ $('boardPass').onchange=renderBoard;
 $('cardBody').addEventListener('click', e=>{ if(e.target.closest('.seeall')) setMTab('all'); });
 $('boardBody').addEventListener('click', e=>{ const b=e.target.closest('button[data-act]'); if(!b) return; const c=BOARDROWS[+b.dataset.i]; if(!c) return;
   if(b.dataset.act==='log'){ const pick=CARD.find(p=>p.key===c.key&&p.market===c.market); if(logBetFrom(c, pick?pick.stake:sugStake(c))){ saveBets(); renderBets(); } }
+  else if(b.dataset.act==='unlog'){ const g=curGameId(), x=bets.find(y=>y.result==='pending'&&y.game===g&&y.key===c.key&&y.market===c.market);
+    if(x && confirm(`Take ${x.player} ${mktLabel(x.market)} ${x.odds} out of your bet log?`)){ bets=bets.filter(y=>y!==x); saveBets(); renderBets(); } }
   else { const ok=addLeg({key:c.key, name:c.label, abbr:c.abbr, mp:c.mp, odds:c.odds, ref:c.ref||{dst:true}, conf:c.conf}, c.market); b.textContent=ok?'✓':'in slip'; } });
 $('boardLogAll').onclick=()=>{ if(!LAST) return; let n=0;
   for(const c of CANDS) if(c.tier==='take'){ const pick=CARD.find(p=>p.key===c.key&&p.market===c.market); if(logBetFrom(c, pick?pick.stake:sugStake(c))) n++; }
