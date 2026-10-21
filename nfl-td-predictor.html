@@ -366,6 +366,9 @@
   .bcwhy b.ev-pos{color:var(--good)}
   .bclink{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
   .bclink .statussel,.bclink .ss{font-size:13px;padding:5px 11px!important}
+  .bclink .bskip{color:var(--ink3)} .bclink .bskip:hover{color:var(--bad);border-color:var(--bad)}
+  .bcfloor{margin-left:auto;font-size:12.5px;color:var(--ink3);white-space:nowrap} .bcfloor b{font-family:var(--mono);color:var(--ink2)}
+  .skipnote{margin-top:14px;font-size:13px;color:var(--ink3);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   @media(max-width:760px){
     .topin{gap:8px;padding:8px 12px}
     .brand{font-size:17px} .brand i{width:22px;height:22px}
@@ -749,7 +752,7 @@ function betCard(o){ const w=x=>Math.max(0,Math.min(100,x*100)).toFixed(1);
     (o.mp!=null&&o.bimp!=null?`<div class="bcbar" title="bar = its chance (${pct(o.mp)}) · line = the chance the price pays for (${pct(o.bimp)})"><i style="width:${w(o.mp)}%"></i><u style="left:${w(o.bimp)}%"></u></div>`+
       `<div class="bcwhy"><span>chance <b>${pct(o.mp)}</b> · price <b>${pct(o.bimp)}</b></span>${o.ev!=null?`<span>EV <b class="${o.ev>0?'ev-pos':''}">${o.ev>=0?'+':''}${(o.ev*100).toFixed(1)}%</b></span>`:''}</div>`:'')+
     (o.note?`<div class="bcwhy">${o.note}</div>`:'')+
-    (o.link?`<div class="bclink">${o.link}</div>`:'')+'</article>'; }
+    (o.link||o.extra?`<div class="bclink">${o.link||''}${o.extra||''}</div>`:'')+'</article>'; }
 function logo(abbr){ const t=S.teams[abbr]; return t&&t.logo?t.logo:''; }
 // the model switches the backtest validated (shipped by the build) — the app applies exactly these
 const M = C.MODEL || {};
@@ -2881,13 +2884,26 @@ async function pullAllGames(){
   picks.sort((a,b)=>(Date.parse(a.kickoff)-Date.parse(b.kickoff)) || (b.stake-a.stake));
   WEEK={at:Date.now(), n:games.length, picks, notes}; lsW('nfltd_week', WEEK); renderWeek();
 }
+// the worst price that still makes this a bet by the card's own rule (EV above 3%) — check it against the price in the
+// slip: if the slip is worse, skip the bet (user, 2026-10-21: FanDuel showed +104 for a +114 card bet)
+const MIN_EDGE=0;
+function floorPrice(p, minEdge){ if(!(p>minEdge&&p<1)) return null; const d=Math.max(1.03/p, minEdge?1/(p-minEdge):0)+1e-9;
+  return d>=2 ? '+'+Math.ceil((d-1)*100) : '-'+Math.floor(100/(d-1)); }
+const floorTxt=c=>{ const f=floorPrice(c.mp, MIN_EDGE); return f?`<span class="bcfloor" title="still a bet down to this price — if the slip shows a worse price, skip it">bet at <b>${f}</b> or better</span>`:''; };
+// ✕ Skip (user, 2026-10-21: "should it be a removed button … when i recheck for bets it doesnt pop up again"): a bet you pass
+// on stays out of this list for that game — through re-pulls — keyed game + player + stat like the one-bet-per-stat rule;
+// "↩ Bring back" undoes it. Kept 8 days. (Your card on the game tab still shows the whole game.)
+let SKIP=(o=>{ const old=Date.now()-8*864e5; for(const k of Object.keys(o)) if(!(o[k]>old)) delete o[k]; return o; })(lsJ('nfltd_skip', {})||{});
+const skipKey=(game,c)=>game+'|'+c.key+'|'+statOf(c.market);
+const skipBtn=(game,c)=>`<button class="statussel bskip" data-skip="${esc(skipKey(game,c))}" title="hide this bet — it stays hidden when you pull again">✕ Skip</button>`;
+const weekSkips=()=>Object.keys(SKIP).filter(k=>SCHED.some(g=>g.away+'@'+g.home===k.split('|')[0]&&Date.parse(g.kickoff)>Date.now()));
 function renderWeek(){
   const out=$('weekBody'), cost=$('weekCost'); if(!out) return;
   const now=Date.now(), left=SCHED.filter(g=>Date.parse(g.kickoff)>now), mk=pickedMarkets().length;
   if(cost) cost.innerHTML=`≈ <b>${left.length*mk}</b> credits · ${left.length} game${left.length===1?'':'s'} × ${mk} market${mk===1?'':'s'}<br>a game pulled in the last hour is free${oddsRemaining!=null?`<br>${Number(oddsRemaining).toLocaleString()} credits left`:''}`;
   const tt=$('weekTitle'); if(tt) tt.textContent=left.length?`This week · ${left.length} game${left.length===1?'':'s'} left`:'No games left this week';
   if(!WEEK) return;
-  const age=Math.round((now-WEEK.at)/60e3), P=WEEK.picks.filter(c=>(!c.kickoff||Date.parse(c.kickoff)>now) && !heldSameStat(c.game, c));   // kicked-off games drop out; so does a stat you already bet
+  const age=Math.round((now-WEEK.at)/60e3), P=WEEK.picks.filter(c=>(!c.kickoff||Date.parse(c.kickoff)>now) && !heldSameStat(c.game, c) && !SKIP[skipKey(c.game, c)]);   // kicked-off games drop out; so does a stat you already bet
   const isNew=c=>!bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&b.market===c.market), NEW=P.filter(isNew), nNew=NEW.length, tot=NEW.reduce((a,c)=>a+c.stake,0);
   let h= !P.length ? cardStat('none','NO BETS THIS WEEK','nothing at your books clears the bar') : nNew ? cardStat('new',`🆕 ${nNew} NEW BET${nNew>1?'S':''}`, `${stakeTxt(tot)} · ${(tot/getBankroll()*100).toFixed(1)}% of bankroll${P.length-nNew?` · ${P.length-nNew} already in your log`:''}`) : cardStat('done','✅ NO NEW BETS',`${P.length>1?'all '+P.length+' are':'it\'s'} already in your log`);
   h+=`<div class="muted" style="font-size:13px;margin:-2px 0 8px">${WEEK.n} game${WEEK.n===1?'':'s'} checked ${age<1?'just now':age<60?age+' min ago':Math.round(age/60)+' h ago'}${age>60?' — <span style="color:var(--warn)">pull again for fresh prices</span>':''} · each game's bets are exactly what its card says · tap a bet to open its game</div>`;
@@ -2903,13 +2919,16 @@ function renderWeek(){
     h+=`<div class="bgame">${esc(bookName(b))} · ${L.length} bet${L.length>1?'s':''} · ${stakeTxt(st)}${L.length>1?`<span class="bgo">${openAt(b, L.map(leg), n=>`Open all ${n} on FanDuel`)}</span>`:''}</div><div class="bcards">`+L.map(c=>{ const g=c.game;
       return betCard({nw:true, cls:'spick', attrs:`data-g="${esc(g)}" title="open this game"`, tc:teamColor(c.abbr), name:c.label, mkt:mktLabel(c.market), sub:`${esc(g.replace('@',' @ '))} · ${fmtKick(c.kickoff)}`, odds:c.odds, book:c.book, stake:c.stake,
         conf:c.conf?confBadge(c.conf):'', mp:c.mp, bimp:c.bimp, ev:c.ev, note:c.mkt==null?'<span style="color:var(--warn)">model only — no other book prices it</span>':'',
-        link:openAt(c.book, [leg(c)], 'Open on FanDuel')}); }).join('')+'</div>'; }
+        link:openAt(c.book, [leg(c)], 'Open on FanDuel'), extra:skipBtn(g, c)+floorTxt(c)}); }).join('')+'</div>'; }
+  { const n=weekSkips().length; if(n) h+=`<div class="skipnote">${n} skipped this week <button class="statussel" id="unskip">↩ Bring ${n>1?'them':'it'} back</button></div>`; }
   if(WEEK.notes&&WEEK.notes.length) h+=`<div class="muted" style="font-size:12px;margin-top:10px">Skipped: ${WEEK.notes.map(esc).join(' · ')}</div>`;
   out.innerHTML=h;
   const wl=$('weekLog'); if(wl) wl.onclick=()=>{ let n=0; for(const c of NEW) if(logBetFrom(Object.assign({}, c), c.stake, c.game)) n++; if(n){ saveBets(); renderBets(); } renderWeek(); };
   out.querySelectorAll('.spick').forEach(el=>{ el.onclick=e=>{ if(e.target.closest('button,a')) return; const [a,hm]=el.dataset.g.split('@'); if(!S.teamList.includes(a)||!S.teamList.includes(hm)) return;
     $('awaySel').value=a; $('homeSel').value=hm; userPicked=true; onMatchupChange(); setTimeout(()=>goTo('mktSec'), 300); }; });
 }
+$('weekBody').addEventListener('click', e=>{ const b=e.target.closest('.bskip'); if(b){ SKIP[b.dataset.skip]=Date.now(); lsW('nfltd_skip', SKIP); renderWeek(); return; }
+  if(e.target.closest('#unskip')){ for(const k of weekSkips()) delete SKIP[k]; lsW('nfltd_skip', SKIP); renderWeek(); } });
 function renderSlate(){
   const out=$('slateBody'); if(!out||!SLATE) return;
   const u=stakeTxt, bank=getBankroll(), dayName=new Date(SLATE.day).toLocaleDateString([], {weekday:'long'});
