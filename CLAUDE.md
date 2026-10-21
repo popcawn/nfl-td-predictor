@@ -85,6 +85,8 @@ See README.md for what the model does and how it was validated.
 - NFL page weight: the snapshot embedded 32 team logos at 500 px (1.8 MB of a 2.9 MB page — the user still saw a flash going
   NBA -> NFL). The build now embeds 80 px logos from ESPN's image combiner (~4 KB each; the app shows them at 22-40 px):
   page ~0.86 MB. Don't embed full-size images in the snapshot.
+- The ⚡ Bets list draws ONLY new bets (user, 2026-10-21: "logged bets shouldnt be shown. Only new bets"); the status line
+  still counts the logged ones ("· 1 already in your log") and the log has them. Your card (NFL game tab) still shows both.
 
 ## The user
 - Bets FanDuel props, pastes boards in FanDuel's stacked format, builds cross-game parlays.

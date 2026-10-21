@@ -2890,8 +2890,9 @@ function renderWeek(){
   let h= !P.length ? cardStat('none','NO BETS THIS WEEK','nothing at your books clears the bar') : nNew ? cardStat('new',`🆕 ${nNew} NEW BET${nNew>1?'S':''}`, `${stakeTxt(tot)} · ${(tot/getBankroll()*100).toFixed(1)}% of bankroll${P.length-nNew?` · ${P.length-nNew} already in your log`:''}`) : cardStat('done','✅ NO NEW BETS',`${P.length>1?'all '+P.length+' are':'it\'s'} already in your log`);
   h+=`<div class="muted" style="font-size:13px;margin:-2px 0 8px">${WEEK.n} game${WEEK.n===1?'':'s'} checked ${age<1?'just now':age<60?age+' min ago':Math.round(age/60)+' h ago'}${age>60?' — <span style="color:var(--warn)">pull again for fresh prices</span>':''} · each game's bets are exactly what its card says · tap a bet to open its game</div>`;
   if(nNew) h+=`<div class="bacts"><button class="statussel" id="weekLog">📓 Log the ${nNew} new</button>${fdButton(NEW.map(c=>({game:c.game, market:c.market, key:c.key, label:c.label, odds:c.odds, stake:c.stake})), n=>`Open ${n>1?'these '+n:'it'} on FanDuel`)}</div>`;
-  const byG=new Map(); for(const c of P) (byG.get(c.game)||byG.set(c.game,[]).get(c.game)).push(c);
-  for(const [g,L] of byG){ h+=`<div class="bgame">${fmtGame(g)} · ${fmtKick(L[0].kickoff)}</div><div class="bcards">`+L.map(c=>{ const nw=isNew(c);
+  // only new bets are drawn (user, 2026-10-21: "logged bets shouldnt be shown. Only new bets") — the log has the rest
+  const byG=new Map(); for(const c of NEW) (byG.get(c.game)||byG.set(c.game,[]).get(c.game)).push(c);
+  for(const [g,L] of byG){ h+=`<div class="bgame">${fmtGame(g)} · ${fmtKick(L[0].kickoff)}</div><div class="bcards">`+L.map(c=>{ const nw=true;
       return betCard({nw, cls:'spick', attrs:`data-g="${esc(g)}" title="open this game"`, tc:teamColor(c.abbr), name:c.label, mkt:mktLabel(c.market), sub:esc(c.abbr), odds:c.odds, book:c.book, stake:c.stake,
         conf:c.conf?confBadge(c.conf):'', mp:c.mp, bimp:c.bimp, ev:c.ev, note:c.mkt==null?'<span style="color:var(--warn)">model only — no other book prices it</span>':'',
         link:nw?fdButton([{game:c.game, market:c.market, key:c.key, label:c.label, odds:c.odds, stake:c.stake}], 'Open on FanDuel', 'slip'):''}); }).join('')+'</div>'; }
