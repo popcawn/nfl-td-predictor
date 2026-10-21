@@ -367,7 +367,7 @@
   .bclink{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
   /* the bet log fits its column — no sideways scroll bar (user, 2026-10-21): the bet and the close / CLV text wrap */
   table.logtbl td{white-space:normal} table.logtbl td.l{min-width:170px}
-  table.logtbl td.odds,table.logtbl td:nth-last-child(-n+4){white-space:nowrap}
+  table.logtbl td.odds,table.logtbl td:nth-last-child(-n+5){white-space:nowrap}
   .bclink .statussel,.bclink .ss{font-size:13px;padding:5px 11px!important}
   .unlog:hover{color:var(--bad)!important;border-color:var(--bad)!important;font-size:0!important} .unlog:hover::after{content:"✕ remove";font-size:12px}
   .bclink .bskip{color:var(--ink3)} .bclink .bskip:hover{color:var(--bad);border-color:var(--bad)}
@@ -2243,7 +2243,10 @@ const fmtUsd=x=>{ const a=Math.abs(x); return (x<0?'−':'')+'$'+(a>=20?Math.rou
 // a stake for display: dollars when a bankroll is set, units otherwise
 const stakeTxt=u=>{ const k=unitUsd(); return k!=null ? fmtUsd(u*k) : (Math.round(u*10)/10).toFixed(1)+'u'; };
 const betStakeTxt=b=>BANK.amt&&betUsd(b)!=null ? fmtUsd(betUsd(b)) : b.stake+'u';
-const usdStamp=u=>{ const k=unitUsd(); return k!=null ? {usd:+(u*k).toFixed(2)} : {}; };   // goes on a bet when it's logged
+// a stake in dollars exactly as the app shows it (whole $ from $20, half-dollars from $1, cents below) — what you actually bet,
+// so the log's P/L and "To win" match your book
+const roundUsd=x=>{ const a=Math.abs(x); return a>=20?Math.round(a):a>=1?Math.round(a*2)/2:Math.round(a*100)/100; };
+const usdStamp=u=>{ const k=unitUsd(); return k!=null ? {usd:roundUsd(u*k)} : {}; };   // goes on a bet when it's logged
 function renderBank(){
   const inp=$('bankUsd'); if(!inp) return; const now=bankNow();
   if(document.activeElement!==inp) inp.value=now!=null ? Math.round(now*100)/100 : '';
@@ -3091,11 +3094,13 @@ function renderBets(){
   const rows=bets.map(b=>{ const dec=oddsDec(b.odds), cd=oddsDec(b.closeOdds), nd=!cd&&b.cur&&b.cur.q?oddsDec(b.cur.q):null;
     return {b, dec, clv:dec&&cd?dec/cd-1:null, live:dec&&nd?dec/nd-1:null, stk:usdOn?(betUsd(b)||0):(+b.stake||0),
       pl:usdOn?betPlUsd(b):(b.result==='win'?b.stake*((dec||1)-1):b.result==='loss'?-b.stake:b.result==='push'?0:null)}; });
-  const agg=R=>{ let w=0,l=0,p=0,st=0,net=0,cs=0,cn=0,cp=0,open=0,spent=0,riding=0;
-    for(const r of R){ const x=r.b.result; spent+=r.stk||0; if(x==='pending') riding+=r.stk||0; if(x==='win'||x==='loss'){ x==='win'?w++:l++; st+=r.stk; net+=r.pl||0; } else if(x==='push') p++; else open++;
+  const agg=R=>{ let w=0,l=0,p=0,st=0,net=0,cs=0,cn=0,cp=0,open=0,spent=0,riding=0,towin=0;
+    for(const r of R){ const x=r.b.result; spent+=r.stk||0; if(x==='pending'){ riding+=r.stk||0; towin+=(r.stk||0)*((r.dec||1)-1); } if(x==='win'||x==='loss'){ x==='win'?w++:l++; st+=r.stk; net+=r.pl||0; } else if(x==='push') p++; else open++;
       if(r.clv!=null){ cs+=r.clv; cn++; if(r.clv>0) cp++; } }
-    return {n:R.length, w, l, p, st, net, roi:st?net/st:null, clv:cn?cs/cn:null, cn, cp, open, spent, riding}; };
+    return {n:R.length, w, l, p, st, net, roi:st?net/st:null, clv:cn?cs/cn:null, cn, cp, open, spent, riding, towin}; };
+  const cnt=a=>a.open===a.n?`${a.n} open bet${a.n>1?'s':''}`:`${a.n} bet${a.n>1?'s':''}${a.open?` · ${a.open} open`:''}`;   // "52 bets · 52 open" -> "52 open bets"
   const amt=v=>usdOn ? fmtUsd(v) : v.toFixed(1)+'u';   // money spent (no sign)
+  const amtc=v=>usdOn ? '$'+v.toFixed(2) : v.toFixed(2)+'u';   // to the cent (To win)
   const rec=a=>`${a.w}-${a.l}${a.p?'-'+a.p:''}`;
   const A=agg(rows), F=agg(rows.filter(r=>r.b.fun));
   let html=`<div class="logsum"><span>Record <b>${rec(A)}</b></span>${BK.length>1?`<span title="every sport's settled bets, by the book they were placed at">🏆 Best book <b>${esc(bookName(BK[0].k))}</b> ${plPill(BK[0].pl)}</span>`:''}`+
@@ -3109,15 +3114,15 @@ function renderBets(){
   const weeks=new Map(); for(const r of rows){ const k=weekStart(betWhen(r.b)); (weeks.get(k)||weeks.set(k,[]).get(k)).push(r); }
   const kick=gm=>{ const s=SCHED.find(x=>x.away+'@'+x.home===gm)||(S.schedule||[]).find(x=>x.away+'@'+x.home===gm); return s?new Date(s.kickoff).getTime():null; };
   const fmtD=t=>new Date(t).toLocaleDateString([], {month:'short', day:'numeric'}), fmtT=t=>new Date(t).toLocaleString([], {weekday:'short', hour:'numeric', minute:'2-digit'});
-  const head=['Bet','Odds','Close · CLV','Stake','Result','P/L',''].map((h,i)=>`<th class="${i<1?'l':''}" style="cursor:default;position:static">${h}</th>`).join('');
+  const head=['Bet','Odds','Close · CLV','Stake','To win','Result','P/L',''].map((h,i)=>`<th class="${i<1?'l':''}" style="cursor:default;position:static">${h}</th>`).join('');
   PLANS=new Map();
   const upTo=new Map(); { let sp=0, nt=0; for(const ws of [...weeks.keys()].sort((a,b)=>a-b)){ const a=agg(weeks.get(ws)); sp+=a.spent; nt+=a.net; upTo.set(ws,{spent:sp, net:nt}); } }
   [...weeks.keys()].sort((a,b)=>b-a).forEach((ws,wi)=>{
     const R=weeks.get(ws), a=agg(R), wk=(R.find(r=>r.b.wk)||{b:{}}).b.wk;
     const wOpen=LOGOPEN.has('W'+ws)?LOGOPEN.get('W'+ws):(wi===0||a.open>0);
-    html+=`<details class="weekgrp" data-w="${ws}"${wOpen?' open':''}><summary><b>${wk?'Week '+wk:'Week of '+fmtD(ws)}</b>${a.w+a.l?plPill(a.net):''} <span class="muted">${wk?fmtD(ws)+' – '+fmtD(ws+6*86400e3)+' · ':''}${a.n} bet${a.n>1?'s':''}${a.open?` · ${a.open} open`:''}${a.w+a.l?` · ${rec(a)}`:''}</span>`+
+    html+=`<details class="weekgrp" data-w="${ws}"${wOpen?' open':''}><summary><b>${wk?'Week '+wk:'Week of '+fmtD(ws)}</b>${a.w+a.l?plPill(a.net):''} <span class="muted">${wk?fmtD(ws)+' – '+fmtD(ws+6*86400e3)+' · ':''}${cnt(a)}${a.w+a.l?` · ${rec(a)}`:''}</span>`+
       `${a.clv!=null?` <span class="muted">· CLV</span> <b class="${g(a.clv)}">${pc(a.clv)}</b>`:''}`+
-      `<span class="wktally">💵 Spent <b>${amt(a.spent)}</b>${a.riding?` · <span class="muted">${amt(a.riding)} still riding</span>`:''}</span></summary><div class="wkbody">`;
+      `<span class="wktally">💵 Spent <b>${amt(a.spent)}</b>${a.riding?` · <span class="muted">${amt(a.riding)} still riding · could win ${amt(a.towin)}</span>`:''}</span></summary><div class="wkbody">`;
     const groups=new Map(); R.forEach(r=>{ const k=r.b.game||''; (groups.get(k)||groups.set(k,[]).get(k)).push(r); });
     const G=[...groups.entries()].map(([gm,rs])=>({gm, rs, pend:rs.filter(r=>r.b.result==='pending').length, t:(gm&&kick(gm))||Math.min(...rs.map(r=>betWhen(r.b)))}))
       .sort((x,y)=>((y.pend>0)-(x.pend>0)) || (!x.gm-!y.gm) || (x.t-y.t));
@@ -3125,10 +3130,10 @@ function renderBets(){
       const plan=grp.gm&&grp.pend?planFor(grp.gm):null, planOf=new Map(), ga=agg(grp.rs), key=grp.gm+'#'+ws;
       if(plan){ plan.picks.forEach(c=>planOf.set(c.bet.id,{keep:true, stake:c.stake})); plan.skipped.forEach(s=>planOf.set(s.c.bet.id,{keep:false, why:s.why})); PLANS.set(grp.gm, plan); }
       const open=LOGOPEN.has(key)?LOGOPEN.get(key):false;   // games start collapsed (user, 2026-10-16)
-      html+=`<details class="gamegrp" data-k="${esc(key)}"${open?' open':''}><summary><b>${grp.gm?fmtGame(grp.gm):'Parlays &amp; custom bets'}</b> <span class="muted">· ${ga.n} bet${ga.n>1?'s':''}${ga.open?` · ${ga.open} open`:''}${ga.w+ga.l?` · ${rec(ga)}`:''}</span>`+
+      html+=`<details class="gamegrp" data-k="${esc(key)}"${open?' open':''}><summary><b>${grp.gm?fmtGame(grp.gm):'Parlays &amp; custom bets'}</b> <span class="muted">· ${cnt(ga)}${ga.w+ga.l?` · ${rec(ga)}`:''}${ga.open?` · could win ${amt(ga.towin)}`:''}</span>`+
         `${ga.w+ga.l?` <b class="${g(ga.net)}">${mny(ga.net)}</b>`:''}</summary><div class="grpbody">`;
       html+=`<div style="overflow-x:auto"><table class="logtbl" style="margin-top:0"><thead><tr>${head}</tr></thead><tbody>`;
-      grp.rs.forEach(({b,dec,clv,live,pl})=>{ const P=planOf.get(b.id), lh=leadH(b), mine=isPropMkt(b.market)?+b.market.split('|')[3]:null;
+      grp.rs.forEach(({b,dec,clv,live,pl,stk})=>{ const P=planOf.get(b.id), lh=leadH(b), mine=isPropMkt(b.market)?+b.market.split('|')[3]:null;
         const moved=mine!=null && b.cur && b.cur.l!=null && b.cur.l!==mine, arrow=moved?(b.cur.l<mine?'▼':'▲')+b.cur.l+' ':'';
         const tags=[ b.fun?'<span title="a fun pick">🎉</span>':'',
           b.result==='pending'&&P ? (P.keep?`<span class="vbadge vb-take" title="the plan keeps this one${Math.abs((+b.stake||0)-P.stake)>0.05?' — suggested stake '+stakeTxt(P.stake):''}">★ ${stakeTxt(P.stake)}</span>`:'') : '',
@@ -3144,6 +3149,7 @@ function renderBets(){
           `<td class="odds">${esc(b.odds)}${b.book&&myBooks().length>1?bkBadge(b.book):''}</td>`+
           `<td><input class="bookin betclose" data-id="${b.id}" value="${(b.closeOdds||'').replace(/"/g,'&quot;')}" placeholder="close" style="width:62px">${clvTxt}</td>`+
           `<td title="${b.stake}u">${betStakeTxt(b)}</td>`+
+          `<td class="${b.result==='pending'?'':'muted'}" title="what it pays in profit if it wins">${dec?amtc((stk||0)*(dec-1)):'—'}</td>`+
           `<td style="white-space:nowrap"><select class="statussel betres" data-id="${b.id}">${['pending','win','loss','push'].map(s=>`<option ${s===b.result?'selected':''}>${s}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc('auto-settled from ESPN: '+b.auto)}">🤖</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
           `<td class="${pl!=null?g(pl):''}">${pl==null?'—':usdOn?mny(pl):sgn(pl.toFixed(2))}</td>`+
           `<td><button class="statussel betdel" data-id="${b.id}" style="padding:0 7px;color:var(--warn)">✕</button></td></tr>`;

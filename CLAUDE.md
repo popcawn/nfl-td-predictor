@@ -111,6 +111,10 @@ See README.md for what the model does and how it was validated.
   TD picks' parlay of the day. Straight bets (TD and props) still use every one of your books, BetMGM included.
 - Bet log tables FIT their column — no sideways scroll bar (user, 2026-10-21: "remove the scroll bar"): table.logtbl lets the bet
   and the close / CLV cell wrap (odds, stake, result, P/L stay on one line). Don't put white-space:nowrap back on those cells.
+- Bet log tidy (user, 2026-10-21): "52 bets · 52 open" reads "52 open bets" (cnt()); NBA/NHL bet lines drop the game (it is on
+  hover); a TO WIN column (profit if it wins, to the cent) and "could win $X" on the week / night / game summaries. Stakes are
+  LOGGED AS SHOWN (roundUsd(): whole $ from $20, half-dollars from $1, cents below) — before, the card showed $1.50 but the log
+  kept e.g. $1.73, so P/L and To win didn't match the book. Bets logged before this keep their old amounts.
 
 ## The user
 - Bets FanDuel props, pastes boards in FanDuel's stacked format, builds cross-game parlays.
