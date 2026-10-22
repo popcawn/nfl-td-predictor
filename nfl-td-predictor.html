@@ -1860,7 +1860,10 @@ const FD_SLIP='https://sportsbook.fanduel.com/addToBetslip';
 const STATE_BOOKS=['betmgm','williamhill_us'];
 const BOOK_HOME={fanatics:'https://sportsbook.fanatics.com/'};   // no bet-slip link exists for these: open the book, find the bet
 const needsState=t=>!!t && STATE_BOOKS.includes(bookOfTk(t)) && !ODDSCFG.state;   // ids are there, your state isn't
-function bookLink(book, tks, combo){
+// BetMGM: /en/sportsapp/sports?… opens the BetMGM app on a phone (the app claims only /sportsapp/ addresses — without it, links
+// opened in Safari: user 2026-10-22); with no app installed their site redirects it to the normal bet slip. A single bet also
+// carries its stake (BetMGM's deep links take &stake=), so the slip opens with the amount filled in.
+function bookLink(book, tks, combo, usd){
   if(!tks.length) return null;
   const st=String(ODDSCFG.state||'').toLowerCase();
   if(book==='fanduel'){ if(tks.some(x=>!x.m||!x.s)) return null;
@@ -1868,7 +1871,7 @@ function bookLink(book, tks, combo){
       : FD_SLIP+'?'+tks.map((x,i)=>`marketId[${i}]=${encodeURIComponent(x.m)}&selectionId[${i}]=${encodeURIComponent(x.s)}`).join('&'); }
   if(book==='draftkings'){ if(tks.some(x=>!x.s)) return null; return 'https://sportsbook.draftkings.com/?outcomes='+tks.map(x=>encodeURIComponent(x.s)).join('+'); }
   // BetMGM / Caesars, from the API's own one-leg links; joining several legs with commas is a guess, like FanDuel's / DK's
-  if(book==='betmgm'){ if(!st || tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sports?options=${tks.map(x=>x.g).join(',')}&type=${combo&&tks.length>1?'Combo':'Single'}`; }
+  if(book==='betmgm'){ if(!st || tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sportsapp/sports?options=${tks.map(x=>x.g).join(',')}&type=${combo&&tks.length>1?'Combo':'Single'}${usd&&tks.length===1?'&stake='+usd:''}`; }
   if(book==='williamhill_us'){ if(!st || tks.some(x=>!x.s)) return null; return `https://sportsbook.caesars.com/us/${st}/bet/betslip?selectionIds=${tks.map(x=>encodeURIComponent(x.s)).join(',')}`; }
   return null;   // Fanatics gives no links — open those by hand (BOOK_HOME)
 }
@@ -1887,7 +1890,8 @@ function fdButton(legs, label, mode){
   let html='';
   for(const [b,items] of by){ const tks=items.map(x=>x.t);
     const txt=String(typeof label==='function'?label(tks.length):label).replace(/FanDuel/g, bookName(b));
-    html+=`<a class="statussel fdbtn" href="${esc(bookLink(b,tks))}" target="_blank" rel="noopener" title="opens ${esc(bookName(b))} with ${tks.length===1?'this bet':'these '+tks.length+' bets'} in the bet slip — check the price there before you bet">📲 ${txt}${by.size>1&&typeof label!=='function'?' ('+tks.length+')':''}</a> `; }
+    const one1=items.length===1&&items[0].l.stake&&unitUsd()!=null?roundUsd(items[0].l.stake*unitUsd()):null;
+    html+=`<a class="statussel fdbtn" href="${esc(bookLink(b,tks,false,one1))}" target="_blank" rel="noopener" title="opens ${esc(bookName(b))} with ${tks.length===1?'this bet':'these '+tks.length+' bets'} in the bet slip — check the price there before you bet">📲 ${txt}${by.size>1&&typeof label!=='function'?' ('+tks.length+')':''}</a> `; }
   // a price at a book the app can't link (Fanatics …) is still on the board — say where to place it by hand
   const LINKED_BOOKS=['fanduel','draftkings'].concat(STATE_BOOKS), atBook=l=>{ const t=legSel(l), b=t&&bookOfTk(t); return b&&!LINKED_BOOKS.includes(b) ? b : null; };
   const byHand=other.filter(atBook), unk=other.filter(l=>!atBook(l));

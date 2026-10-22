@@ -118,6 +118,10 @@ See README.md for what the model does and how it was validated.
 - One-time stake fix (2026-10-21, user: "a 2 bet at +100 wins $2 not 1.97"): bets logged before "logged as shown" are rounded to
   what the card showed (flag *_usdround; NFL only touches app-logged bets — book / legs / mktP / rawP / fun — never a hand-typed
   stake), stamped mt so Sync spreads it. The log's stake shows exactUsd(): the usual format for round amounts, else cents.
+- BetMGM links open the APP (user, 2026-10-22: "when i click open it defaults to safari browser, change it to opening the app"):
+  Apple's app-site-association for sports.<state>.betmgm.com claims ONLY "/*/sportsapp/*" for the BetMGM sports app, so links are
+  /en/sportsapp/sports?options=…&type=… (their site 302s that to /en/sports?… when the app isn't installed). A single bet also
+  carries &stake=<$ shown on the card> (BetMGM deep links accept stake; their Sports API docs). Not tested on a phone by me.
 
 ## The user
 - Bets FanDuel props, pastes boards in FanDuel's stacked format, builds cross-game parlays.
