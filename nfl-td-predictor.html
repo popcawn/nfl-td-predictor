@@ -1860,9 +1860,9 @@ const FD_SLIP='https://sportsbook.fanduel.com/addToBetslip';
 const STATE_BOOKS=['betmgm','williamhill_us'];
 const BOOK_HOME={fanatics:'https://sportsbook.fanatics.com/'};   // no bet-slip link exists for these: open the book, find the bet
 const needsState=t=>!!t && STATE_BOOKS.includes(bookOfTk(t)) && !ODDSCFG.state;   // ids are there, your state isn't
-// BetMGM: /en/sportsapp/sports?… opens the BetMGM app on a phone (the app claims only /sportsapp/ addresses — without it, links
-// opened in Safari: user 2026-10-22); with no app installed their site redirects it to the normal bet slip. A single bet also
-// carries its stake (BetMGM's deep links take &stake=), so the slip opens with the amount filled in.
+// BetMGM: the bet slip on their site, and a single bet carries its stake (&stake=) so it opens with the amount filled in (tested on
+// the user's iPhone 2026-10-22). No link opens the BetMGM app there: /sportsapp/ addresses and betmgm.onelink.me app links were
+// tried — the first open Safari, the second the App Store — and the app's private link type isn't published.
 function bookLink(book, tks, combo, usd){
   if(!tks.length) return null;
   const st=String(ODDSCFG.state||'').toLowerCase();
@@ -1871,7 +1871,7 @@ function bookLink(book, tks, combo, usd){
       : FD_SLIP+'?'+tks.map((x,i)=>`marketId[${i}]=${encodeURIComponent(x.m)}&selectionId[${i}]=${encodeURIComponent(x.s)}`).join('&'); }
   if(book==='draftkings'){ if(tks.some(x=>!x.s)) return null; return 'https://sportsbook.draftkings.com/?outcomes='+tks.map(x=>encodeURIComponent(x.s)).join('+'); }
   // BetMGM / Caesars, from the API's own one-leg links; joining several legs with commas is a guess, like FanDuel's / DK's
-  if(book==='betmgm'){ if(!st || tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sportsapp/sports?options=${tks.map(x=>x.g).join(',')}&type=${combo&&tks.length>1?'Combo':'Single'}${usd&&tks.length===1?'&stake='+usd:''}`; }
+  if(book==='betmgm'){ if(!st || tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sports?options=${tks.map(x=>x.g).join(',')}&type=${combo&&tks.length>1?'Combo':'Single'}${usd&&tks.length===1?'&stake='+usd:''}`; }
   if(book==='williamhill_us'){ if(!st || tks.some(x=>!x.s)) return null; return `https://sportsbook.caesars.com/us/${st}/bet/betslip?selectionIds=${tks.map(x=>encodeURIComponent(x.s)).join(',')}`; }
   return null;   // Fanatics gives no links — open those by hand (BOOK_HOME)
 }
