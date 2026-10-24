@@ -2275,7 +2275,11 @@ function renderPotChip(now){ const c=$('potChip'); if(!c) return; const AB=allBe
 // another app (NBA / NHL) in another tab changed the pot or its bets -> redraw
 window.addEventListener('storage', e=>{ if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderBank(); try{ if(LAST) computeTopPlays(); renderSlip(); renderBets(); }catch(err){} } else if(e.key==='nbap_bets'||e.key==='nhlp_bets') renderBank(); });
 function setBank(v){ BANK = v>0 ? {amt:+(+v).toFixed(2), at:Date.now(), mt:Date.now()} : {amt:null, at:0, mt:Date.now()}; lsW('nfltd_bank', BANK); syncSoon(); if(LAST) computeTopPlays(); renderSlip(); renderBets(); try{ if(SLATE) renderSlate(); }catch(e){} }
-let ODDSCFG=Object.assign({td:true, props:true, auto:true, reserve:150}, lsJ('nfltd_oddscfg',{}));
+// all five of your books by default (user, 2026-10-24: "is it intentional to have betmgm turned off" — no: the list is
+// saved per device and a new device started with FanDuel + DraftKings only, while the real-price test found the edge in
+// shopping all five). A device that saved fewer gets the rest added once (booksV2); unticking one after that sticks
+let ODDSCFG=Object.assign({td:true, props:true, auto:true, reserve:150, books:['fanduel','draftkings','betmgm','williamhill_us','fanatics']}, lsJ('nfltd_oddscfg',{}));
+if(!ODDSCFG.booksV2){ ODDSCFG.books=[...new Set((ODDSCFG.books||[]).concat(['fanduel','draftkings','betmgm','williamhill_us','fanatics']))]; ODDSCFG.booksV2=1; lsW('nfltd_oddscfg', ODDSCFG); }
 let PULLED=(p=>{ const old=Date.now()-2*86400e3; for(const k of Object.keys(p)) if(!(p[k]>old)) delete p[k]; return p; })(lsJ('nfltd_pulled',{}));
 let oddsRemaining=lsJ('nfltd_oddsleft',null), oddsEvents=null, pullToken=0;
 const oddsKey=()=>{ try{ return localStorage.getItem('nfltd_oddskey')||''; }catch(e){ return ''; } };
@@ -3614,7 +3618,7 @@ bkBoxes.forEach(c=>{ c.checked=myBooks().includes(c.value); }); mkBoxes.forEach(
 const showOddsCost=()=>{ const n=pickedMarkets().length; $('oddsCost').textContent=n+' credit'+(n===1?'':'s'); };
 const saveOddsCfg=()=>{ const mk={}; mkBoxes.forEach(c=>{ mk[c.value]=c.checked; });
   ODDSCFG={td:mkBoxes.some(c=>OA_TD[c.value]&&c.checked), props:mkBoxes.some(c=>OA_PROP[c.value]&&c.checked), mk, books:bkBoxes.filter(c=>c.checked).map(c=>c.value),
-    auto:$('oddsAuto').checked, reserve:Math.max(0,+$('oddsReserve').value||0), state:$('oddsState').value||''};
+    auto:$('oddsAuto').checked, reserve:Math.max(0,+$('oddsReserve').value||0), state:$('oddsState').value||'', booksV2:1};
   lsW('nfltd_oddscfg', ODDSCFG); showOddsCost(); };
 $('oddsState').value=ODDSCFG.state||'';
 bkBoxes.concat(mkBoxes, [$('oddsAuto'), $('oddsReserve')]).forEach(el=>el.addEventListener('change', saveOddsCfg));

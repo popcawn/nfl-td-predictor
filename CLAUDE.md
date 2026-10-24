@@ -312,6 +312,7 @@ See README.md for what the model does and how it was validated.
   units box is a hidden field = 100, so 1u = 1%). stakeTxt(u) / betStakeTxt(b) render every stake ($ when a bankroll is
   set, else units); bets store `usd` at log time (usdStamp). Typing a new balance = setBank() resets the base. The log
   (stake, P/L, totals, ROI) switches to dollars via usdOn/mny.
+- ALL FIVE BOOKS BY DEFAULT (2026-10-24, user: "is it intentional to have betmgm turned off for nba" — no): the book list is saved per device and a new device started with FanDuel + DraftKings only (the user's desktop had all five; the phone likely not). Default is now FD, DK, BetMGM, Caesars, Fanatics; a device that saved fewer gets the rest added ONCE (`nfltd_oddscfg.booksV2`, kept by the settings save); unticking after that sticks. Don't drop books from the default: the real-price test found the NBA edge in shopping all five.
 - MULTI-BOOK (2026-10-13, "search DraftKings + FanDuel for best odds"): myBooks() = ODDSCFG.books (FanDuel always first,
   default + DraftKings). parseOdds() -> best price among YOUR books per TD selection / per prop side at the primary
   (FanDuel's) line, each with a TICKET {b, o, m?, s?, alt:{book:ticket}} filed as FD#<market>#<key> (name kept for
