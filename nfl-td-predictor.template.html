@@ -691,7 +691,7 @@
             <button class="statussel" id="betClear" style="padding:6px 10px;font-size:12px">Clear log</button>
           </div>
         </div>
-        <div class="logsub muted" style="font-size:12px;line-height:1.55"><b>How to read it.</b> <b>CLV</b> = how much better your price was than FanDuel's closing price; beat the close over many bets and profit follows, long before ROI shows it. A grey <b>≈</b> CLV is a live read (FanDuel's price right now), not final. <b>▼ / ▲</b> = FanDuel moved a prop's line since you bet; the CLV is worked out at your line. <b>★</b> = the stake the card's rule suggests for an open bet (best in its game). <b>⏱</b> = how long before kickoff you logged it. <b>🤖</b> = settled automatically from ESPN (hover for why); <b>✋</b> = settle that one yourself.</div>
+        <div class="logsub muted" style="font-size:12px;line-height:1.55"><b>How to read it.</b> <b>CLV</b> = how much better your price was than FanDuel's closing price; beat the close over many bets and profit follows, long before ROI shows it. A grey <b>≈</b> CLV is a live read (FanDuel's price right now), not final. <b>▼ / ▲</b> = FanDuel moved a prop's line since you bet; the CLV is worked out at your line. <b>⏱</b> = how long before kickoff you logged it. <b>🤖</b> = settled automatically from ESPN (hover for why); <b>✋</b> = settle that one yourself.</div>
       </details>
     </div>
 
@@ -1499,11 +1499,9 @@ function pickPlays(cands){
   return {picks, skipped};
 }
 // open bets in the log for one game that the model priced (custom props can't be ranked)
-function pendingFor(game){ return bets.filter(b=>b.game===game && b.result==='pending' && b.key && b.market!=='custom' && b.modelProb!=null && !b.fun); }   // fun bets sit outside the card and the plan
+function pendingFor(game){ return bets.filter(b=>b.game===game && b.result==='pending' && b.key && b.market!=='custom' && b.modelProb!=null && !b.fun); }   // fun bets sit outside the card
 // a logged bet's rank was saved when it was logged; older entries fall back to Kelly from the price x 0.7
 function betRank(b){ if(typeof b.rk==='number') return b.rk; const d=oddsDec(b.odds), p=b.modelProb; if(!d||p==null) return 0; return 0.7*Math.max(0,(p*d-1)/(d-1)); }
-function planFor(game){ const L=pendingFor(game).filter(b=>!b.offBoard); if(!L.length) return null;
-  return pickPlays(L.map(b=>({key:b.key, label:b.player, abbr:teamOfKey(b.key), market:b.market, odds:b.odds, mp:b.modelProb, rk:betRank(b), bet:b}))); }
 function sugStake(c){ return Math.max(0.1, Math.round(KELLY_FRAC*(c.kelly||c.rk||0)*getBankroll()*10)/10); }
 // the one place a priced bet is written into the log (keeps its rank so the log can pick the best later)
 // a prop's stat without side or line ('P|recyd'); TD markets are their own stat
@@ -2060,7 +2058,6 @@ function renderSlip(){
 // player props), enter the closing line later, and it tracks CLV (did you beat the close — the
 // leading indicator of a real edge) + settled ROI. Persists via localStorage. ----
 let bets=[]; let betOptCache=[];
-let PLANS=new Map();          // game -> {picks, skipped}: the log's ★ stake plan per open game
 const LOGOPEN=new Map();      // which game sections you opened/closed (kept across re-renders)
 function loadBets(){ try{ const s=localStorage.getItem('nfltd_bets'); if(s) bets=JSON.parse(s)||[]; }catch(e){ bets=[]; } if(!Array.isArray(bets)) bets=[]; }
 function saveBets(){ stampChanges(bets, betSnap, betKey, TOMB.bets); betSnap=snapOf(bets, betKey); saveTomb(); try{ localStorage.setItem('nfltd_bets', JSON.stringify(bets)); }catch(e){} syncSoon(); if(LAST) computeTopPlays(); try{ if(SLATE) renderSlate(); }catch(e){} try{ renderWeek(); }catch(e){} }
@@ -3121,7 +3118,6 @@ function renderBets(){
   const kick=gm=>{ const s=SCHED.find(x=>x.away+'@'+x.home===gm)||(S.schedule||[]).find(x=>x.away+'@'+x.home===gm); return s?new Date(s.kickoff).getTime():null; };
   const fmtD=t=>new Date(t).toLocaleDateString([], {month:'short', day:'numeric'}), fmtT=t=>new Date(t).toLocaleString([], {weekday:'short', hour:'numeric', minute:'2-digit'});
   const head=['Bet','Odds','Close · CLV','Stake','To win','Result','P/L',''].map((h,i)=>`<th class="${i<1?'l':''}" style="cursor:default;position:static">${h}</th>`).join('');
-  PLANS=new Map();
   const upTo=new Map(); { let sp=0, nt=0; for(const ws of [...weeks.keys()].sort((a,b)=>a-b)){ const a=agg(weeks.get(ws)); sp+=a.spent; nt+=a.net; upTo.set(ws,{spent:sp, net:nt}); } }
   [...weeks.keys()].sort((a,b)=>b-a).forEach((ws,wi)=>{
     const R=weeks.get(ws), a=agg(R), wk=(R.find(r=>r.b.wk)||{b:{}}).b.wk;
@@ -3133,16 +3129,14 @@ function renderBets(){
     const G=[...groups.entries()].map(([gm,rs])=>({gm, rs, pend:rs.filter(r=>r.b.result==='pending').length, t:(gm&&kick(gm))||Math.min(...rs.map(r=>betWhen(r.b)))}))
       .sort((x,y)=>((y.pend>0)-(x.pend>0)) || (!x.gm-!y.gm) || (x.t-y.t));
     for(const grp of G){
-      const plan=grp.gm&&grp.pend?planFor(grp.gm):null, planOf=new Map(), ga=agg(grp.rs), key=grp.gm+'#'+ws;
-      if(plan){ plan.picks.forEach(c=>planOf.set(c.bet.id,{keep:true, stake:c.stake})); plan.skipped.forEach(s=>planOf.set(s.c.bet.id,{keep:false, why:s.why})); PLANS.set(grp.gm, plan); }
+      const ga=agg(grp.rs), key=grp.gm+'#'+ws;
       const open=LOGOPEN.has(key)?LOGOPEN.get(key):false;   // games start collapsed (user, 2026-10-16)
       html+=`<details class="gamegrp" data-k="${esc(key)}"${open?' open':''}><summary><b>${grp.gm?fmtGame(grp.gm):'Parlays &amp; custom bets'}</b> <span class="muted">· ${cnt(ga)}${ga.w+ga.l?` · ${rec(ga)}`:''}${ga.open?` · could win ${amt(ga.towin)}`:''}</span>`+
         `${ga.w+ga.l?` <b class="${g(ga.net)}">${mny(ga.net)}</b>`:''}</summary><div class="grpbody">`;
       html+=`<div style="overflow-x:auto"><table class="logtbl" style="margin-top:0"><thead><tr>${head}</tr></thead><tbody>`;
-      grp.rs.forEach(({b,dec,clv,live,pl,stk})=>{ const P=planOf.get(b.id), lh=leadH(b), mine=isPropMkt(b.market)?+b.market.split('|')[3]:null;
+      grp.rs.forEach(({b,dec,clv,live,pl,stk})=>{ const lh=leadH(b), mine=isPropMkt(b.market)?+b.market.split('|')[3]:null;
         const moved=mine!=null && b.cur && b.cur.l!=null && b.cur.l!==mine, arrow=moved?(b.cur.l<mine?'▼':'▲')+b.cur.l+' ':'';
         const tags=[ b.fun?'<span title="a fun pick">🎉</span>':'',
-          b.result==='pending'&&P ? (P.keep?`<span class="vbadge vb-take" title="the plan keeps this one${Math.abs((+b.stake||0)-P.stake)>0.05?' — suggested stake '+stakeTxt(P.stake):''}">★ ${stakeTxt(P.stake)}</span>`:'') : '',
           b.offBoard&&b.result==='pending'?`<span style="color:var(--warn);font-size:12px" title="${esc(b.offBoard+' — if you didn\'t place it, delete it (✕)')}">⚠ off FanDuel</span>`:'',
           lh!=null?`<span class="muted" style="font-size:11px" title="${esc('logged '+fmtT(b.ts)+' · kickoff '+fmtT(b.ko))}">⏱ ${leadTxt(lh)}</span>`:'' ].filter(Boolean).join(' ');
         // CLV: final once Close is in; before that a live read from the last pull (≈), with ▼/▲ when FanDuel moved the prop's line
@@ -3151,7 +3145,7 @@ function renderBets(){
           : b.result!=='pending'||!b.cur ? ''
           : live!=null ? ` <span class="${cg(live)}" style="font-size:12px" title="${esc((moved?`FanDuel moved the line to ${b.cur.l} (${b.cur.o}) — about ${b.cur.q} at your line. `:`FanDuel now: ${b.cur.q}. `)+'A live read, not final until the close.')}">${arrowH}<span class="muted">≈ ${esc(b.cur.q)} ${moved?'at your '+mine:'now'} ·</span> ${pc(live)}</span>`
           : moved ? ` <span style="font-size:12px" title="FanDuel moved the line to ${b.cur.l} (${esc(b.cur.o||'')})">${arrowH}</span>` : '';
-        html+=`<tr${P&&P.keep?' class="rowtake"':''}><td class="l"><b${b.modelProb!=null?` title="chance when logged: ${pct(b.modelProb)}"`:''}>${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)}</span> ${tags}</td>`+
+        html+=`<tr><td class="l"><b${b.modelProb!=null?` title="chance when logged: ${pct(b.modelProb)}"`:''}>${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)}</span> ${tags}</td>`+
           `<td class="odds">${esc(b.odds)}${b.book&&myBooks().length>1?bkBadge(b.book):''}</td>`+
           `<td><input class="bookin betclose" data-id="${b.id}" value="${(b.closeOdds||'').replace(/"/g,'&quot;')}" placeholder="close" style="width:62px">${clvTxt}</td>`+
           `<td title="${b.stake}u">${betStakeTxt(b)}</td>`+
@@ -3564,7 +3558,7 @@ $('boardBody').addEventListener('click', e=>{ const b=e.target.closest('button[d
 $('boardLogAll').onclick=()=>{ if(!LAST) return; let n=0;
   for(const c of CANDS) if(c.tier==='take'){ const pick=CARD.find(p=>p.key===c.key&&p.market===c.market); if(logBetFrom(c, pick?pick.stake:sugStake(c))) n++; }
   if(n){ saveBets(); renderBets(); }
-  const btn=$('boardLogAll'); btn.textContent=n?`✓ logged ${n} — see the plan in the log`:'nothing new to log'; setTimeout(()=>{ btn.textContent='📓 Log every edge'; },3000); };
+  const btn=$('boardLogAll'); btn.textContent=n?`✓ logged ${n} — see them in the log`:'nothing new to log'; setTimeout(()=>{ btn.textContent='📓 Log every edge'; },3000); };
 // sticky jump bar: keep table headers and anchors clear of it
 function setNavH(){ const n=$('topbar'); if(n) document.documentElement.style.setProperty('--navh', n.offsetHeight+'px'); }
 window.addEventListener('resize', setNavH);

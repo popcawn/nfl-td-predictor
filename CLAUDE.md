@@ -221,7 +221,7 @@ See README.md for what the model does and how it was validated.
   PULL vs OPEN BETS (rewritten 2026-10-12, user: "props that go down are considered off FanDuel instead of prop lowered
   for CLV"): `closeView(b,d)` = FanDuel's price for a logged bet AT ITS OWN LINE (exact, or the nearest line translated with
   the model's distribution; null = not offered). Still offered -> `b.cur={q,l,o,t}` (live CLV in the log: "▼64.5 ≈+10.8%");
-  only a prop FanDuel dropped entirely -> `b.offBoard` (card drops it, planFor ignores it, log shows ⚠). A MOVED LINE IS
+  only a prop FanDuel dropped entirely -> `b.offBoard` (card drops it, log shows ⚠). A MOVED LINE IS
   NEVER off-board. applyClose() = closeView + write closeOdds/closeEst. Don't raise either share without a new real-price test that wins both halves. Refit: `DUMP_BT=1` build
   (restore shipped files with git checkout) -> `--go` / `--props --go` -> `analyze` / `analyze-props` -> build.
   Raw prices (market_hist/, market_td_*.json, market_props_*.json) and bt_*.json stay local.
@@ -275,14 +275,14 @@ See README.md for what the model does and how it was validated.
 - BET LOG LAYOUT (2026-10-12, user: "a lot going on, simplify it" + "condense by week"): renderBets() = .logsum summary +
   details.weekgrp (Tue->Mon local weeks by b.ko||b.ts; newest/any-open week open; label "Week N" from b.wk) -> details.gamegrp
   (LOGOPEN keys: 'W'+weekStart, game+'#'+weekStart; trim button keeps data-g=game) -> 7-column rows with inline tags
-  (🎉, ★ stake / cut, ⚠ off FanDuel, ⏱ lead). Everything else is static HTML under details#logMore (#betInsights is filled by
+  (🎉, ⚠ off FanDuel, ⏱ lead). Everything else is static HTML under details#logMore (#betInsights is filled by
   renderBets: scoreboard + "When you bet" table by lead time, TIMING_KIND prop|td|all). Bets carry `ko` (kickoff) and `wk`:
   koStamp(game) at log time (SCHED + CUR_WK), back-filled by autoSettle from ESPN events for older bets (koX = not found).
   Parlay picker = details#parlaySec, collapsed by default; computeParlays() returns early while closed and runs on open;
   open state in nfltd_parlayopen; #jumpNav links open a <details> target.
 - NO "CUT" ON LOGGED BETS (2026-10-15, user: "the cut in logged picks"): a logged bet is already placed, so the log no
   longer tags bets "cut", shows "N to cut" or a Trim banner, and Your card no longer shows "didn't make the cut / ✂ Trim"
-  (trimLog is gone). The log still marks the bets the card rule would pick with ★ + suggested stake (planFor/PLANS).
+  (trimLog is gone). The ★ + suggested stake on open bets (planFor/PLANS, which re-ran pickPlays — 2/team, best 3/game, 4% team cap — over every open bet at today's bankroll) and its green rowtake highlight were REMOVED 2026-10-24 (user: "the stake and suggested is off" — ★ $4.50 next to a $5.50 stake): a placed bet's stake can't change, so the log shows only what was bet. Don't bring back a recomputed stake for logged bets.
   WEEK TALLY: every week summary has a .wktally line — Spent (every stake, open included) · Won/lost (settled net) · still
   riding · season so far (cumulative spent + net up to that week); the top summary says Spent and Won/lost too.
 - 📲 EDGE ALERTS (2026-10-15, user asked for phone notifications, then "yes" to building it with the timer off):
