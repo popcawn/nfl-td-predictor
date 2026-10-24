@@ -275,7 +275,7 @@ See README.md for what the model does and how it was validated.
 - BET LOG LAYOUT (2026-10-12, user: "a lot going on, simplify it" + "condense by week"): renderBets() = .logsum summary +
   details.weekgrp (Tue->Mon local weeks by b.ko||b.ts; newest/any-open week open; label "Week N" from b.wk) -> details.gamegrp
   (LOGOPEN keys: 'W'+weekStart, game+'#'+weekStart; trim button keeps data-g=game) -> 7-column rows with inline tags
-  (🎉, ⚠ off FanDuel, ⏱ lead). Everything else is static HTML under details#logMore (#betInsights is filled by
+  (🎉, ⚠ off FanDuel; the ⏱ lead tag was removed 2026-10-24 — user: "remove the timing tag and run that data in the background": every bet still stores ts + ko, the ⏱ When you bet table stays in ⚙ More → Insights, and Claude can read it on request). Everything else is static HTML under details#logMore (#betInsights is filled by
   renderBets: scoreboard + "When you bet" table by lead time, TIMING_KIND prop|td|all). Bets carry `ko` (kickoff) and `wk`:
   koStamp(game) at log time (SCHED + CUR_WK), back-filled by autoSettle from ESPN events for older bets (koX = not found).
   Parlay picker = details#parlaySec, collapsed by default; computeParlays() returns early while closed and runs on open;

@@ -691,7 +691,7 @@
             <button class="statussel" id="betClear" style="padding:6px 10px;font-size:12px">Clear log</button>
           </div>
         </div>
-        <div class="logsub muted" style="font-size:12px;line-height:1.55"><b>How to read it.</b> <b>CLV</b> = how much better your price was than FanDuel's closing price; beat the close over many bets and profit follows, long before ROI shows it. A grey <b>≈</b> CLV is a live read (FanDuel's price right now), not final. <b>▼ / ▲</b> = FanDuel moved a prop's line since you bet; the CLV is worked out at your line. <b>⏱</b> = how long before kickoff you logged it. <b>🤖</b> = settled automatically from ESPN (hover for why); <b>✋</b> = settle that one yourself.</div>
+        <div class="logsub muted" style="font-size:12px;line-height:1.55"><b>How to read it.</b> <b>CLV</b> = how much better your price was than FanDuel's closing price; beat the close over many bets and profit follows, long before ROI shows it. A grey <b>≈</b> CLV is a live read (FanDuel's price right now), not final. <b>▼ / ▲</b> = FanDuel moved a prop's line since you bet; the CLV is worked out at your line. <b>🤖</b> = settled automatically from ESPN (hover for why); <b>✋</b> = settle that one yourself.</div>
       </details>
     </div>
 
@@ -3078,7 +3078,6 @@ const weekStart=t=>{ const d=new Date(t); d.setHours(0,0,0,0); d.setDate(d.getDa
 const betWhen=b=>Date.parse(b.ko)||Date.parse(b.ts)||0;
 // how long before kickoff a bet was logged (hours) — the "when you bet" insight buckets it
 const leadH=b=>{ const k=Date.parse(b.ko), t=Date.parse(b.ts); return k&&t ? (k-t)/3.6e6 : null; };
-const leadTxt=h=>h<0?'after kickoff':h>=48?Math.round(h/24)+'d out':h>=1?Math.round(h)+'h out':Math.max(1,Math.round(h*60))+'m out';
 const LEAD_B=[['3+ days out',72,Infinity],['1–3 days out',24,72],['3–24 hours out',3,24],['last 3 hours',0,3]];
 let TIMING_KIND='prop';
 function renderBets(){
@@ -3116,7 +3115,7 @@ function renderBets(){
 
   const weeks=new Map(); for(const r of rows){ const k=weekStart(betWhen(r.b)); (weeks.get(k)||weeks.set(k,[]).get(k)).push(r); }
   const kick=gm=>{ const s=SCHED.find(x=>x.away+'@'+x.home===gm)||(S.schedule||[]).find(x=>x.away+'@'+x.home===gm); return s?new Date(s.kickoff).getTime():null; };
-  const fmtD=t=>new Date(t).toLocaleDateString([], {month:'short', day:'numeric'}), fmtT=t=>new Date(t).toLocaleString([], {weekday:'short', hour:'numeric', minute:'2-digit'});
+  const fmtD=t=>new Date(t).toLocaleDateString([], {month:'short', day:'numeric'});
   const head=['Bet','Odds','Close · CLV','Stake','To win','Result','P/L',''].map((h,i)=>`<th class="${i<1?'l':''}" style="cursor:default;position:static">${h}</th>`).join('');
   const upTo=new Map(); { let sp=0, nt=0; for(const ws of [...weeks.keys()].sort((a,b)=>a-b)){ const a=agg(weeks.get(ws)); sp+=a.spent; nt+=a.net; upTo.set(ws,{spent:sp, net:nt}); } }
   [...weeks.keys()].sort((a,b)=>b-a).forEach((ws,wi)=>{
@@ -3134,11 +3133,10 @@ function renderBets(){
       html+=`<details class="gamegrp" data-k="${esc(key)}"${open?' open':''}><summary><b>${grp.gm?fmtGame(grp.gm):'Parlays &amp; custom bets'}</b> <span class="muted">· ${cnt(ga)}${ga.w+ga.l?` · ${rec(ga)}`:''}${ga.open?` · could win ${amt(ga.towin)}`:''}</span>`+
         `${ga.w+ga.l?` <b class="${g(ga.net)}">${mny(ga.net)}</b>`:''}</summary><div class="grpbody">`;
       html+=`<div style="overflow-x:auto"><table class="logtbl" style="margin-top:0"><thead><tr>${head}</tr></thead><tbody>`;
-      grp.rs.forEach(({b,dec,clv,live,pl,stk})=>{ const lh=leadH(b), mine=isPropMkt(b.market)?+b.market.split('|')[3]:null;
+      grp.rs.forEach(({b,dec,clv,live,pl,stk})=>{ const mine=isPropMkt(b.market)?+b.market.split('|')[3]:null;
         const moved=mine!=null && b.cur && b.cur.l!=null && b.cur.l!==mine, arrow=moved?(b.cur.l<mine?'▼':'▲')+b.cur.l+' ':'';
         const tags=[ b.fun?'<span title="a fun pick">🎉</span>':'',
-          b.offBoard&&b.result==='pending'?`<span style="color:var(--warn);font-size:12px" title="${esc(b.offBoard+' — if you didn\'t place it, delete it (✕)')}">⚠ off FanDuel</span>`:'',
-          lh!=null?`<span class="muted" style="font-size:11px" title="${esc('logged '+fmtT(b.ts)+' · kickoff '+fmtT(b.ko))}">⏱ ${leadTxt(lh)}</span>`:'' ].filter(Boolean).join(' ');
+          b.offBoard&&b.result==='pending'?`<span style="color:var(--warn);font-size:12px" title="${esc(b.offBoard+' — if you didn\'t place it, delete it (✕)')}">⚠ off FanDuel</span>`:'' ].filter(Boolean).join(' ');
         // CLV: final once Close is in; before that a live read from the last pull (≈), with ▼/▲ when FanDuel moved the prop's line
         const sideOf=String(b.market).split('|')[2], against=moved&&((sideOf==='U'&&b.cur.l>mine)||(sideOf==='O'&&b.cur.l<mine)), arrowH=moved?`<span class="${against?'clv-bad':'ev-pos'}" title="${against?'the line moved against your bet':'the line moved your way'}">${arrow.trim()}</span> `:'';
         const clvTxt = clv!=null ? ` <b class="${cg(clv)}">${pc(clv)}</b>${b.closeEst?`<span class="muted" title="the line moved — closed ${esc(b.closeEst)}; this is the equivalent price at your line (model-based estimate)"> ≈</span>`:''}`
