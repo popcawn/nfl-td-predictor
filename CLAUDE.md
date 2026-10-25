@@ -118,6 +118,7 @@ See README.md for what the model does and how it was validated.
 - One-time stake fix (2026-10-21, user: "a 2 bet at +100 wins $2 not 1.97"): bets logged before "logged as shown" are rounded to
   what the card showed (flag *_usdround; NFL only touches app-logged bets — book / legs / mktP / rawP / fun — never a hand-typed
   stake), stamped mt so Sync spreads it. The log's stake shows exactUsd(): the usual format for round amounts, else cents.
+- BetMGM OPEN-ALL WITH STAKES (2026-10-25, user: "it only auto fills stake when its one bet and not multiple"): tested on the user's iPhone with two real selections — options=a,b&type=Single&stake=2 filled $2 on BOTH; stake=2,3 filled nothing. So a book group's BetMGM bets get one button per stake amount ("📲 Open 3 on BetMGM · $2 each"), each link carrying that one stake; FanDuel / DK / Caesars links take no stake. Never put a stake on a BetMGM Combo (parlay) link — untested.
 - BetMGM links = the bet slip on their SITE, with &stake=<$ shown on the card> for a single bet (tested on the user's iPhone
   2026-10-22: bet + stake filled in Safari). The user asked for the APP; nothing opens it from a link on their phone: /en/sportsapp/
   addresses (the only ones Apple's app-site-association lists) opened Safari, betmgm.onelink.me app links opened the App Store, and

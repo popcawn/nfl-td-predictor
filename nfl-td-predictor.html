@@ -1869,7 +1869,7 @@ function bookLink(book, tks, combo, usd){
       : FD_SLIP+'?'+tks.map((x,i)=>`marketId[${i}]=${encodeURIComponent(x.m)}&selectionId[${i}]=${encodeURIComponent(x.s)}`).join('&'); }
   if(book==='draftkings'){ if(tks.some(x=>!x.s)) return null; return 'https://sportsbook.draftkings.com/?outcomes='+tks.map(x=>encodeURIComponent(x.s)).join('+'); }
   // BetMGM / Caesars, from the API's own one-leg links; joining several legs with commas is a guess, like FanDuel's / DK's
-  if(book==='betmgm'){ if(!st || tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sports?options=${tks.map(x=>x.g).join(',')}&type=${combo&&tks.length>1?'Combo':'Single'}${usd&&tks.length===1?'&stake='+usd:''}`; }
+  if(book==='betmgm'){ if(!st || tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sports?options=${tks.map(x=>x.g).join(',')}&type=${combo&&tks.length>1?'Combo':'Single'}${usd&&!(combo&&tks.length>1)?'&stake='+usd:''}`; }
   if(book==='williamhill_us'){ if(!st || tks.some(x=>!x.s)) return null; return `https://sportsbook.caesars.com/us/${st}/bet/betslip?selectionIds=${tks.map(x=>encodeURIComponent(x.s)).join(',')}`; }
   return null;   // Fanatics gives no links — open those by hand (BOOK_HOME)
 }
@@ -1886,10 +1886,16 @@ function fdButton(legs, label, mode){
       `<button class="statussel fdpull" style="padding:3px 11px" title="${esc(why)} — pulls this game's prices again">🔗 Get bet-slip link${legs.length>1?'s':''}</button>`; }
   const by=new Map(); for(const l of ok){ const t=legSel(l), b=bookOfTk(t); (by.get(b)||by.set(b,[]).get(b)).push({t,l}); }
   let html='';
+// BetMGM's slip link takes ONE stake for every bet in it (the user's iPhone, 2026-10-25: stake=2 filled $2 on both bets; a
+// list like stake=2,3 filled nothing) -> its bets are split into one button per stake amount, each opening with it filled in
+  const k=unitUsd(), usdOf=l=>l.stake&&k!=null?roundUsd(l.stake*k):null;
+  const btn=(b,tks,usd,txt)=>`<a class="statussel fdbtn" href="${esc(bookLink(b,tks,false,usd))}" target="_blank" rel="noopener" title="opens ${esc(bookName(b))} with ${tks.length===1?'this bet':'these '+tks.length+' bets'} in the bet slip${usd&&b==='betmgm'?' and '+fmtUsd(usd)+(tks.length>1?' on each':'')+' filled in':''} — check the price there before you bet">📲 ${txt}</a> `;
   for(const [b,items] of by){ const tks=items.map(x=>x.t);
     const txt=String(typeof label==='function'?label(tks.length):label).replace(/FanDuel/g, bookName(b));
-    const one1=items.length===1&&items[0].l.stake&&unitUsd()!=null?roundUsd(items[0].l.stake*unitUsd()):null;
-    html+=`<a class="statussel fdbtn" href="${esc(bookLink(b,tks,false,one1))}" target="_blank" rel="noopener" title="opens ${esc(bookName(b))} with ${tks.length===1?'this bet':'these '+tks.length+' bets'} in the bet slip — check the price there before you bet">📲 ${txt}${by.size>1&&typeof label!=='function'?' ('+tks.length+')':''}</a> `; }
+    if(b==='betmgm'&&tks.length>1&&items.every(x=>usdOf(x.l))){ const g=new Map(); for(const x of items){ const u=usdOf(x.l); (g.get(u)||g.set(u,[]).get(u)).push(x.t); }
+      for(const [u,T] of [...g].sort((p,q)=>q[0]-p[0])) html+=btn(b, T, u, `Open ${T.length>1?T.length+' ':''}on ${esc(bookName(b))} · ${fmtUsd(u)}${T.length>1?' each':''}`);
+      continue; }
+    html+=btn(b, tks, items.length===1?usdOf(items[0].l):null, `${txt}${by.size>1&&typeof label!=='function'?' ('+tks.length+')':''}`); }
   // a price at a book the app can't link (Fanatics …) is still on the board — say where to place it by hand
   const LINKED_BOOKS=['fanduel','draftkings'].concat(STATE_BOOKS), atBook=l=>{ const t=legSel(l), b=t&&bookOfTk(t); return b&&!LINKED_BOOKS.includes(b) ? b : null; };
   const byHand=other.filter(atBook), unk=other.filter(l=>!atBook(l));
