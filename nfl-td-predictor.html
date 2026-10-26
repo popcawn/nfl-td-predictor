@@ -2246,6 +2246,16 @@ const betUsd=b=>b.usd!=null ? +b.usd : (BANK.amt ? (+b.stake||0)*BANK.amt/getBan
 const betPlUsd=b=>{ const u=betUsd(b); if(u==null) return null; const d=oddsDec(b.odds)||1; return b.result==='win'?u*(d-1):b.result==='loss'?-u:b.result==='push'?0:null; };
 function bankNow(){ if(!BANK.amt) return null; let x=BANK.amt; for(const b of allBets()) if(b.st>BANK.at){ const p=betPlUsd(b); if(p!=null) x+=p; } return Math.max(0,x); }   // every sport's settled bets
 const unitUsd=()=>{ const n=bankNow(); return n!=null ? n/getBankroll() : null; };
+// BANKROLL LIMIT (user, 2026-10-26: the plan they said yes to — "whatever profits the most money"): the money on open bets
+// across NFL, NBA and NHL (one pot) never goes above the bankroll. New bets take the room biggest stake first; the rest wait
+// off the card until settled bets free room up. (A simulation of the season said a half-bankroll limit cost growth for
+// almost no safety; the full bankroll stops the overspending — $257 was riding on $133 on Oct 25.)
+const ridingUsd=()=>allBets().filter(b=>b.result==='pending').reduce((a,b)=>a+(betUsd(b)||0),0);
+function fitRoom(L, usdOf){ const B=bankNow(); if(B==null) return {fit:L.slice(), out:[], bank:null, left:null};
+  let left=B-ridingUsd(); const fit=[], out=[];
+  for(const c of L.slice().sort((a,b)=>usdOf(b)-usdOf(a))){ const u=usdOf(c); if(u<=left+1e-9){ fit.push(c); left-=u; } else out.push(c); }
+  return {fit, out, bank:B, left}; }
+const roomNote=R=>R&&R.out.length?`<div class="skipnote" title="the money on open bets across NFL, NBA and NHL never goes above your bankroll — biggest bets first; the rest wait until settled bets free up room">💰 ${fmtUsd(R.bank-R.left)} of your ${fmtUsd(R.bank)} bankroll in play · ${R.out.length} more bet${R.out.length>1?'s':''} wait${R.out.length>1?'':'s'} for room</div>`:'';
 const fmtUsd=x=>{ const a=Math.abs(x); return (x<0?'−':'')+'$'+(a>=20?Math.round(a).toLocaleString():a>=1?(Math.round(a*2)/2).toFixed(Math.round(a*2)%2?2:0):a.toFixed(2)); };
 // a stake for display: dollars when a bankroll is set, units otherwise
 const stakeTxt=u=>{ const k=unitUsd(); return k!=null ? fmtUsd(u*k) : (Math.round(u*10)/10).toFixed(1)+'u'; };
@@ -2934,9 +2944,10 @@ function renderWeek(){
   const tt=$('weekTitle'); if(tt) tt.textContent=left.length?`This week · ${left.length} game${left.length===1?'':'s'} left`:'No games left this week';
   if(!WEEK) return;
   const age=Math.round((now-WEEK.at)/60e3), P=WEEK.picks.filter(c=>(!c.kickoff||Date.parse(c.kickoff)>now) && !heldSameStat(c.game, c) && !SKIP[skipKey(c.game, c)]);   // kicked-off games drop out; so does a stat you already bet
-  const isNew=c=>!bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&b.market===c.market), NEW=P.filter(isNew), nNew=NEW.length, tot=NEW.reduce((a,c)=>a+c.stake,0);
+  const isNew=c=>!bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&b.market===c.market), ALLNEW=P.filter(isNew), WR=fitRoom(ALLNEW, c=>roundUsd(c.stake*(unitUsd()||0))), NEW=ALLNEW.filter(c=>WR.fit.includes(c)), nNew=NEW.length, tot=NEW.reduce((a,c)=>a+c.stake,0);
   let h= !P.length ? cardStat('none','NO BETS THIS WEEK','nothing at your books clears the bar') : nNew ? cardStat('new',`🆕 ${nNew} NEW BET${nNew>1?'S':''}`, `${stakeTxt(tot)} · ${(tot/getBankroll()*100).toFixed(1)}% of bankroll${P.length-nNew?` · ${P.length-nNew} already in your log`:''}`) : cardStat('done','✅ NO NEW BETS',`${P.length>1?'all '+P.length+' are':'it\'s'} already in your log`);
   h+=`<div class="muted" style="font-size:13px;margin:-2px 0 8px">${WEEK.n} game${WEEK.n===1?'':'s'} checked ${age<1?'just now':age<60?age+' min ago':Math.round(age/60)+' h ago'}${age>60?' — <span style="color:var(--warn)">pull again for fresh prices</span>':''} · each game's bets are exactly what its card says · tap a bet to open its game</div>`;
+  if(WR.out.length) h=(nNew?h:cardStat('done','💰 BANKROLL IN PLAY', `${WR.out.length} bet${WR.out.length>1?'s':''} wait for room`))+roomNote(WR);
   if(nNew) h+=`<div class="bacts"><button class="statussel" id="weekLog">📓 Log the ${nNew} new</button></div>`;
   // only new bets are drawn (user, 2026-10-21: "logged bets shouldnt be shown. Only new bets") — the log has the rest
   // one grid per sportsbook (user, 2026-10-21: "doesnt need to stacked. or even seperated by game … if anything seperate
@@ -2965,10 +2976,11 @@ function renderSlate(){
   const age=Math.round((Date.now()-SLATE.at)/60e3), when=new Date(SLATE.at).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
   const notes=SLATE.notes.length?`<div class="muted" style="font-size:12px;margin-top:6px">Skipped: ${SLATE.notes.map(esc).join(' · ')}</div>`:'';
   const stale=age>45?` <span style="color:var(--warn)">— ${age} min old, rebuild for fresh prices</span>`:'';
-  const P=SLATE.parlay, on=betOnSet();
+  const P=SLATE.parlay, on=betOnSet(), RS=fitRoom(SLATE.picks.filter(c=>on.get(c.game+'|'+c.key)!=='log'), c=>roundUsd(c.stake*(unitUsd()||0)));
   const stakeBadge=(c,cls)=>{ const w=on.get(c.game+'|'+c.key);
     return w==='log' ? `<span class="muted" style="margin-left:auto;font-size:12px" title="you already have an open bet on him — another one only doubles up">✓ already bet</span>`
       : w==='slip' ? `<span class="muted" style="margin-left:auto;font-size:12px" title="he's in your slip — bet him once, from here or from the slip">✓ in your slip</span>`
+      : RS.out.includes(c) ? `<span class="muted" style="margin-left:auto;font-size:12px" title="your bankroll is fully in play — this becomes a bet when settled bets free up room">💰 no room</span>`
       : `<span class="vbadge${cls}" style="margin-left:auto;font-size:12px">bet ${u(c.stake)}</span>`; };
   const parlayBadge=(PP,stake,fun,cls)=>parlayLogged(PP.legs, fun) ? '<span class="muted" style="font-size:12px">✓ already bet</span>' : `<span class="vbadge${cls}" style="font-size:12px">bet ${u(stake)}</span>`;
   let html='';
@@ -3040,7 +3052,7 @@ function renderSlate(){
     html+=pxNote+`</div>`;
   }
   out.innerHTML=html+notes;
-  const lp=$('slateLog'); if(lp) lp.onclick=()=>{ let n=0; for(const c of SLATE.picks) if(logBetFrom(Object.assign({market:'anytime'},c), c.stake, c.game)) n++; if(n){ saveBets(); renderBets(); } lp.textContent=n?`✓ logged ${n}`:'already logged'; };
+  const lp=$('slateLog'); if(lp) lp.onclick=()=>{ let n=0; for(const c of SLATE.picks) if(!RS.out.includes(c)&&logBetFrom(Object.assign({market:'anytime'},c), c.stake, c.game)) n++; if(n){ saveBets(); renderBets(); } lp.textContent=n?`✓ logged ${n}`:'already logged'; };
   const logParlay=(PP, stake, label, extra)=>{ const first=PP.legs.map(l=>l.game).filter(koOf).sort((x,y)=>Date.parse(koOf(x))-Date.parse(koOf(y)))[0];
     bets.unshift(Object.assign({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), ...(first?koStamp(first):{}), ...usdStamp(stake), game:'', key:null, player:label+PP.legs.map(l=>l.name).join(' + '), market:'custom', odds:amStr(decToAmerican(PP.D)), modelProb:+PP.P.toFixed(4), stake, closeOdds:'', result:'pending',
     legs:PP.legs.map(l=>({game:l.game, key:l.key, market:l.market||'anytime', name:l.name}))}, extra||{})); saveBets(); renderBets(); };
