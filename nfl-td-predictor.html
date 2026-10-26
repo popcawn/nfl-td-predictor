@@ -1858,10 +1858,11 @@ const FD_SLIP='https://sportsbook.fanduel.com/addToBetslip';
 const STATE_BOOKS=['betmgm','williamhill_us'];
 const BOOK_HOME={fanatics:'https://sportsbook.fanatics.com/'};   // no bet-slip link exists for these: open the book, find the bet
 const needsState=t=>!!t && STATE_BOOKS.includes(bookOfTk(t)) && !ODDSCFG.state;   // ids are there, your state isn't
-// BetMGM: the bet slip on their site, and a single bet carries its stake (&stake=) so it opens with the amount filled in (tested on
-// the user's iPhone 2026-10-22). No link opens the BetMGM app there: /sportsapp/ addresses and betmgm.onelink.me app links were
-// tried — the first open Safari, the second the App Store — and the app's private link type isn't published.
-function bookLink(book, tks, combo, usd){
+// BetMGM: the bet slip on their site, no stake in the link — you type each bet's stake (user, 2026-10-26: "i dont want the
+// average ... just open all with a click and i fill it in"; a link stake fills ONE amount for every bet in the slip, and BetMGM
+// turned &stake=0.78 into $0.50). No link opens the BetMGM app on the user's iPhone: /sportsapp/ addresses and
+// betmgm.onelink.me app links were tried — the first open Safari, the second the App Store.
+function bookLink(book, tks, combo){
   if(!tks.length) return null;
   const st=String(ODDSCFG.state||'').toLowerCase();
   if(book==='fanduel'){ if(tks.some(x=>!x.m||!x.s)) return null;
@@ -1869,7 +1870,7 @@ function bookLink(book, tks, combo, usd){
       : FD_SLIP+'?'+tks.map((x,i)=>`marketId[${i}]=${encodeURIComponent(x.m)}&selectionId[${i}]=${encodeURIComponent(x.s)}`).join('&'); }
   if(book==='draftkings'){ if(tks.some(x=>!x.s)) return null; return 'https://sportsbook.draftkings.com/?outcomes='+tks.map(x=>encodeURIComponent(x.s)).join('+'); }
   // BetMGM / Caesars, from the API's own one-leg links; joining several legs with commas is a guess, like FanDuel's / DK's
-  if(book==='betmgm'){ if(!st || tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sports?options=${tks.map(x=>x.g).join(',')}&type=${combo&&tks.length>1?'Combo':'Single'}${usd&&!(combo&&tks.length>1)?'&stake='+usd:''}`; }
+  if(book==='betmgm'){ if(!st || tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sports?options=${tks.map(x=>x.g).join(',')}&type=${combo&&tks.length>1?'Combo':'Single'}`; }
   if(book==='williamhill_us'){ if(!st || tks.some(x=>!x.s)) return null; return `https://sportsbook.caesars.com/us/${st}/bet/betslip?selectionIds=${tks.map(x=>encodeURIComponent(x.s)).join(',')}`; }
   return null;   // Fanatics gives no links — open those by hand (BOOK_HOME)
 }
@@ -1886,16 +1887,9 @@ function fdButton(legs, label, mode){
       `<button class="statussel fdpull" style="padding:3px 11px" title="${esc(why)} — pulls this game's prices again">🔗 Get bet-slip link${legs.length>1?'s':''}</button>`; }
   const by=new Map(); for(const l of ok){ const t=legSel(l), b=bookOfTk(t); (by.get(b)||by.set(b,[]).get(b)).push({t,l}); }
   let html='';
-// BetMGM's slip link takes ONE stake for every bet in it (the user's iPhone, 2026-10-25: stake=2 filled $2 on both bets; a
-// list like stake=2,3 filled nothing) -> its bets are split into one button per stake amount, each opening with it filled in
-  const k=unitUsd(), usdOf=l=>l.stake&&k!=null?roundUsd(l.stake*k):null;
-  const btn=(b,tks,usd,txt)=>`<a class="statussel fdbtn" href="${esc(bookLink(b,tks,false,usd))}" target="_blank" rel="noopener" title="opens ${esc(bookName(b))} with ${tks.length===1?'this bet':'these '+tks.length+' bets'} in the bet slip${usd&&b==='betmgm'?' and '+fmtUsd(usd)+(tks.length>1?' on each':'')+' filled in':''} — check the price there before you bet">📲 ${txt}</a> `;
   for(const [b,items] of by){ const tks=items.map(x=>x.t);
     const txt=String(typeof label==='function'?label(tks.length):label).replace(/FanDuel/g, bookName(b));
-    if(b==='betmgm'&&tks.length>1&&items.every(x=>usdOf(x.l))){ const g=new Map(); for(const x of items){ const u=usdOf(x.l); (g.get(u)||g.set(u,[]).get(u)).push(x.t); }
-      for(const [u,T] of [...g].sort((p,q)=>q[0]-p[0])) html+=btn(b, T, u, `Open ${T.length>1?T.length+' ':''}on ${esc(bookName(b))} · ${fmtUsd(u)}${T.length>1?' each':''}`);
-      continue; }
-    html+=btn(b, tks, items.length===1?usdOf(items[0].l):null, `${txt}${by.size>1&&typeof label!=='function'?' ('+tks.length+')':''}`); }
+    html+=`<a class="statussel fdbtn" href="${esc(bookLink(b,tks,false))}" target="_blank" rel="noopener" title="opens ${esc(bookName(b))} with ${tks.length===1?'this bet':'these '+tks.length+' bets'} in the bet slip — check the price there before you bet">📲 ${txt}${by.size>1&&typeof label!=='function'?' ('+tks.length+')':''}</a> `; }
   // a price at a book the app can't link (Fanatics …) is still on the board — say where to place it by hand
   const LINKED_BOOKS=['fanduel','draftkings'].concat(STATE_BOOKS), atBook=l=>{ const t=legSel(l), b=t&&bookOfTk(t); return b&&!LINKED_BOOKS.includes(b) ? b : null; };
   const byHand=other.filter(atBook), unk=other.filter(l=>!atBook(l));
@@ -2255,12 +2249,6 @@ function fitRoom(L, usdOf){ const B=bankNow(); if(B==null) return {fit:L.slice()
   let left=B-ridingUsd(); const fit=[], out=[];
   for(const c of L.slice().sort((a,b)=>usdOf(b)-usdOf(a))){ const u=usdOf(c); if(u<=left+1e-9){ fit.push(c); left-=u; } else out.push(c); }
   return {fit, out, bank:B, left}; }
-// BetMGM's slip link takes one stake for every bet in it, and one button per stake amount was too many (user, 2026-10-26:
-// "i dont like the individual opens for bet mgm" — half-size NBA stakes made almost every bet its own amount) -> the new
-// BetMGM bets in a batch share one stake, their average: the total is unchanged and one button fills them all
-// The average runs over every BetMGM bet in the batch, logged ones too, so logging some never moves the stake of the rest
-const mgmEven=(L, isNew=c=>!c.held)=>{ const all=L.filter(c=>c.book==='betmgm'); if(all.length<2||!all.some(isNew)) return L; const avg=all.reduce((a,c)=>a+c.stake,0)/all.length;
-  return L.map(c=>c.book==='betmgm'&&isNew(c)?Object.assign({}, c, {stake:avg}):c); };
 const roomNote=R=>R&&R.out.length?`<div class="skipnote" title="the money on open bets across NFL, NBA and NHL never goes above your bankroll — biggest bets first; the rest wait until settled bets free up room">💰 ${fmtUsd(R.bank-R.left)} of your ${fmtUsd(R.bank)} bankroll in play · ${R.out.length} more bet${R.out.length>1?'s':''} wait${R.out.length>1?'':'s'} for room</div>`:'';
 const fmtUsd=x=>{ const a=Math.abs(x); return (x<0?'−':'')+'$'+(a>=20?Math.round(a).toLocaleString():a>=1?(Math.round(a*2)/2).toFixed(Math.round(a*2)%2?2:0):a.toFixed(2)); };
 // a stake for display: dollars when a bankroll is set, units otherwise
@@ -2950,7 +2938,7 @@ function renderWeek(){
   const tt=$('weekTitle'); if(tt) tt.textContent=left.length?`This week · ${left.length} game${left.length===1?'':'s'} left`:'No games left this week';
   if(!WEEK) return;
   const age=Math.round((now-WEEK.at)/60e3), P=WEEK.picks.filter(c=>(!c.kickoff||Date.parse(c.kickoff)>now) && !heldSameStat(c.game, c) && !SKIP[skipKey(c.game, c)]);   // kicked-off games drop out; so does a stat you already bet
-  const isNew=c=>!bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&b.market===c.market), ALLNEW=mgmEven(P, isNew).filter(isNew), WR=fitRoom(ALLNEW, c=>roundUsd(c.stake*(unitUsd()||0))), NEW=ALLNEW.filter(c=>WR.fit.includes(c)), nNew=NEW.length, tot=NEW.reduce((a,c)=>a+c.stake,0);
+  const isNew=c=>!bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&b.market===c.market), ALLNEW=P.filter(isNew), WR=fitRoom(ALLNEW, c=>roundUsd(c.stake*(unitUsd()||0))), NEW=ALLNEW.filter(c=>WR.fit.includes(c)), nNew=NEW.length, tot=NEW.reduce((a,c)=>a+c.stake,0);
   let h= !P.length ? cardStat('none','NO BETS THIS WEEK','nothing at your books clears the bar') : nNew ? cardStat('new',`🆕 ${nNew} NEW BET${nNew>1?'S':''}`, `${stakeTxt(tot)} · ${(tot/getBankroll()*100).toFixed(1)}% of bankroll${P.length-nNew?` · ${P.length-nNew} already in your log`:''}`) : cardStat('done','✅ NO NEW BETS',`${P.length>1?'all '+P.length+' are':'it\'s'} already in your log`);
   h+=`<div class="muted" style="font-size:13px;margin:-2px 0 8px">${WEEK.n} game${WEEK.n===1?'':'s'} checked ${age<1?'just now':age<60?age+' min ago':Math.round(age/60)+' h ago'}${age>60?' — <span style="color:var(--warn)">pull again for fresh prices</span>':''} · each game's bets are exactly what its card says · tap a bet to open its game</div>`;
   if(WR.out.length) h=(nNew?h:cardStat('done','💰 BANKROLL IN PLAY', `${WR.out.length} bet${WR.out.length>1?'s':''} wait${WR.out.length>1?'':'s'} for room`))+roomNote(WR);
