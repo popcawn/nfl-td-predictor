@@ -394,6 +394,11 @@
      swap in one frame (no fade: a cross-fade showed both pages at once) — Chrome / Edge */
   @view-transition{navigation:auto}
   ::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none}
+  /* ↩ undo pop-up after a 📓 log click */
+  .undobar{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;z-index:70;display:flex;align-items:center;gap:10px;background:var(--panel);color:var(--ink);border:1px solid var(--line2);border-radius:14px;box-shadow:var(--shadow);padding:8px 8px 8px 16px;font-size:15px;max-width:calc(100vw - 32px);white-space:nowrap}
+  .undobar[hidden]{display:none}
+  .undobar button{font-size:14px;padding:6px 12px;cursor:pointer} .undobar #undoLog{font-weight:700}
+  @media(max-width:760px){ .undobar{bottom:calc(74px + env(safe-area-inset-bottom))} }
 </style>
 </head>
 <body>
@@ -702,6 +707,7 @@
   </div>
 
   <footer id="footer"></footer>
+<div id="undoBar" class="undobar" role="status" aria-live="polite" hidden></div>
   <nav class="mtabbar" id="mtabbar"><button data-t="picks"><span>⚡</span>Bets</button><button data-t="game"><span>🏈</span>Game</button><button data-t="bets"><span>📓</span>Log</button><button data-t="more"><span>⋯</span>More</button></nav>
 </div>
 
@@ -1510,12 +1516,25 @@ function statOf(m){ return typeof m==='string'&&m.startsWith('P|') ? m.split('|'
 // your log, the same player's stat at a new line (the line got bet up) or on the other side is never another bet
 function heldSameStat(game, c){ if(!isPropMkt(c.market)) return null;
   return bets.find(b=>b.result==='pending' && b.game===game && b.key===c.key && b.market!==c.market && statOf(b.market)===statOf(c.market))||null; }
+// ↩ UNDO A LOG (user, 2026-10-31: "create a button that undo log bets if i accidently click log bets"): every bet a click logs
+// is noted, and that click's bets get a pop-up with ↩ Undo for 30 s. Undo takes them back out like the log's ✕ (a sync
+// tombstone, so other devices drop them too). Only still-open bets are taken out; a newer click replaces the pop-up
+let UNDO=null, undoNew=[], undoTimer=0;
+function noteLogged(id){ if(!undoNew.length) setTimeout(showUndo, 0); undoNew.push(id); }
+function showUndo(){ UNDO=undoNew; undoNew=[]; const el=$('undoBar'), n=UNDO.length; if(!el||!n) return;
+  el.innerHTML=`<span>📓 Logged <b>${n}</b> bet${n>1?'s':''}</span><button class="ss" id="undoLog">↩ Undo</button><button class="ss" id="undoX" title="close" aria-label="close">✕</button>`;
+  el.hidden=false; clearTimeout(undoTimer); undoTimer=setTimeout(hideUndo, 30e3); }
+function hideUndo(){ UNDO=null; clearTimeout(undoTimer); const el=$('undoBar'); if(el) el.hidden=true; }
+function undoLog(){ if(!UNDO) return; const ids=new Set(UNDO), n0=bets.length; bets=bets.filter(b=>!(ids.has(b.id)&&b.result==='pending')); const n=n0-bets.length;
+  UNDO=null; if(n){ saveBets(); renderBets(); } const el=$('undoBar'); if(!el) return;
+  el.innerHTML=`<span>↩ Took ${n||'no'} bet${n===1?'':'s'} back out of your log</span>`; clearTimeout(undoTimer); undoTimer=setTimeout(hideUndo, 2500); }
 function logBetFrom(c, stake, gameIn){
   const game=gameIn||curGameId();
   if(bets.some(b=>b.game===game && b.key===c.key && b.market===c.market && b.result==='pending') || heldSameStat(game, c)) return false;
   bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), ...koStamp(game), ...usdStamp(stake), ...(c.book?{book:c.book}:{}), game, key:c.key, player:c.label, market:c.market, odds:c.odds,
     modelProb:+(+c.mp).toFixed(4), ...(c.fun?{fun:true}:{}), ...(c.model!=null?{rawP:+(+c.model).toFixed(4)}:{}), ...(c.mkt!=null?{mktP:+(+c.mkt).toFixed(4)}:{}), rk:+(c.kelly!=null?c.kelly:(c.rk||0)).toFixed(5), cf:c.conf?c.conf.score:null, ...(c.prop?{pmu:+c.prop.mu.toFixed(3)}:{}),
     stake:+(+stake).toFixed(1), closeOdds:'', result:'pending'});
+  noteLogged(bets[0].id);
   return true;
 }
 let CANDS=[], BOARDROWS=[];
@@ -2174,7 +2193,7 @@ function addBet(){
   else { player=o.name; key=o.key; market=mkt; mp = o.p ? o.p[mkt] : (o.dst ? o.dst[mkt] : null); }
   let rk=null, cf=null;   // rank for the log's plan (confidence-adjusted Kelly), like bets logged from the card
   if(mp!=null){ const r=evalBet(mp, odds); if(r){ const cn=confFor(o.p||{dst:true}, market, r); cf=cn.score; rk=r.edge>0?+(cn.score*r.edge/(1-r.bimp)).toFixed(5):0; } }
-  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*9999), ts:new Date().toISOString(), ...koStamp(game), ...usd, game, key, player, market, odds, modelProb:(mp!=null?+mp.toFixed(4):null), rk, cf, stake, closeOdds:'', result:'pending'});
+  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*9999), ts:new Date().toISOString(), ...koStamp(game), ...usd, game, key, player, market, odds, modelProb:(mp!=null?+mp.toFixed(4):null), rk, cf, stake, closeOdds:'', result:'pending'}); noteLogged(bets[0].id);
   saveBets(); $('betOdds').value=''; $('betCustom').value=''; renderBets(); betFlash('logged ✓');
 }
 // Fill Close from a pasted board: matches your OPEN bets (pending, or logged in the last 2 days without a
@@ -3049,7 +3068,7 @@ function renderSlate(){
   const lp=$('slateLog'); if(lp) lp.onclick=()=>{ let n=0; for(const c of SLATE.picks) if(!RS.out.includes(c)&&logBetFrom(Object.assign({market:'anytime'},c), c.stake, c.game)) n++; if(n){ saveBets(); renderBets(); } lp.textContent=n?`✓ logged ${n}`:'already logged'; };
   const logParlay=(PP, stake, label, extra)=>{ const first=PP.legs.map(l=>l.game).filter(koOf).sort((x,y)=>Date.parse(koOf(x))-Date.parse(koOf(y)))[0];
     bets.unshift(Object.assign({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), ...(first?koStamp(first):{}), ...usdStamp(stake), game:'', key:null, player:label+PP.legs.map(l=>l.name).join(' + '), market:'custom', odds:amStr(decToAmerican(PP.D)), modelProb:+PP.P.toFixed(4), stake, closeOdds:'', result:'pending',
-    legs:PP.legs.map(l=>({game:l.game, key:l.key, market:l.market||'anytime', name:l.name}))}, extra||{})); saveBets(); renderBets(); };
+    legs:PP.legs.map(l=>({game:l.game, key:l.key, market:l.market||'anytime', name:l.name}))}, extra||{})); noteLogged(bets[0].id); saveBets(); renderBets(); };
   const lpp=$('slateLogParlay'); if(lpp) lpp.onclick=()=>{ logParlay(P, slateParlayStake(P,bank), 'Parlay: '); lpp.textContent='✓ logged'; };
   const ls=$('slateSlip'); if(ls) ls.onclick=()=>{ let n=0; for(const l of P.legs) if(!slipHas(l.game,l.key,l.market)){ slip.push(Object.assign({},l)); n++; } if(n){ saveSlip(); renderSlip(); } ls.textContent=n?`✓ added ${n}`:'already in slip'; };
   const fl=$('funLog'); if(fl) fl.onclick=()=>{ let n=0; for(const c of F.picks) if(logBetFrom(Object.assign({market:'anytime', fun:true},c), c.stake, c.game)) n++; if(n){ saveBets(); renderBets(); } fl.textContent=n?`✓ logged ${n}`:'already logged'; };
@@ -3564,6 +3583,7 @@ $('pricedChips').addEventListener('click', e=>{ const b=e.target.closest('.chipx
   renderPlayers(); renderDST(); renderProps(); computeParlays(); refreshSlipAdder(); boardChanged(); });
 $('boardPass').onchange=renderBoard;
 $('cardBody').addEventListener('click', e=>{ if(e.target.closest('.seeall')) setMTab('all'); });
+$('undoBar').addEventListener('click', e=>{ if(e.target.closest('#undoLog')) undoLog(); else if(e.target.closest('#undoX')) hideUndo(); });
 $('boardBody').addEventListener('click', e=>{ const b=e.target.closest('button[data-act]'); if(!b) return; const c=BOARDROWS[+b.dataset.i]; if(!c) return;
   if(b.dataset.act==='log'){ const pick=CARD.find(p=>p.key===c.key&&p.market===c.market); if(logBetFrom(c, pick?pick.stake:sugStake(c))){ saveBets(); renderBets(); } }
   else if(b.dataset.act==='unlog'){ const g=curGameId(), x=bets.find(y=>y.result==='pending'&&y.game===g&&y.key===c.key&&y.market===c.market);
