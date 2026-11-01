@@ -477,6 +477,7 @@
         <span id="bankNow" style="font-size:12px;line-height:1.45"></span>
       </div>
       <div id="bankNote" class="muted" style="font-size:12px;margin-top:6px;line-height:1.5"></div>
+      <label style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px;margin-top:8px;cursor:pointer" title="ON: the money on open bets across NFL, NBA and NHL never goes above your bankroll — the biggest bets go first, the rest wait until settled bets free up room. OFF: every bet the card picks shows, however much is already riding. One switch for all three sports (it rides in ☁ Sync)"><input type="checkbox" id="limitChk" checked> <b>💰 Bankroll limit</b> <span id="limitTxt" class="muted"></span></label>
       <input id="bankroll" type="hidden">
     </div>
     <!-- PRICE THIS GAME: one paste box for every market -->
@@ -2274,7 +2275,11 @@ const unitUsd=()=>{ const n=bankNow(); return n!=null ? n/getBankroll() : null; 
 // off the card until settled bets free room up. (A simulation of the season said a half-bankroll limit cost growth for
 // almost no safety; the full bankroll stops the overspending — $257 was riding on $133 on Oct 25.)
 const ridingUsd=()=>allBets().filter(b=>b.result==='pending').reduce((a,b)=>a+(betUsd(b)||0),0);
-function fitRoom(L, usdOf){ const B=bankNow(); if(B==null) return {fit:L.slice(), out:[], bank:null, left:null};
+// 💰 ON / OFF (user, 2026-11-01: "create a on/off toggle for bankroll limit"): BANK.lim===false switches the limit off. It lives
+// in the pot (nfltd_bank), so it is one switch for NFL, NBA and NHL and rides in ☁ Sync; typing a new balance keeps it.
+// Off = every bet the card picks shows, however much is already riding
+function renderLimit(){ const c=$('limitChk'), t=$('limitTxt'); if(!c) return; c.checked=BANK.lim!==false; t.textContent=c.checked?'— open bets never go above your bankroll':'is OFF — every bet shows, even past your bankroll'; }
+function fitRoom(L, usdOf){ const B=bankNow(); if(B==null||BANK.lim===false) return {fit:L.slice(), out:[], bank:B, left:null};
   let left=B-ridingUsd(); const fit=[], out=[];
   for(const c of L.slice().sort((a,b)=>usdOf(b)-usdOf(a))){ const u=usdOf(c); if(u<=left+1e-9){ fit.push(c); left-=u; } else out.push(c); }
   return {fit, out, bank:B, left}; }
@@ -2289,7 +2294,7 @@ const betStakeTxt=b=>BANK.amt&&betUsd(b)!=null ? exactUsd(+betUsd(b)) : b.stake+
 // so the log's P/L and "To win" match your book
 const roundUsd=x=>{ const a=Math.abs(x); return a>=20?Math.round(a):a>=1?Math.round(a*2)/2:Math.round(a*100)/100; };
 const usdStamp=u=>{ const k=unitUsd(); return k!=null ? {usd:roundUsd(u*k)} : {}; };   // goes on a bet when it's logged
-function renderBank(){
+function renderBank(){ renderLimit();
   const inp=$('bankUsd'); if(!inp) return; const now=bankNow();
   if(document.activeElement!==inp) inp.value=now!=null ? Math.round(now*100)/100 : '';
   const bs=$('betStake'); if(bs) bs.placeholder=now!=null?'stake $':'stake 1';
@@ -2312,8 +2317,8 @@ function renderPotChip(now){ const c=$('potChip'); if(!c) return; const AB=allBe
     (onG.length?st('','This game', fmtUsd(gUsd), 'staked on the game you have open'):'');
   try{ const sh=c.innerHTML.replace(/<div class="stat [^"]*" title="staked on the game you have open">[\s\S]*$/, ''); localStorage.setItem('sims_chip', sh); }catch(e){} }
 // another app (NBA / NHL) in another tab changed the pot or its bets -> redraw
-window.addEventListener('storage', e=>{ if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderBank(); try{ if(LAST) computeTopPlays(); renderSlip(); renderBets(); }catch(err){} } else if(e.key==='nbap_bets'||e.key==='nhlp_bets') renderBank(); });
-function setBank(v){ BANK = v>0 ? {amt:+(+v).toFixed(2), at:Date.now(), mt:Date.now()} : {amt:null, at:0, mt:Date.now()}; lsW('nfltd_bank', BANK); syncSoon(); if(LAST) computeTopPlays(); renderSlip(); renderBets(); try{ if(SLATE) renderSlate(); }catch(e){} }
+window.addEventListener('storage', e=>{ if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderBank(); try{ if(LAST) computeTopPlays(); renderSlip(); renderBets(); renderWeek(); if(SLATE) renderSlate(); }catch(err){} } else if(e.key==='nbap_bets'||e.key==='nhlp_bets') renderBank(); });
+function setBank(v){ const lim=BANK.lim; BANK = v>0 ? {amt:+(+v).toFixed(2), at:Date.now(), mt:Date.now()} : {amt:null, at:0, mt:Date.now()}; if(lim===false) BANK.lim=false; lsW('nfltd_bank', BANK); syncSoon(); if(LAST) computeTopPlays(); renderSlip(); renderBets(); try{ if(SLATE) renderSlate(); }catch(e){} }
 // all five of your books by default (user, 2026-10-24: "is it intentional to have betmgm turned off" — no: the list is
 // saved per device and a new device started with FanDuel + DraftKings only, while the real-price test found the edge in
 // shopping all five). A device that saved fewer gets the rest added once (booksV2); unticking one after that sticks
@@ -3718,6 +3723,7 @@ document.querySelectorAll('.mktbtn[data-mkt]').forEach(b=>{
 try{ $('bankroll').value=localStorage.getItem('nfltd_bankroll')||100; }catch(e){ $('bankroll').value=100; }
 $('bankUsd').addEventListener('change', e=>setBank(+e.target.value||0));
 $('bankUsd').addEventListener('keydown', e=>{ if(e.key==='Enter') e.target.blur(); });
+$('limitChk').addEventListener('change', e=>{ if(e.target.checked) delete BANK.lim; else BANK.lim=false; BANK.mt=Date.now(); lsW('nfltd_bank', BANK); syncSoon(); renderBank(); if(LAST) computeTopPlays(); renderSlip(); renderBets(); try{ renderWeek(); if(SLATE) renderSlate(); }catch(err){} });
 $('bankroll').addEventListener('input',()=>{ try{ localStorage.setItem('nfltd_bankroll',$('bankroll').value); }catch(e){} bankMt=Date.now(); lsSet('nfltd_bankmt', bankMt); syncSoon(); if(LAST) computeTopPlays(); renderSlip(); renderBets(); });
 try{ const v=localStorage.getItem('nfltd_maxgame'); if(v) $('maxGame').value=v; }catch(e){}
 $('maxGame').onchange=()=>{ try{ localStorage.setItem('nfltd_maxgame',$('maxGame').value); }catch(e){} if(LAST) computeTopPlays(); renderBets(); };
