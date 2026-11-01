@@ -103,6 +103,11 @@ See README.md for what the model does and how it was validated.
   (gathered with setTimeout 0) -> pop-up #undoBar "📓 Logged N bets · ↩ Undo · ✕" for 30 s, above the phone tab bar.
   undoLog() takes the batch's still-open bets out through saveBets (sync tombstones, like the log's ✕); a newer click
   replaces the pop-up. ANY NEW WAY TO LOG A BET MUST CALL noteLogged.
+- 📱 PHONE STATS TABLES (2026-11-01, user screenshot: the Log tab slid sideways on a phone): a stats table with more
+  columns than fit 390px gets class "pcards" and labelCells(container) after it is drawn — under 760px each row becomes a
+  small card (name on top, 3-column grid of numbers, each with its column name from data-l above it). Used by By
+  sportsbook, Background bets and NFL's When you bet. A NEW WIDE TABLE MUST DO THE SAME or sit in a .scroll box, never
+  widen the page.
 - Priced list: the ✓ on a logged bet takes it back OUT of the log (user, 2026-10-21: "i cant remove a logged bet") — hover
   reads "✕ remove", a confirm names the bet, then it is deleted like the bet log's ✕ (a sync tombstone, so other devices drop it).
 - 🎯 TD picks at ONE book (user, 2026-10-21: "this selection of bets should all come from one book … decide which book based
