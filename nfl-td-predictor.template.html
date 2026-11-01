@@ -706,7 +706,7 @@
             <button class="statussel" id="betClear" style="padding:6px 10px;font-size:12px">Clear log</button>
           </div>
         </div>
-        <div class="logsub muted" style="font-size:12px;line-height:1.55"><b>How to read it.</b> <b>CLV</b> = how much better your price was than FanDuel's closing price; beat the close over many bets and profit follows, long before ROI shows it. A grey <b>≈</b> CLV is a live read (FanDuel's price right now), not final. <b>▼ / ▲</b> = FanDuel moved a prop's line since you bet; the CLV is worked out at your line. <b>🤖</b> = settled automatically from ESPN (hover for why); <b>✋</b> = settle that one yourself.</div>
+        <div class="logsub muted" style="font-size:12px;line-height:1.55"><b>How to read it.</b> <b>CLV</b> = how much better your price was than FanDuel's closing price; beat the close over many bets and profit follows, long before ROI shows it. A grey <b>≈</b> CLV is a live read (FanDuel's price right now), not final. <b>▼ / ▲</b> = FanDuel moved a prop's line since you bet; the CLV is worked out at your line. <b>🤖</b> = settled automatically from ESPN (hover for why); <b>⏱</b> = settled mid-game — already decided (a TD scored, the 1st TD, catches past the line, a parlay leg lost), checked again at the final; <b>✋</b> = settle that one yourself.</div>
       </details>
     </div>
 
@@ -2565,7 +2565,8 @@ async function pullCloses(){
 // ---------- 🤖 AUTO-SETTLE + CLOSING LINES ----------
 // Results: once a game is final, ESPN's box score (each player's rushing / receiving / return TDs, yards, catches), its
 // scoring plays in order (1st / last TD, defensive TDs) and the game-day roster (didNotPlay = FanDuel's "did not play ->
-// void") settle every PENDING bet on it. Free, no key. A result you set by hand is never touched.
+// void") settle every PENDING bet on it. Free, no key. A result you set by hand is never touched. While a game is being
+// played, a bet it has already decided settles mid-game (legLive, b.mid) and is checked again at the final.
 // Closes: within 15 min of kickoff (app open) FanDuel's live price, 1 credit per market; after kickoff, FanDuel's price
 // 5 min before kickoff from The Odds API's history (paid plans), 10 credits per market. Each game is tried once.
 const ESPN_SUM='https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=';
@@ -2574,7 +2575,7 @@ const HIST_API='https://api.the-odds-api.com/v4/historical/sports/americanfootba
 let AUTO=Object.assign({settle:true, close:true, hist:false}, lsJ('nfltd_auto',{}));   // hist: after-kickoff closes cost 10 credits per bet type — opt-in since 2026-10-16
 let CLOSED=(c=>{ const old=Date.now()-21*86400e3; for(const k of Object.keys(c)) if(!(c[k].t>old)) delete c[k]; return c; })(lsJ('nfltd_closed',{}));
 let AUTO_NOTE='', autoBusy=false, autoLast=0;
-const evCache=new Map();   // ESPN event id -> parsed final (finals don't change)
+const evCache=new Map(), liveCache=new Map();   // ESPN event id -> parsed final (finals don't change) / a game being played (this check only)
 function renderAutoNote(){ const el=$('autoMsg'); if(el) el.innerHTML=AUTO_NOTE; }
 // ESPN events for the active week and the weeks back to the oldest open bet (ESPN refuses date ranges; weeks work),
 // as {id, game, kickoff, final, tids}
@@ -2587,13 +2588,13 @@ async function espnEventsFor(bs){
   const out=[];
   for(const e of all.values()){ const c=e.competitions&&e.competitions[0]; if(!c) continue; const side={};
     for(const x of (c.competitors||[])){ const ab=espnIdToAbbr[String(x.team&&x.team.id)]; if(ab) side[x.homeAway]={ab, tid:String(x.team.id)}; }
-    if(side.home&&side.away) out.push({id:String(e.id), game:side.away.ab+'@'+side.home.ab, kickoff:e.date, final:!!(e.status&&e.status.type&&e.status.type.completed), tids:[side.away.tid, side.home.tid], week:e._wk||null}); }
+    if(side.home&&side.away) out.push({id:String(e.id), game:side.away.ab+'@'+side.home.ab, kickoff:e.date, final:!!(e.status&&e.status.type&&e.status.type.completed), live:!!(e.status&&e.status.type&&e.status.type.state==='in'), tids:[side.away.tid, side.home.tid], week:e._wk||null}); }
   return out;
 }
 // the game a bet is on: same matchup, the first kickoff after it was logged (a day's slack)
 const eventFor=(evs,b)=>evs.filter(e=>e.game===b.game && Date.parse(e.kickoff)>=(Date.parse(b.ts)||0)-86400e3).sort((x,y)=>Date.parse(x.kickoff)-Date.parse(y.kickoff))[0]||null;
 async function espnResult(ev){
-  if(evCache.has(ev.id)) return evCache.get(ev.id);
+  const cache=ev.final?evCache:liveCache; if(cache.has(ev.id)) return cache.get(ev.id);
   const sum=await (await fetch(ESPN_SUM+ev.id)).json();
   const P=new Map(), num=v=>{ const x=parseFloat(String(v).replace(/,/g,'')); return isNaN(x)?0:x; };
   const pl=id=>P.get(id)||P.set(id,{td:0, dtd:0, rec:0, recyd:0, ryd:0, pyd:0}).get(id);
@@ -2613,7 +2614,7 @@ async function espnResult(ev){
     return {team:espnIdToAbbr[String(p.team&&p.team.id)]||null, name:(tx.match(/^(.+?)\s+\d+\s+(?:Yd|Yard)/i)||[])[1]||tx.split(/\s+(?:\d|Fumble|Blocked|Recover)/i)[0],
       def:/interception|fumble return|defensive/i.test(ty), blocked:/blocked/i.test(ty), type:ty}; });
   const R={P, dnp, seen, tds, rostersOk:seen.size>0};
-  evCache.set(ev.id, R); return R;
+  cache.set(ev.id, R); return R;
 }
 // one leg on a final game -> {r:'win'|'loss'|'push'(void)|null(can't tell), why}
 function legResult(R, l){
@@ -2635,36 +2636,57 @@ function legResult(R, l){
     return {r:nth.team===a && sameName(nth.name, l.name)?'win':'loss', why:`${lab}: ${nth.name}`}; }
   return {r:null, why:'settle by hand'};
 }
+// ⏱ MID-GAME (user, 2026-11-01: "are you able to settle bets mid game?" → "yes"): one leg on a game still being played ->
+// {r:'win'|'loss'|null (not decided yet), why}. Only what can't change before the final: a TD scored (anytime; 2+ once he
+// has two; a defense TD), the 1st TD once anyone has scored, and catches past the line. Yards wait for the final — they can
+// go back DOWN (a loss on a run or a catch) — and so do last TD, voids (did not play) and blocked-kick TDs
+function legLive(R, l){
+  const [a,b]=String(l.key||'').split('|');
+  if(l.market==='first') return R.tds.length&&!R.tds[0].blocked ? legResult(R, l) : {r:null, why:'no TD yet'};
+  if(a==='DST'){ if(l.market!=='anytime'||R.tds.some(x=>x.blocked&&x.team===b)) return {r:null, why:''}; const n=R.tds.filter(x=>x.def&&x.team===b).length; return {r:n?'win':null, why:`${b} defense ${n} TD`}; }
+  if(!b||R.dnp.has(b)) return {r:null, why:''};
+  const p=R.P.get(b)||{td:0, rec:0};
+  if(l.market==='anytime'||l.market==='two'){ const need=l.market==='two'?2:1; return {r:p.td>=need?'win':null, why:`${p.td} TD`}; }
+  if(isPropMkt(l.market)){ const [,s,side,line]=l.market.split('|'), v=p[s]||0; return {r:s==='rec'&&v>+line?(side==='O'?'win':'loss'):null, why:`${PROP_SHORT[s]||s} ${v}`}; }
+  return {r:null, why:''};
+}
 async function autoSettle(manual){
   if(autoBusy || (!manual && (!AUTO.settle && !AUTO.hist))) return;
   if(!manual && Date.now()-autoLast<10*60e3) return;
-  const pend=AUTO.settle||manual ? bets.filter(b=>b.result==='pending' && ((b.game && b.key && b.market!=='custom') || (b.legs&&b.legs.length))) : [];
+  const pend=AUTO.settle||manual ? bets.filter(b=>(b.result==='pending'||b.mid) && ((b.game && b.key && b.market!=='custom') || (b.legs&&b.legs.length))) : [];
   const noClose=AUTO.hist ? bets.filter(b=>b.game && b.key && b.market!=='custom' && !b.closeOdds && Date.now()-(Date.parse(b.ts)||0)<14*86400e3) : [];
   const noKo=bets.filter(b=>!b.ko && !b.koX && (b.game || (b.legs&&b.legs.length)) && Date.now()-(Date.parse(b.ts)||0)<28*86400e3);   // logged before bets carried a kickoff
   if(!pend.length && !noClose.length && !noKo.length){ if(manual){ AUTO_NOTE='🤖 no open bets to settle'; renderAutoNote(); } return; }
   autoBusy=true; autoLast=Date.now(); if(manual){ AUTO_NOTE='🤖 checking ESPN…'; renderAutoNote(); }
   try{
     const evs=await espnEventsFor(pend.concat(noClose, noKo));
-    let settled=0, byHand=0, changed=false;
+    let settled=0, byHand=0, changed=false, mid=0, fixed=0; liveCache.clear();
     for(const b of noKo){ const es=(b.legs&&b.legs.length?b.legs:[b]).map(l=>eventFor(evs,{game:l.game, ts:b.ts})).filter(Boolean).sort((x,y)=>Date.parse(x.kickoff)-Date.parse(y.kickoff));
       if(es.length){ b.ko=es[0].kickoff; if(es[0].week) b.wk=es[0].week; } else b.koX=1;   // koX: not found, don't look again
       changed=true; }
     for(const b of pend){
       const legs=b.legs&&b.legs.length ? b.legs : [{game:b.game, key:b.key, market:b.market, name:b.player}];
+      const E=legs.map(l=>eventFor(evs, {game:l.game, ts:b.ts})), fin=E.every(e=>e&&e.final);
+      if(!fin && (b.result!=='pending' || !E.some(e=>e&&(e.final||e.live)))) continue;
       const res=[]; let ready=true;
-      for(const l of legs){ const ev=eventFor(evs, {game:l.game, ts:b.ts}); if(!ev||!ev.final){ ready=false; break; }
-        try{ res.push(legResult(await espnResult(ev), l)); }catch(e){ ready=false; break; } }
+      for(let i=0;i<legs.length;i++){ const e=E[i]; if(!e||!(e.final||e.live)){ res.push({r:null, why:''}); continue; }
+        try{ const R=await espnResult(e); res.push(e.final?legResult(R, legs[i]):legLive(R, legs[i])); }catch(err){ ready=false; break; } }
       if(!ready) continue;
+      // ⏱ not every game is final: settle only when it's already decided — a leg lost, or every leg already won
+      if(!fin){ const r=res.some(x=>x.r==='loss')?'loss':res.every(x=>x.r==='win')?'win':null; if(!r) continue;
+        b.result=r; b.mid=1; b.auto=res.map(x=>x.why).filter(Boolean).join(' · ')+' — mid-game'; b.st=Date.now(); delete b.autoNote; settled++; mid++; changed=true; continue; }
       const r = res.some(x=>x.r==='loss') ? 'loss' : res.some(x=>x.r===null) ? null : (legs.length>1 && res.some(x=>x.r==='push')) ? null : res.every(x=>x.r==='win') ? 'win' : 'push';
       const txt=res.map(x=>x.why).join(' · ')+(legs.length>1 && r===null && res.some(x=>x.r==='push')?' — a leg was void, FanDuel reprices the parlay: settle by hand':'');
+      if(b.mid){ delete b.mid; changed=true; if(r){ b.auto=txt; if(r!==b.result){ b.result=r; b.st=Date.now(); fixed++; } } continue; }
       if(!r){ if(b.autoNote!==txt){ b.autoNote=txt; changed=true; } byHand++; continue; }
       b.result=r; b.auto=txt; b.st=Date.now(); delete b.autoNote; settled++; changed=true;
     }
     if(changed){ saveBets(); renderBets(); }
     const closeTxt=AUTO.hist ? await autoHistCloses(evs) : '';
-    AUTO_NOTE=[settled?`🤖 settled <b>${settled}</b> bet${settled>1?'s':''} from ESPN's final box scores`:'',
+    AUTO_NOTE=[settled?`🤖 settled <b>${settled}</b> bet${settled>1?'s':''} ${mid===settled?'mid-game — already decided, checked again at the final':`from ESPN's box scores${mid?` (${mid} mid-game — already decided, checked again at the final)`:''}`}`:'',
+      fixed?`<span style="color:var(--warn)">${fixed} mid-game result${fixed>1?'s':''} changed at the final</span>`:'',
       byHand?`<span style="color:var(--warn)">${byHand} to settle by hand</span> (✋ — hover for why)`:'', closeTxt].filter(Boolean).join(' · ')
-      || (manual?'🤖 nothing to do yet — no open bet\'s game is final, and every started game has its Close':'');
+      || (manual?'🤖 nothing to do yet — no open bet is decided yet, and every started game has its Close':'');
     renderAutoNote();
   }catch(e){ if(manual){ AUTO_NOTE='couldn\'t reach ESPN (offline?)'; renderAutoNote(); } }
   finally{ autoBusy=false; }
@@ -3196,7 +3218,7 @@ function renderBets(){
           `<td><input class="bookin betclose" data-id="${b.id}" value="${(b.closeOdds||'').replace(/"/g,'&quot;')}" placeholder="close" style="width:62px">${clvTxt}</td>`+
           `<td title="${b.stake}u">${betStakeTxt(b)}</td>`+
           `<td class="${b.result==='pending'?'':'muted'}" title="what it pays in profit if it wins">${dec?amtc((stk||0)*(dec-1)):'—'}</td>`+
-          `<td style="white-space:nowrap"><select class="statussel betres" data-id="${b.id}">${['pending','win','loss','push'].map(s=>`<option ${s===b.result?'selected':''}>${s}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc('auto-settled from ESPN: '+b.auto)}">🤖</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
+          `<td style="white-space:nowrap"><select class="statussel betres" data-id="${b.id}">${['pending','win','loss','push'].map(s=>`<option ${s===b.result?'selected':''}>${s}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc((b.mid?'settled mid-game from ESPN\'s live box score — it was already decided; checked again at the final: ':'auto-settled from ESPN: ')+b.auto)}">${b.mid?'⏱':'🤖'}</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
           `<td class="${pl!=null?g(pl):''}">${pl==null?'—':usdOn?mny(pl):sgn(pl.toFixed(2))}</td>`+
           `<td><button class="statussel betdel" data-id="${b.id}" style="padding:0 7px;color:var(--warn)">✕</button></td></tr>`;
       });
@@ -3679,7 +3701,7 @@ $('betImportFile').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f
 $('betClear').onclick=()=>{ if(bets.length && confirm('Clear all '+bets.length+' logged bets?'+(SYNC.token?' This clears them on every synced PC too.':'')+' This can\'t be undone.')){ bets=[]; saveBets(); renderBets(); } };
 $('betBody').addEventListener('change', e=>{ const id=e.target.dataset.id; if(!id) return; const b=bets.find(x=>x.id===id); if(!b) return;
   if(e.target.classList.contains('betclose')){ b.closeOdds=e.target.value.trim(); delete b.closeEst; }
-  else if(e.target.classList.contains('betres')){ b.result=e.target.value; delete b.auto; if(b.result==='pending') delete b.st; else b.st=Date.now(); }   // your call replaces the auto one
+  else if(e.target.classList.contains('betres')){ b.result=e.target.value; delete b.auto; delete b.mid; if(b.result==='pending') delete b.st; else b.st=Date.now(); }   // your call replaces the auto one
   saveBets(); renderBets(); });
 $('betBody').addEventListener('toggle', e=>{ const d=e.target; if(!d||!d.classList) return; if(d.classList.contains('gamegrp')) LOGOPEN.set(d.dataset.k, d.open); else if(d.classList.contains('weekgrp')) LOGOPEN.set('W'+d.dataset.w, d.open); }, true);
 $('betBody').addEventListener('click', e=>{ const d=e.target.closest('.betdel'); if(!d) return; bets=bets.filter(x=>x.id!==d.dataset.id); saveBets(); renderBets(); });
