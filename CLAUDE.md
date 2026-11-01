@@ -251,7 +251,11 @@ See README.md for what the model does and how it was validated.
   Raw prices (market_hist/, market_td_*.json, market_props_*.json) and bt_*.json stay local.
   GOTCHA: `node market-backtest.mjs analyze` REWRITES market_anchor.json and drops its props section (props.w) — after
   using it just to read numbers, `git checkout -- market_anchor.json` (happened 2026-10-15, caught before commit).
-- 🎉 FUN PICKS (2026-10-05, user wants TD action despite no edge): `buildSlate` also collects every FanDuel anytime price in
+- 🎉 FUN PICKS — SECTION REMOVED 2026-11-01 (user: "remove fun picks section. but keep td section to find best td prices"): the
+  box under 🎯 My TD picks (list, games/theme filters, ⚡ check/refresh, log + open buttons, fun parlay) is gone from renderSlate;
+  the TD picks + parlay of the day are unchanged. buildSlate still fills SLATE.funPool / SLATE.fun (pickFun, priceFunGames,
+  refun are now unused) and old 🎉 bets keep their tag and running total in the log. Don't bring it back unless asked.
+  History, as built: `buildSlate` also collects every FanDuel anytime price in
   FUN_BAND [+100,+400) (not OUT/DBT, not already a real pick), sorted by the sim's EV only as a tiebreak, 1 per game (2nd
   pass: other team), flat FUN_STAKE 0.5u; fun parlay = the 2 likeliest (mp) from different games, 0.2u. Evidence (2025
   market_td + bt_rows, active players): +100..+400 -1%/-9% by half, +400..+1500 -18..-24% both halves, <+100 ~-11%;
