@@ -212,6 +212,14 @@ See README.md for what the model does and how it was validated.
   across PCs through a secret gist (`nfl-td-sync.json`) using a gist-scope token the user pastes into each browser.
   Records carry `mt`; deletions are tombstones (`nfltd_tomb`); `saveBets()/saveSlip()` stamp changes automatically,
   so any new code that edits bets/slip must go through them. Never put a token in the repo. Export / Import still work.
+- ☁ SYNC KEY ACROSS WINDOWS (2026-11-03, user: "same pc two separate windows, one needs key and has it"): every window of the
+  site shares `nfltd_sync`, but each held its own copy of SYNC in memory and wrote ALL of it back after every sync. The old key
+  expired (last good sync Oct 29); the user pasted a new key in one window, and a window opened earlier kept failing with the
+  old key and wrote it back over the new one. Now only Connect / Stop write the key (`putSyncCfg`); routine saves
+  (`saveSyncCfg`: last, err, gistId) skip when the stored key isn't this window's; `adoptSyncToken()` takes up the stored key
+  before every sync, on focus and on the `storage` event. 401 reads "key rejected (expired or deleted)"; a 403/429 with
+  rate-limit headers reads "GitHub is limiting requests" instead of blaming the key. NBA / NHL read the key fresh each sync
+  (never write it), so they were fine. Windows still running the old code must be reloaded once.
 - ESPN calls in the build retry (curlJsonRetry); a team whose roster still fails is rebuilt from the PREVIOUS
   snapshot's player list, and the build throws (no files written, the bot commits nothing) if any team is still missing.
   A one-off ESPN failure dropped PIT on 2026-10-01 and blanked the app. Test with `FAIL_ROSTER=PIT`. The app also skips
@@ -299,6 +307,13 @@ See README.md for what the model does and how it was validated.
   `legs`. Closes: `autoLiveCloses` (<15 min to kickoff, live, 1/market) and `autoHistCloses` (after kickoff, historical
   events 1 + event odds 10/market, bookmakers=fanduel, snapshot kickoff-5min; free plan -> nfltd_histoff pause 3 days);
   each game once (nfltd_closed). Tested on IND@WAS 2026-10-04: 13/13 bets settled right; history close matched FD.
+  NOT ON THE ROSTER (2026-11-03, user: "for the settle by hands, I assume they are push" — RJ Harvey anytime, on IR, sat as
+  ✋): a player in neither the box score nor either game-day roster settles on the same name in his team's box score (an id
+  mix-up), else PUSH "<ESPN injury status> — did not play, void" — only when BOTH rosters loaded (`R.rostersAll`); a
+  failed roster leaves it by hand. A parlay with a void leg still goes by hand (the book reprices it). ✋ / 🤖 / ⏱ reasons
+  open on a TAP (.whytap -> .whytxt under the result; phones have no hover). Tested in Node on KC@DEN 401873033 (scratch
+  test pulls legResult / espnResult out of the template): IR -> push, wrong id + right name graded, one roster missing ->
+  by hand, normal win / loss unchanged.
   `parseOdds()` and `applyClose()` are shared by live pulls, manual Pull closing prices and history.
 - BET LOG LAYOUT (2026-10-12, user: "a lot going on, simplify it" + "condense by week"): renderBets() = .logsum summary +
   details.weekgrp (Tue->Mon local weeks by b.ko||b.ts; newest/any-open week open; label "Week N" from b.wk) -> details.gamegrp

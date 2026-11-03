@@ -82,6 +82,7 @@
   .big{font-weight:800;font-size:15px}
   .odds{font-family:var(--mono);font-size:14px}
   .statussel{background:var(--panel2);border:1px solid var(--line2);border-radius:7px;color:var(--ink2);font-size:11px;padding:3px 4px}
+  .whytap{cursor:pointer} .whytxt{white-space:normal;font-size:12px;color:var(--ink2);max-width:240px;margin-top:4px;line-height:1.35}
   .mktrow{display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap;font-size:13px;color:var(--ink2)}
   .mktbtn{background:var(--panel2);border:1px solid var(--line2);color:var(--ink2);border-radius:9px;padding:6px 15px;font-size:14px;font-weight:700;cursor:pointer;transition:border-color .1s,color .1s}
   .mktbtn:hover{border-color:var(--accent)}
@@ -2105,7 +2106,13 @@ const lsSet=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){
 let SYNC=lsGet('nfltd_sync',{})||{};
 let TOMB=(t=>({bets:(t&&t.bets)||{}, slip:(t&&t.slip)||{}}))(lsGet('nfltd_tomb',null));
 let bankMt=+lsGet('nfltd_bankmt',0)||0;
-const saveTomb=()=>lsSet('nfltd_tomb', TOMB), saveSyncCfg=()=>lsSet('nfltd_sync', SYNC);
+// Every window of the site shares nfltd_sync but keeps its own copy in memory: a window opened before a new key was pasted
+// kept the old one, failed with it and wrote it back over the new one (user, 2026-11-03: "same pc two separate windows, one
+// needs key and has it"). Only Connect / Stop write the key (putSyncCfg); routine saves skip when the stored key is not this
+// window's, and adoptSyncToken() takes up the stored key before every sync, on focus and on the storage event.
+const saveTomb=()=>lsSet('nfltd_tomb', TOMB), putSyncCfg=()=>lsSet('nfltd_sync', SYNC);
+const saveSyncCfg=()=>{ if(((lsGet('nfltd_sync',{})||{}).token||'')===(SYNC.token||'')) lsSet('nfltd_sync', SYNC); };
+function adoptSyncToken(){ const cur=lsGet('nfltd_sync',{})||{}; if((cur.token||'')===(SYNC.token||'')) return false; SYNC=Object.assign({}, cur, {err:null}); return true; }
 const betKey=b=>b.id, legKey=l=>l.game+'|'+l.key+'|'+l.market;
 const recBody=r=>{ const {mt, ...rest}=r; return JSON.stringify(rest); };
 const snapOf=(list,keyOf)=>new Map(list.map(r=>[keyOf(r), recBody(r)]));
@@ -2143,7 +2150,7 @@ async function ghApi(path, opt){
   opt=opt||{};
   const r=await fetch(GH_API+path, {method:opt.method||'GET', cache:'no-store', body:opt.body,
     headers:Object.assign({Authorization:'Bearer '+SYNC.token, Accept:'application/vnd.github+json'}, opt.body?{'Content-Type':'application/json'}:{})});
-  if(!r.ok){ const e=new Error('GitHub '+r.status); e.status=r.status; throw e; }
+  if(!r.ok){ const e=new Error('GitHub '+r.status); e.status=r.status; e.limited=r.status===429||r.headers.get('x-ratelimit-remaining')==='0'||!!r.headers.get('retry-after'); throw e; }
   return r.json();
 }
 async function readSyncGist(g){
@@ -2154,6 +2161,7 @@ async function readSyncGist(g){
 let syncBusy=false, syncAgain=false, syncTimer=null;
 function syncSoon(ms){ if(!SYNC.token) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncNow, ms==null?2500:ms); }
 async function syncNow(){
+  if(adoptSyncToken()) syncStatus();
   if(!SYNC.token) return; if(syncBusy){ syncAgain=true; return; }
   syncBusy=true; syncStatus(true);
   try{
@@ -2170,7 +2178,7 @@ async function syncNow(){
     if(!g){ const c=await ghApi('/gists',{method:'POST', body:JSON.stringify({description:'NFL TD predictor — bet log sync (private, used by the app)', public:false, files:{[SYNC_FILE]:{content}}})}); SYNC.gistId=c.id; }
     else if(!remote || syncCanon(mine)!==syncCanon(remote)) await ghApi('/gists/'+SYNC.gistId,{method:'PATCH', body:JSON.stringify({files:{[SYNC_FILE]:{content}}})});
     SYNC.last=Date.now(); SYNC.err=null;
-  }catch(e){ SYNC.err = (e.status===401) ? 'token rejected — make a new one and reconnect' : (e.status===403||e.status===404) ? 'GitHub refused — does the token have the gist scope?' : 'offline — will retry'; }
+  }catch(e){ SYNC.err = (e.status===401) ? 'key rejected (expired or deleted) — make a new one and reconnect' : e.limited ? 'GitHub is limiting requests — will retry by itself' : (e.status===403||e.status===404) ? 'GitHub refused — does the token have the gist scope?' : 'offline — will retry'; }
   finally{ saveSyncCfg(); syncBusy=false; syncStatus(); if(syncAgain){ syncAgain=false; syncSoon(400); } }
 }
 function syncStatus(busy){
@@ -2606,21 +2614,22 @@ async function espnResult(ev){
   const P=new Map(), num=v=>{ const x=parseFloat(String(v).replace(/,/g,'')); return isNaN(x)?0:x; };
   const pl=id=>P.get(id)||P.set(id,{td:0, dtd:0, rec:0, recyd:0, ryd:0, pyd:0}).get(id);
   for(const tb of ((sum.boxscore&&sum.boxscore.players)||[])) for(const cat of (tb.statistics||[])){
-    const L=cat.labels||[];
-    for(const a of (cat.athletes||[])){ const id=String(a.athlete&&a.athlete.id), s=a.stats||[], v=n=>L.indexOf(n)>=0?num(s[L.indexOf(n)]):0, p=pl(id);
+    const L=cat.labels||[], tm=espnIdToAbbr[String(tb.team&&tb.team.id)]||null;
+    for(const a of (cat.athletes||[])){ const id=String(a.athlete&&a.athlete.id), s=a.stats||[], v=n=>L.indexOf(n)>=0?num(s[L.indexOf(n)]):0, p=pl(id); p.name=a.athlete&&a.athlete.displayName; p.team=tm;
       if(cat.name==='rushing'){ p.ryd=v('YDS'); p.td+=v('TD'); }
       else if(cat.name==='receiving'){ p.rec=v('REC'); p.recyd=v('YDS'); p.td+=v('TD'); }
       else if(cat.name==='passing') p.pyd=v('YDS');
       else if(cat.name==='kickReturns'||cat.name==='puntReturns') p.td+=v('TD');
       else if(cat.name==='interceptions'||cat.name==='defensive') p.dtd=Math.max(p.dtd, v('TD')); } }
   for(const p of P.values()) p.td+=p.dtd;
-  const dnp=new Set(), seen=new Set();
+  const dnp=new Set(), seen=new Set(); let rosters=0;
   await Promise.all(ev.tids.map(async tid=>{ try{ const r=await (await fetch(`${ESPN_CORE}${ev.id}/competitions/${ev.id}/competitors/${tid}/roster`)).json();
-    for(const x of (r.entries||[])){ const id=String(x.playerId); seen.add(id); if(x.didNotPlay) dnp.add(id); } }catch(e){} }));
+    if((r.entries||[]).length) rosters++; for(const x of (r.entries||[])){ const id=String(x.playerId); seen.add(id); if(x.didNotPlay) dnp.add(id); } }catch(e){} }));
+  const inj=new Map(); for(const t of (sum.injuries||[])) for(const i of (t.injuries||[])) if(i.athlete&&i.athlete.id) inj.set(String(i.athlete.id), i.status||'');
   const tds=(sum.scoringPlays||[]).filter(p=>p.scoringType&&p.scoringType.name==='touchdown').map(p=>{ const ty=(p.type&&p.type.text)||'', tx=String(p.text||'');
     return {team:espnIdToAbbr[String(p.team&&p.team.id)]||null, name:(tx.match(/^(.+?)\s+\d+\s+(?:Yd|Yard)/i)||[])[1]||tx.split(/\s+(?:\d|Fumble|Blocked|Recover)/i)[0],
       def:/interception|fumble return|defensive/i.test(ty), blocked:/blocked/i.test(ty), type:ty}; });
-  const R={P, dnp, seen, tds, rostersOk:seen.size>0};
+  const R={P, dnp, seen, tds, inj, rostersOk:seen.size>0, rostersAll:rosters===ev.tids.length};
   cache.set(ev.id, R); return R;
 }
 // one leg on a final game -> {r:'win'|'loss'|'push'(void)|null(can't tell), why}
@@ -2633,8 +2642,13 @@ function legResult(R, l){
     return {r:null, why:'settle by hand'}; }
   if(!b) return {r:null, why:'no player id — settle by hand'};
   if(R.dnp.has(b)) return {r:'push', why:'did not play — void'};
-  if(!R.P.has(b) && !R.seen.has(b)) return {r:null, why:R.rostersOk?'not on ESPN\'s game roster — settle by hand':'ESPN roster unavailable — settle by hand'};
-  const p=R.P.get(b)||{td:0, rec:0, recyd:0, ryd:0, pyd:0};
+  // not in the box score and not on either game-day roster: the same name in his team's box score (an id mix-up) settles on
+  // that line; else he didn't dress (IR, PUP, suspended, cut / traded) -> void, as the books do. Only when BOTH rosters
+  // loaded — a missing one would void a bet on a player who played (user, 2026-11-03: RJ Harvey on IR sat as "by hand")
+  let p=R.P.get(b);
+  if(!p && !R.seen.has(b)){ p=l.name?[...R.P.values()].find(x=>x.team===a && x.name && sameName(x.name, l.name)):null;
+    if(!p) return R.rostersAll ? {r:'push', why:`${R.inj.get(b)||'not on the game-day roster'} — did not play, void`} : {r:null, why:R.rostersOk?'not on ESPN\'s game roster — settle by hand':'ESPN roster unavailable — settle by hand'}; }
+  p=p||{td:0, rec:0, recyd:0, ryd:0, pyd:0};
   if(isPropMkt(l.market)){ const [,s,side,line]=l.market.split('|'), v=s==='rryd'?p.ryd+p.recyd:(p[s]||0), L=+line;
     return {r:v===L?'push':((v>L)===(side==='O')?'win':'loss'), why:`${PROP_SHORT[s]||s} ${v}`}; }
   if(l.market==='anytime') return {r:p.td>=1?'win':'loss', why:`${p.td} TD`};
@@ -2692,7 +2706,7 @@ async function autoSettle(manual){
     const closeTxt=AUTO.hist ? await autoHistCloses(evs) : '';
     AUTO_NOTE=[settled?`🤖 settled <b>${settled}</b> bet${settled>1?'s':''} ${mid===settled?'mid-game — already decided, checked again at the final':`from ESPN's box scores${mid?` (${mid} mid-game — already decided, checked again at the final)`:''}`}`:'',
       fixed?`<span style="color:var(--warn)">${fixed} mid-game result${fixed>1?'s':''} changed at the final</span>`:'',
-      byHand?`<span style="color:var(--warn)">${byHand} to settle by hand</span> (✋ — hover for why)`:'', closeTxt].filter(Boolean).join(' · ')
+      byHand?`<span style="color:var(--warn)">${byHand} to settle by hand</span> (tap ✋ for why)`:'', closeTxt].filter(Boolean).join(' · ')
       || (manual?'🤖 nothing to do yet — no open bet is decided yet, and every started game has its Close':'');
     renderAutoNote();
   }catch(e){ if(manual){ AUTO_NOTE='couldn\'t reach ESPN (offline?)'; renderAutoNote(); } }
@@ -3174,7 +3188,7 @@ function renderBets(){
           `<td><input class="bookin betclose" data-id="${b.id}" value="${(b.closeOdds||'').replace(/"/g,'&quot;')}" placeholder="close" style="width:62px">${clvTxt}</td>`+
           `<td title="${b.stake}u">${betStakeTxt(b)}</td>`+
           `<td class="${b.result==='pending'?'':'muted'}" title="what it pays in profit if it wins">${dec?amtc((stk||0)*(dec-1)):'—'}</td>`+
-          `<td style="white-space:nowrap"><select class="statussel betres" data-id="${b.id}">${['pending','win','loss','push'].map(s=>`<option ${s===b.result?'selected':''}>${s}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc((b.mid?'settled mid-game from ESPN\'s live box score — it was already decided; checked again at the final: ':'auto-settled from ESPN: ')+b.auto)}">${b.mid?'⏱':'🤖'}</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
+          `<td style="white-space:nowrap"><select class="statussel betres" data-id="${b.id}">${['pending','win','loss','push'].map(s=>`<option ${s===b.result?'selected':''}>${s}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span class="whytap" title="${esc((b.mid?'settled mid-game from ESPN\'s live box score — it was already decided; checked again at the final: ':'auto-settled from ESPN: ')+b.auto)}">${b.mid?'⏱':'🤖'}</span>`:''}${b.result==='pending'&&b.autoNote?` <span class="whytap" title="${esc(b.autoNote)}">✋</span>`:''}</td>`+
           `<td class="${pl!=null?g(pl):''}">${pl==null?'—':usdOn?mny(pl):sgn(pl.toFixed(2))}</td>`+
           `<td><button class="statussel betdel" data-id="${b.id}" style="padding:0 7px;color:var(--warn)">✕</button></td></tr>`;
       });
@@ -3703,11 +3717,15 @@ betSnap=snapOf(bets, betKey); slipSnap=snapOf(slip, legKey); syncStatus();
 // sync wiring: pull on load, when the tab comes back, and every 90 s while visible
 $('syncBtn').onclick=()=>{ const b=$('syncBox'); b.style.display=b.style.display==='none'?'':'none'; syncStatus(); };
 $('syncConnect').onclick=()=>{ const t=$('syncToken').value.trim(); if(!t){ $('syncMsg').textContent='paste the token first'; return; }
-  SYNC={token:t}; saveSyncCfg(); $('syncToken').value=''; syncNow(); };
+  SYNC={token:t}; putSyncCfg(); $('syncToken').value=''; syncNow(); };
 $('syncNowBtn').onclick=()=>{ if(SYNC.token) syncNow(); else $('syncMsg').textContent='connect first'; };
-$('syncOff').onclick=()=>{ if(SYNC.token && confirm('Stop syncing on this PC? Your log stays here; the gist and other PCs are untouched.')){ SYNC={}; saveSyncCfg(); syncStatus(); } };
-const syncIfStale=()=>{ if(SYNC.token && document.visibilityState==='visible' && Date.now()-(SYNC.last||0)>20e3) syncNow(); };
+$('syncOff').onclick=()=>{ if(SYNC.token && confirm('Stop syncing on this PC? Your log stays here; the gist and other PCs are untouched.')){ SYNC={}; putSyncCfg(); syncStatus(); } };
+const syncIfStale=()=>{ if(adoptSyncToken()) syncStatus(); if(SYNC.token && document.visibilityState==='visible' && Date.now()-(SYNC.last||0)>20e3) syncNow(); };
 document.addEventListener('visibilitychange', syncIfStale); window.addEventListener('focus', syncIfStale);
+window.addEventListener('storage', e=>{ if(e.key==='nfltd_sync' && adoptSyncToken()){ syncStatus(); syncSoon(300); } });
+// ✋ / 🤖 / ⏱ in the bet log: a tap shows the reason under the result (phones have no hover; user, 2026-11-03)
+document.addEventListener('click', e=>{ const t=e.target.closest&&e.target.closest('.whytap'); if(!t) return; const c=t.parentElement, o=c.querySelector('.whytxt');
+  if(o){ o.remove(); return; } const d=document.createElement('div'); d.className='whytxt'; d.textContent=t.getAttribute('title')||''; c.appendChild(d); });
 setInterval(()=>{ if(SYNC.token && document.visibilityState==='visible') syncNow(); }, 90e3);
 opened().then(()=>{ if(SYNC.token) syncNow(); });
 // opened after being built in the background: catch up on the pot and the week list
