@@ -350,6 +350,10 @@ See README.md for what the model does and how it was validated.
   (trimLog is gone). The ★ + suggested stake on open bets (planFor/PLANS, which re-ran pickPlays — 2/team, best 3/game, 4% team cap — over every open bet at today's bankroll) and its green rowtake highlight were REMOVED 2026-10-24 (user: "the stake and suggested is off" — ★ $4.50 next to a $5.50 stake): a placed bet's stake can't change, so the log shows only what was bet. Don't bring back a recomputed stake for logged bets.
   WEEK TALLY: every week summary has a .wktally line — Spent (every stake, open included) · Won/lost (settled net) · still
   riding · season so far (cumulative spent + net up to that week); the top summary says Spent and Won/lost too.
+- 📲 EDGE ALERTS — LIVE since 2026-11-05 (user: "lets set up the phone alerts" -> "i want to catch all nfl bets"): every game on
+  the board (ALERT_HOURS 168, ALERT_MAX 20, all 5 books) every 30 min via an outside timer (cron-job.org -> workflow_dispatch
+  API, fine-grained token with Actions read+write on this repo); GitHub's own cron is a 2-hour backup (this account's timers
+  run hours late). ~20K credits/month. Phone: ntfy; FanDuel + DraftKings links open the apps, BetMGM / Caesars the website.
 - 📲 EDGE ALERTS (2026-10-15, user asked for phone notifications, then "yes" to building it with the timer off):
   `alerts/watch.mjs` (Node 20, no deps) run by `.github/workflows/alerts.yml` — workflow_dispatch modes test|dry|live, the
   `schedule:` (*/5) is COMMENTED OUT until the user says to switch it on (credits: ~5K/month at 6 h window). It mirrors

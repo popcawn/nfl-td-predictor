@@ -169,8 +169,9 @@ check the price and place it yourself. **It never places a bet.**
   3%, the card's confidence, ¼ Kelly, at most 3 per game / 2 per team / 1 per player. Each bet is alerted once (again only
   if its price gets better). On 2025's real prices this "every other book" rule (flat, EV over 3%) went +18% in weeks 1–9
   and +2% in weeks 10–18 at closing prices — **unproven**; your CLV says whether it works.
-- **Credits:** 1 per game per check. Every 5 minutes for the 6 hours before each kickoff ≈ 5,000 credits a month; a run
-  with no game in the window costs nothing. It stops if the key drops below 1,000 credits (so the app keeps some).
+- **Credits:** 1 per game per check. Since 2026-11-05 it checks EVERY game on the board every 30 minutes (an outside timer,
+  cron-job.org, calls the workflow; GitHub's own timer is a 2-hour backup) ≈ 20,000 credits a month. A bet you haven't logged
+  can alert again about every 12 hours while it lasts (the ntfy channel only remembers 12 h); logging it stops that. It stops if the key drops below 1,000 credits (so the app keeps some).
 - **Setup (once):** in the ntfy app, subscribe to your private channel name. In this repo: *Settings → Secrets and
   variables → Actions → New repository secret* — `NTFY_TOPIC` (that channel name), `ODDS_API_KEY` (your key) and,
   optionally, `SYNC_TOKEN` (the app's ☁ Sync token: stakes in dollars from your bankroll, and players you've already
