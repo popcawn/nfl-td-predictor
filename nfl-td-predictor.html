@@ -733,6 +733,31 @@ window.__SNAPSHOT__ = {"meta":{"builtAt":"2026-11-04T18:13:20.742Z","seasons":[2
 (function(){
 const S = window.__SNAPSHOT__;
 if(!S){ document.getElementById('footer').textContent = 'No data snapshot found. Run: node build-nfl-td-snapshot.mjs'; return; }
+// 🧹 STORAGE GUARD (2026-11-05, user: "yes add the cleanup"): the NFL, NBA and NHL apps are one site, so they share ONE
+// ~5 MB browser storage, and the user's PC had filled it (4.4 MB of old odds caches) — every write that grew a key failed
+// silently. Each app now trims its own odds caches (games that started, prices too old to reuse), and lsSave() — every
+// lsW plus the NFL bets and slip — makes room when a write doesn't fit: first the cached odds any app can tell are stale
+// (staleOdds), then the oldest third of the rest (any app's), trying again up to 4 times. Bets, bankroll and settings are
+// never dropped. OWN_CACHE: cache key -> () => this app's live cache object, so what's dropped leaves memory too.
+const CACHE_KEYS=['nfltd_slatepx','nfltd_boards','nbap_boards','nhlp_boards'], OWN_CACHE={};
+// stale = slate prices past their 20-min reuse, NBA/NHL boards 6 h after the start (or a day after a pull with no start
+// stored), NFL boards 5+ days old (the NFL app also knows its kickoffs — trimBoards — the other apps don't)
+const staleBoard=(x,now)=>{ const s=Date.parse((x&&x.ko)||'')||0; return s?now>=s+6*3600e3:!(x&&x.t>now-864e5); };
+const staleOdds={nfltd_slatepx:(x,now)=>!(x&&now-x.t<20*60e3), nfltd_boards:(x,now)=>!(x&&x.t>now-5*864e5), nbap_boards:staleBoard, nhlp_boards:staleBoard};
+function freeRoom(k, v){
+  try{
+    const pools=[], now=Date.now();
+    for(const c of CACHE_KEYS){ let o=c===k?v:null;
+      if(!o&&OWN_CACHE[c]){ try{ o=OWN_CACHE[c](); }catch(e){} }
+      if(!o){ try{ o=JSON.parse(localStorage.getItem(c)||'null'); }catch(e){} }
+      if(o&&typeof o==='object') pools.push([c, o]); }
+    const all=[]; let stale=0;
+    for(const [c,o] of pools) for(const [g,x] of Object.entries(o)){ if(staleOdds[c](x, now)){ delete o[g]; stale++; } else all.push([o, g, (x&&x.t)||0]); }
+    if(!stale){ if(!all.length) return false; all.sort((a,b)=>a[2]-b[2]); for(const [o,g] of all.slice(0, Math.ceil(all.length/3))) delete o[g]; }
+    for(const [c,o] of pools) if(c!==k){ try{ localStorage.setItem(c, JSON.stringify(o)); }catch(e){} }
+    return true;
+  }catch(e){ return false; } }
+function lsSave(k, v){ for(let i=0;i<5;i++){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ if(i===4||!freeRoom(k, v)) return false; } } return false; }
 const C = S.constants;
 const $ = id => document.getElementById(id);
 
@@ -1073,11 +1098,18 @@ function setLine(){
 const BOARD_KEY='nfltd_boards';
 let BOARDS=(()=>{ try{ const b=JSON.parse(localStorage.getItem(BOARD_KEY)||'{}')||{}, old=Date.now()-5*86400e3;
   for(const k of Object.keys(b)) if(!(b[k]&&b[k].t>old)) delete b[k]; return b; }catch(e){ return {}; } })();
+// 🧹 (2026-11-05, STORAGE GUARD) a game's prices are dropped 6 h after its kickoff, a game that isn't on this week's
+// schedule a day after its pull, and anything 5+ days old
+function trimBoards(){ const now=Date.now(); let ko=new Map(); try{ ko=new Map(SCHED.map(g=>[g.away+'@'+g.home, Date.parse(g.kickoff)||0])); }catch(e){}
+  for(const [g,b] of Object.entries(BOARDS)){ const k=ko.get(g);
+    if(!(b&&b.t>now-5*86400e3) || (k&&now>k+6*3600e3) || (!k&&ko.size&&!(b.t>now-86400e3))) delete BOARDS[g]; } }
+function saveBoards(){ trimBoards(); lsSave(BOARD_KEY, BOARDS); }
+OWN_CACHE.nfltd_boards=()=>BOARDS;
 function saveBoard(){
   if(!LAST) return; const g=LAST.away+'@'+LAST.home;
   const has=Object.values(LAST.bookMap).some(v=>v&&String(v).trim()) || Object.values(LAST.propMap||{}).some(pm=>pm&&(pm.over||pm.under||(pm.alts||[]).length));
   if(has) BOARDS[g]={t:Date.now(), book:LAST.bookMap, prop:LAST.propMap, mkt:LAST.mktMap||{}}; else delete BOARDS[g];
-  try{ localStorage.setItem(BOARD_KEY, JSON.stringify(BOARDS)); }catch(e){}
+  saveBoards();
 }
 function boardChanged(){ clearTimeout(boardChanged.t); boardChanged.t=setTimeout(saveBoard, 300); renderPriced(); }
 // switching games: keep this game's prices, bring back the next game's (empty if it was never priced)
@@ -1849,7 +1881,7 @@ function parlayNote(){ return `<div class="muted" style="margin-top:9px;font-siz
 // localStorage so the slip survives reloads. ----
 let slip=[]; let slipLegCache=[];
 function loadSlip(){ try{ const s=localStorage.getItem('nfltd_slip'); if(s) slip=JSON.parse(s)||[]; }catch(e){ slip=[]; } if(!Array.isArray(slip)) slip=[]; }
-function saveSlip(){ stampChanges(slip, slipSnap, legKey, TOMB.slip); slipSnap=snapOf(slip, legKey); saveTomb(); try{ localStorage.setItem('nfltd_slip', JSON.stringify(slip)); }catch(e){} syncSoon(); try{ if(SLATE) renderSlate(); }catch(e){} }
+function saveSlip(){ stampChanges(slip, slipSnap, legKey, TOMB.slip); slipSnap=snapOf(slip, legKey); saveTomb(); lsSave('nfltd_slip', slip); syncSoon(); try{ if(SLATE) renderSlate(); }catch(e){} }
 function curGameId(){ return LAST ? LAST.away+'@'+LAST.home : null; }
 function markLogGame(){ const g=curGameId(); document.querySelectorAll('#betBody details.gamegrp').forEach(d=>d.classList.toggle('curgame', !!g && String(d.dataset.k||'').startsWith(g+'#'))); }
 function fmtGame(g){ const [a,h]=String(g).split('@'); const sh=x=>S.teams[x]?(S.teams[x].short||x):x; return sh(a)+' @ '+sh(h); }
@@ -2093,7 +2125,7 @@ function renderSlip(){
 let bets=[]; let betOptCache=[];
 const LOGOPEN=new Map();      // which game sections you opened/closed (kept across re-renders)
 function loadBets(){ try{ const s=localStorage.getItem('nfltd_bets'); if(s) bets=JSON.parse(s)||[]; }catch(e){ bets=[]; } if(!Array.isArray(bets)) bets=[]; }
-function saveBets(){ stampChanges(bets, betSnap, betKey, TOMB.bets); betSnap=snapOf(bets, betKey); saveTomb(); try{ localStorage.setItem('nfltd_bets', JSON.stringify(bets)); }catch(e){} syncSoon(); if(LAST) computeTopPlays(); try{ if(SLATE) renderSlate(); }catch(e){} try{ renderWeek(); }catch(e){} }
+function saveBets(){ stampChanges(bets, betSnap, betKey, TOMB.bets); betSnap=snapOf(bets, betKey); saveTomb(); lsSave('nfltd_bets', bets); syncSoon(); if(LAST) computeTopPlays(); try{ if(SLATE) renderSlate(); }catch(e){} try{ renderWeek(); }catch(e){} }
 
 // ---------- cloud sync: one bet log / slip / bankroll across PCs, via a private GitHub gist ----------
 // Browser storage is per machine and per address, so PCs drift apart. With a GitHub token (gist scope only) saved
@@ -2102,7 +2134,7 @@ function saveBets(){ stampChanges(bets, betSnap, betKey, TOMB.bets); betSnap=sna
 // is deleted everywhere instead of coming back from the other copy. Newest edit of a record wins.
 const SYNC_FILE='nfl-td-sync.json', GH_API='https://api.github.com';
 const lsGet=(k,d)=>{ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } };
-const lsSet=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
+const lsSet=(k,v)=>lsSave(k, v);
 let SYNC=lsGet('nfltd_sync',{})||{};
 let TOMB=(t=>({bets:(t&&t.bets)||{}, slip:(t&&t.slip)||{}}))(lsGet('nfltd_tomb',null));
 let bankMt=+lsGet('nfltd_bankmt',0)||0;
@@ -2143,7 +2175,7 @@ function applyRemote(r){
   if(r.bank && (r.bank.mt||0)>(BANK.mt||0)){ BANK=r.bank; lsW('nfltd_bank', BANK); }
   // a merge isn't a local edit: persist without stamping
   betSnap=snapOf(bets, betKey); slipSnap=snapOf(slip, legKey); saveTomb();
-  try{ localStorage.setItem('nfltd_bets', JSON.stringify(bets)); localStorage.setItem('nfltd_slip', JSON.stringify(slip)); }catch(e){}
+  lsSave('nfltd_bets', bets); lsSave('nfltd_slip', slip);
   if(syncCanon(syncPayload())!==before){ renderBets(); renderSlip(); if(LAST) computeTopPlays(); }
 }
 async function ghApi(path, opt){
@@ -2264,7 +2296,7 @@ const ODDS_API='https://api.the-odds-api.com/v4/sports/americanfootball_nfl';
 const OA_TD={player_anytime_td:'anytime', player_1st_td:'first', player_last_td:'last', player_tds_over:'two'};
 const OA_PROP={player_receptions:'rec', player_reception_yds:'recyd', player_rush_yds:'ryd', player_rush_reception_yds:'rryd', player_pass_yds:'pyd'};
 const lsJ=(k,d)=>{ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } };
-const lsW=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
+const lsW=(k,v)=>lsSave(k, v);
 // ---------- BANKROLL IN DOLLARS ----------
 // BANK.amt = what the user says is in the account at BANK.at. From then on every settled bet (b.st = when it settled) adds
 // its dollar P/L, so the bankroll — and every stake, since stakes are a % of it — grows or shrinks by itself. 1 unit is
@@ -2775,7 +2807,10 @@ const slateParlayStake=(P,bank)=>Math.max(0.1, Math.round(Math.min(0.25*kellyFra
 // reliably beat taking them all (model-EV thirds: -10/+2/+2% then -7/-8/-8%), so the BAND is the rule and the sim's
 // order is only a tiebreak. EV < 0, so flat small stakes instead of Kelly.
 const FUN_BAND=[100,400], FUN_EDGE=0.05, FUN_STAKE=0.5, FUN_PARLAY_STAKE=0.2, FUN_PARLAY_LEGS=2;
-let SLATE=lsJ('nfltd_slate', null), SLATEPX=lsJ('nfltd_slatepx', {});
+let SLATE=lsJ('nfltd_slate', null), SLATEPX=lsJ('nfltd_slatepx', {})||{};
+// 🧹 (2026-11-05, STORAGE GUARD) slate prices are only reused for PX_FRESH (pxFresh), so older ones are dropped
+const PX_FRESH=20*60e3, trimPx=()=>{ const now=Date.now(); for(const [g,x] of Object.entries(SLATEPX)) if(!(x&&now-x.t<PX_FRESH)) delete SLATEPX[g]; }, savePx=()=>{ trimPx(); lsW('nfltd_slatepx', SLATEPX); };
+OWN_CACHE.nfltd_slatepx=()=>SLATEPX;
 // players you already have money on — open bets in the log (parlay legs included) and the slip. Fun picks skip them and
 // the list marks them, because every rebuild can re-suggest a player and the user ended up betting one 2-3 times.
 function betOnSet(){ const on=new Map();
@@ -2798,7 +2833,7 @@ async function gameWeather(g){
     return {outdoor:true, wind:Math.round(j.hourly.wind_speed_10m[i]), wx:{precip:k.precip, pp:j.hourly.precipitation_probability[i]||0}};
   }catch(e){ return calm; }
 }
-const pxFresh=gid=>!!SLATEPX[gid] && Date.now()-SLATEPX[gid].t<20*60e3;   // anytime prices this recent are reused — no credit
+const pxFresh=gid=>!!SLATEPX[gid] && Date.now()-SLATEPX[gid].t<PX_FRESH;   // anytime prices this recent are reused — no credit
 async function slateInjuries(){ try{ return parseInjuries(await (await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries')).json()); }catch(e){ return new Map(); } }
 // one game for the slate: your books' anytime prices (cached 20 min), the sim and the market anchor -> real candidates
 // ('take' tier) and every in-band fun option. The prices also go on the game's saved board (open the game later: they're there).
@@ -2846,8 +2881,8 @@ async function buildSlate(){
     for(const g of games){ const r=await slateGame(g, injMap); if(r.note){ notes.push(r.note); continue; }
       funGames[g.away+'@'+g.home]=Date.now(); fun.push(...r.fun);
       perGame.push(r.cands); }
-    try{ localStorage.setItem(BOARD_KEY, JSON.stringify(BOARDS)); }catch(e){}
-    lsW('nfltd_slatepx', SLATEPX);
+    saveBoards();
+    savePx();
     // ONE book for the whole list (user, 2026-10-21: "this selection of bets should all come from one book … decide which
     // book based on best prices"): every candidate is re-priced at each of your books, the same rule as Your card picks
     // each game's bets there, and the book whose best N add up to the most (confidence-adjusted Kelly) wins
@@ -2940,8 +2975,8 @@ async function priceFunGames(list, btn){
     SLATE.funPool=SLATE.funPool||[]; SLATE.funGames=SLATE.funGames||{};
     for(const g of list){ const gid=g.away+'@'+g.home, r=await slateGame(g, injMap); if(r.note){ notes.push(r.note); continue; }
       SLATE.funPool=SLATE.funPool.filter(c=>c.game!==gid).concat(r.fun.map(funSlim)); SLATE.funGames[gid]=Date.now(); }
-    try{ localStorage.setItem(BOARD_KEY, JSON.stringify(BOARDS)); }catch(e){}
-    lsW('nfltd_slatepx', SLATEPX); SLATE.funNotes=notes; refun();
+    saveBoards();
+    savePx(); SLATE.funNotes=notes; refun();
   }finally{ oddsStatus(); }
 }
 // ⚡ PULL ALL GAMES (2026-10-19, user: "adopt the NHL sim pull … nfl could be pull all odds for all games remaining that
@@ -2982,7 +3017,7 @@ async function pullAllGames(){
     }
   }finally{
     LAST=keep; CTX_BADWX=null; CTX_WIND=null;
-    try{ localStorage.setItem(BOARD_KEY, JSON.stringify(BOARDS)); }catch(e){} lsW('nfltd_pulled', PULLED);
+    saveBoards(); lsW('nfltd_pulled', PULLED);
     if(LAST){ const B=BOARDS[curGameId()]; if(B){ LAST.bookMap=Object.assign({}, B.book); LAST.propMap=B.prop; LAST.mktMap=Object.assign({}, B.mkt); } renderPlayers(); renderDST(); computeParlays(); refreshSlipAdder(); boardChanged(); }
     if(ch){ saveBets(); renderBets(); }
     btn.disabled=false; oddsStatus();
@@ -3647,6 +3682,7 @@ $('betExport').onclick=exportData;
 $('closeApply').onclick=applyClosingPaste;
 $('closePull').onclick=pullCloses;
 $('slateBtn').onclick=buildSlate; $('weekBtn').onclick=pullAllGames;
+setTimeout(()=>{ saveBoards(); savePx(); }, 1500);   // 🧹 once per visit: trim the odds caches so the shared storage has room
 $('pullOdds').onclick=()=>pullOdds(false);
 document.addEventListener('click', e=>{ const b=e.target.closest&&e.target.closest('.fdpull'); if(!b) return; b.disabled=true; b.textContent='pulling…'; if(LAST) PULLED[curGameId()]=0; pullOdds(false); });
 $('oddsAuto').checked=!!ODDSCFG.auto; $('oddsReserve').value=ODDSCFG.reserve;

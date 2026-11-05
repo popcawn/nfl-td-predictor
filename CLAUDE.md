@@ -183,6 +183,16 @@ See README.md for what the model does and how it was validated.
   Don't count total/spread/weather in confidence — they already drive the probability.
 
 ## One site, one pot (2026-10-16, user: "combine all into one sim … make them like the nfl sim … one pot")
+- 🧹 STORAGE GUARD (2026-11-05, user: "yes add the cleanup"): one site = ONE ~5 MB localStorage for all three apps, and
+  the user's PC Chrome was full (4.4 MB of odds caches: nfltd_boards, nbap_boards, nfltd_slatepx, nhlp_boards), so every
+  write that grew a key failed silently. The same guard code sits in all three templates (keep it identical): `lsSave()`
+  (every lsW, plus the NFL bets / slip / lsSet) on a failed write first drops the odds any app can tell are stale
+  (`staleOdds`), then the oldest third of the rest (any app's), and retries up to 4 times. Own trims: NFL boards 6 h after
+  kickoff, off this week's schedule a day after the pull, 5+ days (`trimBoards`; 1.5 s after load and on every save); NFL
+  slate prices after 20 min (`trimPx` — only pxFresh reads them); NBA/NHL boards 6 h after the start (pulls store `ko`)
+  or a day after a pull without one (`keepBoard`; at load and on every pull). Tested in real Chrome at the 5 MiB cap
+  (full store -> stale odds dropped first, an upcoming game's board kept, settings saved). Never add bets / bank /
+  settings keys to CACHE_KEYS.
 - The NFL, NBA and NHL apps are separate repos on ONE site (popcawn.github.io), so they share one browser storage. Each
   page has a sport switcher (🏈 · 🏀 · 🏒, relative links ../<repo>/) and a 💰 pot chip.
 - ONE POT: `nfltd_bank` {amt, at, mt} is the bankroll for all three; bankNow() = amt + the dollar P/L of EVERY sport's bets
