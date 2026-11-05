@@ -550,12 +550,12 @@
       <div id="weekBody" style="margin-top:14px"></div>
     </div>
 
-    <!-- 🎯 MY TD PICKS: the whole game day in one click -->
+    <!-- 🎯 MY TD PICKS: the whole game day in one click; defaults to every game left this week (user, 2026-11-05) -->
     <h2 id="slateSec">🎯 My TD picks — the whole game day</h2>
     <div class="note info" style="margin:0 0 10px">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button class="btn" id="slateBtn" style="padding:8px 18px">🎯 Build my TD picks</button>
-        <label class="muted" style="font-size:12px">for <select id="slateScope" class="statussel" style="font-size:12px"><option value="day" selected>the next game day</option><option value="week">every game left this week</option></select></label>
+        <label class="muted" style="font-size:12px">for <select id="slateScope" class="statussel" style="font-size:12px"><option value="day">the next game day</option><option value="week" selected>every game left this week</option></select></label>
         <label class="muted" style="font-size:12px">show <select id="slateN" class="statussel" style="font-size:12px"><option>3</option><option selected>5</option><option>8</option></select> bets</label>
         <span class="muted" style="font-size:12px">· 1 odds credit per game</span>
       </div>
@@ -3038,7 +3038,7 @@ $('weekBody').addEventListener('click', e=>{ const b=e.target.closest('.bskip');
   if(e.target.closest('#unskip')){ for(const k of weekSkips()) delete SKIP[k]; lsW('nfltd_skip', SKIP); renderWeek(); } });
 function renderSlate(){
   const out=$('slateBody'); if(!out||!SLATE) return;
-  const u=stakeTxt, bank=getBankroll(), dayName=new Date(SLATE.day).toLocaleDateString([], {weekday:'long'});
+  const u=stakeTxt, bank=getBankroll(), pDays=new Set(SLATE.picks.map(c=>new Date(c.kickoff||SLATE.day).toDateString())), dayName=pDays.size>1?'the rest of the week':new Date((SLATE.picks[0]&&SLATE.picks[0].kickoff)||SLATE.day).toLocaleDateString([], {weekday:'long'});
   const age=Math.round((Date.now()-SLATE.at)/60e3), when=new Date(SLATE.at).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
   const notes=SLATE.notes.length?`<div class="muted" style="font-size:12px;margin-top:6px">Skipped: ${SLATE.notes.map(esc).join(' · ')}</div>`:'';
   const stale=age>45?` <span style="color:var(--warn)">— ${age} min old, rebuild for fresh prices</span>`:'';
@@ -3061,7 +3061,7 @@ function renderSlate(){
       `<b style="color:${teamText(c.abbr)}">${esc(c.label)}</b><span class="muted" style="font-size:12px">${fmtGame(c.game)}</span>${stakeBadge(c,' vb-take')}</div>`+
       `<div class="cp2">Anytime TD <span class="odds">${esc(c.odds)}</span>${bkBadge(c.book)} ${confBadge(c.conf)} <span class="muted" style="font-size:12px">${c.mkt!=null?(c.mktSrc==='fd'?'own ':'mkt ')+pct(c.mkt)+' · model '+pct(c.model)+' → ':'<span style="color:var(--warn)">model only</span> · '}${pct(c.mp)} vs ${pct(c.bimp)}</span></div></div>`; });
     const tot=SLATE.picks.reduce((a,c)=>a+c.stake,0)+(P?slateParlayStake(P,bank):0);
-    html+=`<div class="muted" style="font-size:12px;margin-top:5px">Whole day <b>${u(tot)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll, parlay included)</div>`;
+    html+=`<div class="muted" style="font-size:12px;margin-top:5px">${pDays.size>1?'Whole week':'Whole day'} <b>${u(tot)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll, parlay included)</div>`;
     if(P){ const stake=slateParlayStake(P,bank);
       html+=`<div style="margin-top:9px;padding:9px 11px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px">`+
         `<b>🎰 Parlay of the day</b> <span class="muted" style="font-size:12px">— ${P.legs.length} legs, different games · <b>the same players as the bets above</b> (it adds to them, it isn't new players)</span><div style="margin-top:3px">${P.legs.map(l=>`<b style="color:${teamText(l.abbr)}">${esc(l.name)}</b>`).join(' + ')}</div>`+
