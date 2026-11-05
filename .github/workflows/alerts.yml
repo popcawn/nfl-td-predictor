@@ -11,10 +11,11 @@ on:
         type: choice
         options: [test, dry, live]
         default: test
-  # THE TIMER IS OFF. To switch it on (after the Odds API credits reset), delete the # at the start of the next 2 lines.
-  # GitHub runs it about every 5 minutes, often a few minutes late.
-  # schedule:
-  #   - cron: '*/5 * * * *'
+  # THE TIMER IS ON (2026-11-05, user: "lets set up the phone alerts"; test alert reached the phone channel). To switch it
+  # off, put # back at the start of the next 2 lines. GitHub runs this account's timed jobs late (hours, seen with closes.yml),
+  # so alerts can arrive later than every 5 minutes.
+  schedule:
+    - cron: '*/5 * * * *'
 
 permissions:
   contents: read
