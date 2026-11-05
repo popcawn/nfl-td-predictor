@@ -164,10 +164,11 @@ kicking off in the next 6 hours and sends the bets **Your card would make** to y
 [ntfy](https://ntfy.sh) (free app, no account). Tap the alert and the bet opens in FanDuel's / DraftKings' slip — you
 check the price and place it yourself. **It never places a bet.**
 
-- **The rule** is the app's: chance = the other books' price (calibrated), the price judged = the best among FanDuel +
-  DraftKings, EV over 3%, the card's confidence, ¼ Kelly, at most 3 per game / 2 per team / 1 per player. Each bet is
-  alerted once (again only if its price gets better). On 2025's real prices this rule went +58% in weeks 1–9 and −14%
-  in weeks 10–18 at closing prices — **unproven**; your CLV says whether it works.
+- **The rule** is the app's: chance = every other book's price (calibrated; since 2026-11-05 — before, only the books that
+  aren't yours), the price judged = the best among your five books (FanDuel, DraftKings, BetMGM, Caesars, Fanatics), EV over
+  3%, the card's confidence, ¼ Kelly, at most 3 per game / 2 per team / 1 per player. Each bet is alerted once (again only
+  if its price gets better). On 2025's real prices this "every other book" rule (flat, EV over 3%) went +18% in weeks 1–9
+  and +2% in weeks 10–18 at closing prices — **unproven**; your CLV says whether it works.
 - **Credits:** 1 per game per check. Every 5 minutes for the 6 hours before each kickoff ≈ 5,000 credits a month; a run
   with no game in the window costs nothing. It stops if the key drops below 1,000 credits (so the app keeps some).
 - **Setup (once):** in the ntfy app, subscribe to your private channel name. In this repo: *Settings → Secrets and

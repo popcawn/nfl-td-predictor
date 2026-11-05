@@ -46,6 +46,7 @@ jobs:
           SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
           ALERT_MODE: ${{ inputs.mode || 'live' }}
           ALERT_HOURS: '6'
+          ALERT_BOOKS: 'fanduel,draftkings,betmgm,williamhill_us,fanatics'   # your five books, as in the app (2026-11-05)
           ALERT_RESERVE: '1000'
           ALERT_STATE: ${{ vars.ALERT_STATE }}
         run: node alerts/watch.mjs
