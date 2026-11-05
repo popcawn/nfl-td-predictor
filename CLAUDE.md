@@ -354,6 +354,10 @@ See README.md for what the model does and how it was validated.
   the board (ALERT_HOURS 168, ALERT_MAX 20, all 5 books) every 30 min via an outside timer (cron-job.org -> workflow_dispatch
   API, fine-grained token with Actions read+write on this repo); GitHub's own cron is a 2-hour backup (this account's timers
   run hours late). ~20K credits/month. Phone: ntfy; FanDuel + DraftKings links open the apps, BetMGM / Caesars the website.
+  BANKROLL (same day, user: "make the alerts follow my bankroll" + "give dollar amounts not units"): syncState() reads all three
+  sports' sync files (one pot: bank = BANK.amt + every sport's settled P/L since BANK.at; riding = every sport's open bets) and
+  applies the app's fitRoom to the run's new alerts (biggest $ first, the rest wait; off when BANK.lim === false); stakes in
+  dollars only (units only without SYNC_TOKEN). Test: ALERT_SYNC_MOCK (local stand-in for the gist files) + ALERT_MOCK, dry.
 - 📲 EDGE ALERTS (2026-10-15, user asked for phone notifications, then "yes" to building it with the timer off):
   `alerts/watch.mjs` (Node 20, no deps) run by `.github/workflows/alerts.yml` — workflow_dispatch modes test|dry|live, the
   `schedule:` (*/5) is COMMENTED OUT until the user says to switch it on (credits: ~5K/month at 6 h window). It mirrors

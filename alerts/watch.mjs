@@ -22,6 +22,7 @@
 //   ALERT_MAX     at most this many alerts per run (default 6)
 //   ALERT_STATE   your state, e.g. nj — BetMGM and Caesars put it in their bet-slip links (repo variable ALERT_STATE)
 //   ALERT_MOCK    a JSON file {events:[...], odds:{eventId: body}} to test without credits or network to The Odds API
+//   ALERT_SYNC_MOCK a JSON file standing in for the ☁ Sync gist's nfl-td-sync / nba-sync / nhl-sync files (tests)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -150,24 +151,36 @@ async function sentBefore() {
   } catch (e) { log('could not read past alerts:', e.message); }
   return out;
 }
-// the app's ☁ Sync gist: bankroll now (BANK.amt + settled P/L since) and players you already have open bets on
+// the app's ☁ Sync gist — ONE POT like the app (2026-11-05, user: "make the alerts follow my bankroll"): bankroll now =
+// BANK.amt + the dollar P/L of every sport's bets settled since (NFL nfl-td-sync.json, NBA nba-sync.json, NHL nhl-sync.json),
+// the money riding on every sport's open bets, the limit switch (BANK.lim === false = off), and players you already bet.
+// ALERT_SYNC_MOCK = a local JSON {"nfl-td-sync.json": {...}, "nba-sync.json": {...}, "nhl-sync.json": {...}} for tests.
+const SYNC_FILES = ['nfl-td-sync.json', 'nba-sync.json', 'nhl-sync.json'];
+function potFrom(files) {
+  const d = files['nfl-td-sync.json']; if (!d) return null;
+  const units = d.bankroll > 0 ? d.bankroll : 100, B = d.bank || {};
+  const all = SYNC_FILES.flatMap(f => (files[f] && files[f].bets) || []);
+  const usd = b => b.usd != null ? +b.usd : (B.amt ? (+b.stake || 0) * B.amt / units : null);
+  let bank = null;
+  if (B.amt) { bank = B.amt; for (const b of all) if (b.st > B.at) { const u = usd(b), dec = americanToDec(String(b.odds).replace('+', '')) || 1;
+    if (u != null) bank += b.result === 'win' ? u * (dec - 1) : b.result === 'loss' ? -u : 0; } bank = Math.max(0, bank); }
+  const riding = all.filter(b => b.result === 'pending').reduce((a, b) => a + (usd(b) || 0), 0);
+  const open = new Set();
+  for (const b of d.bets || []) if (b.result === 'pending') { if (b.legs) b.legs.forEach(l => open.add(l.game + '|' + l.key)); else if (b.game && b.key) open.add(b.game + '|' + b.key); }
+  return { unitUsd: bank != null ? bank / units : null, open, bank, riding, lim: B.lim !== false };
+}
 async function syncState() {
+  if (env.ALERT_SYNC_MOCK) return potFrom(JSON.parse(fs.readFileSync(env.ALERT_SYNC_MOCK, 'utf8')));
   const tok = (env.SYNC_TOKEN || '').trim(); if (!tok) return null;
   const gh = async p => { const r = await fetch('https://api.github.com' + p, { headers: { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' } }); if (!r.ok) throw new Error('GitHub ' + r.status); return r.json(); };
   try {
     let hit = null;
     for (let page = 1; page <= 5 && !hit; page++) { const list = await gh(`/gists?per_page=100&page=${page}`); hit = list.find(x => x.files && x.files['nfl-td-sync.json']); if (list.length < 100) break; }
     if (!hit) { log('sync: no nfl-td-sync.json gist for this token'); return null; }
-    const g = await gh('/gists/' + hit.id), f = g.files['nfl-td-sync.json'];
-    const d = JSON.parse(f.truncated && f.raw_url ? await (await fetch(f.raw_url)).text() : f.content);
-    const units = d.bankroll > 0 ? d.bankroll : 100, B = d.bank || {}, bets = d.bets || [];
-    const usd = b => b.usd != null ? +b.usd : (B.amt ? (+b.stake || 0) * B.amt / units : null);
-    let now = null;
-    if (B.amt) { now = B.amt; for (const b of bets) if (b.st > B.at) { const u = usd(b), dec = americanToDec(String(b.odds).replace('+', '')) || 1;
-      if (u != null) now += b.result === 'win' ? u * (dec - 1) : b.result === 'loss' ? -u : 0; } now = Math.max(0, now); }
-    const open = new Set();
-    for (const b of bets) if (b.result === 'pending') { if (b.legs) b.legs.forEach(l => open.add(l.game + '|' + l.key)); else if (b.game && b.key) open.add(b.game + '|' + b.key); }
-    return { unitUsd: now != null ? now / units : null, open };
+    const g = await gh('/gists/' + hit.id), files = {};
+    for (const name of SYNC_FILES) { const f = g.files[name]; if (!f) continue;
+      try { files[name] = JSON.parse(f.truncated && f.raw_url ? await (await fetch(f.raw_url)).text() : f.content); } catch (e) { log(`sync: ${name} unreadable`); } }
+    return potFrom(files);
   } catch (e) { log('sync: could not read your bet log —', e.message); return null; }
 }
 const usdTxt = x => '$' + (x >= 20 ? Math.round(x) : (Math.round(x * 2) / 2).toFixed(Math.round(x * 2) % 2 ? 2 : 0));
@@ -225,13 +238,22 @@ async function main() {
     log(`${gid}: ${byName.size} priced, ${cands.length} edge(s), ${picks.length} on the card`);
     alerts.push(...picks);
   }
-  alerts.sort((a, b) => b.rk - a.rk);
+  const idOf = c => c.link || 'k:' + c.game + '|' + c.key, usdOf = c => sync && sync.unitUsd ? Math.round(c.stake * sync.unitUsd * 2) / 2 : null;
+  let fresh = alerts.filter(c => !(sent.has(idOf(c)) && sent.get(idOf(c)) >= c.price));   // not yet alerted at this price or better
+  // 💰 BANKROLL LIMIT (the app's fitRoom): money on open bets across NFL, NBA and NHL never goes above your bankroll — new
+  // bets take the room biggest $ first; the rest wait (no alert) until settled bets free some up. Off when the app's limit is off.
+  if (sync && sync.lim && sync.bank != null && sync.unitUsd) {
+    let left = sync.bank - sync.riding; const fit = [], wait = [];
+    for (const c of fresh.slice().sort((a, b) => usdOf(b) - usdOf(a))) { if (usdOf(c) <= left + 1e-9) { fit.push(c); left -= usdOf(c); } else wait.push(c); }
+    log(`bankroll: ${usdTxt(sync.riding)} of ${usdTxt(sync.bank)} in play · ${fit.length} new bet(s) fit${wait.length ? `, ${wait.length} wait for room (${wait.map(c => c.name).join(', ')})` : ''}`);
+    fresh = fit;
+  } else if (!sync) log('bankroll: unknown (no SYNC_TOKEN) — every bet alerted, stakes in units');
+  fresh.sort((a, b) => b.rk - a.rk);
   let n = 0;
-  for (const c of alerts) {
-    const id = c.link || 'k:' + c.game + '|' + c.key;
-    if (sent.has(id) && sent.get(id) >= c.price) continue;   // already alerted at this price or better
+  for (const c of fresh) {
+    const id = idOf(c);
     if (n >= MAX_ALERTS) { log('alert cap reached for this run'); break; }
-    const [a, h] = c.game.split('@'), stake = sync && sync.unitUsd ? `${usdTxt(c.stake * sync.unitUsd)} (${c.stake.toFixed(1)}u)` : `${c.stake.toFixed(1)}u (1u = 1% of your bankroll)`;
+    const [a, h] = c.game.split('@'), stake = usdOf(c) != null ? usdTxt(usdOf(c)) : `${c.stake.toFixed(1)}u (1u = 1% of your bankroll)`;
     const book = bookName(c.book);
     await ntfySend({
       title: `🏈 ${c.name} anytime TD ${fmtAm(c.price)} at ${book}`,
@@ -241,7 +263,7 @@ async function main() {
       ...(c.link ? { click: c.link, actions: [{ action: 'view', label: `Open in ${book}`, url: c.link, clear: true }] }
         : BOOK_HOME[c.book] ? { actions: [{ action: 'view', label: `Open ${book} (find him)`, url: BOOK_HOME[c.book], clear: true }] } : {})
     });
-    n++; log(`alert: ${c.name} ${fmtAm(c.price)} ${book} · EV +${(c.ev * 100).toFixed(1)}% · ${c.stake}u`);
+    n++; log(`alert: ${c.name} ${fmtAm(c.price)} ${book} · EV +${(c.ev * 100).toFixed(1)}% · ${stake}`);
   }
   log(`${n} alert(s) ${MODE === 'dry' ? 'printed' : 'sent'} · credits used ${creditsUsed}${creditsLeft != null ? ` · ${creditsLeft} left` : ''}`);
 }
