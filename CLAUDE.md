@@ -206,7 +206,7 @@ See README.md for what the model does and how it was validated.
   far) -> nights (collapsed; tonight's marked 📍) -> bets.
 
 - ⚡ PULL ALL GAMES (2026-10-19, user: "adopt the NHL sim pull … all games remaining that week"): #weekSec / pullAllGames() — every
-  game still to kick off × pickedMarkets (a game pulled within freshMs reuses BOARDS), each priced by gameOptions() (the card's
+  game still to kick off × pickedMarkets (a game pulled within freshMs reuses BOARDS; ↻ FORCE 2026-11-05, user: "why isnt the app updated the price when i clean pull": pullAllGames(true) = every game fresh after a cost confirm ["↻ pull all fresh" in #weekCost], pullAllGames(Set of ids) = only those games ["↻ price" on a bet card, ~1 game × markets], the rest reused as-is), each priced by gameOptions() (the card's
   candidate + pickPlays rule, extracted from computeTopPlays — Your card = gameOptions() then drawn) on a temporary LAST built
   from simGame (its own injuries + forecast: CTX_BADWX / CTX_WIND feed confFor / propConfidence) and fillBoard(L, d, gid) (the
   pull into any game's maps; fillGameFromOdds = fillBoard(LAST…) + screen). WEEK (nfltd_week) = picks across games ->

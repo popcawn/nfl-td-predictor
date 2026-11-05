@@ -2984,14 +2984,20 @@ async function priceFunGames(list, btn){
 // reuses its saved board), each run through the SAME rule as Your card — gameOptions() on a sim of that game with its own
 // forecast, injuries and your status edits. Result: this week's bets across all games, with open links.
 let WEEK=lsJ('nfltd_week', null);
-async function pullAllGames(){
+// ↻ FRESH PRICES (user, 2026-11-05: "why isnt the app updated the price when i clean pull" -> "yes add the force refresh"):
+// a pull reuses a game's prices for freshMs (20 min on game day, 1 h the day before, 3 h before that), so a book's move in
+// between didn't show. force = true pulls every game now (after a confirm with the cost); a Set of game ids pulls only those
+// (the ↻ price button on a bet card) and reuses every other game's last prices as they are, so it costs one game's markets.
+async function pullAllGames(force){
   const btn=$('weekBtn'), out=$('weekBody'), markets=pickedMarkets();
   if(!oddsKey()){ out.innerHTML='Add your The Odds API key once under <b>Price this game → odds settings</b>.'; $('oddsCfg').open=true; goTo('priceSec'); return; }
   if(!markets.length){ out.textContent='Tick at least one market under odds settings.'; return; }
   const now=Date.now(), games=SCHED.filter(g=>Date.parse(g.kickoff)>now), gidOf=g=>g.away+'@'+g.home;
   if(!games.length){ out.textContent='No games left to kick off this week.'; return; }
-  const fresh=g=>PULLED[gidOf(g)] && now-PULLED[gidOf(g)]<freshMs(gidOf(g)) && BOARDS[gidOf(g)];
+  const only=force instanceof Set ? force : null;
+  const fresh=g=>only ? !only.has(gidOf(g)) : force!==true && PULLED[gidOf(g)] && now-PULLED[gidOf(g)]<freshMs(gidOf(g)) && BOARDS[gidOf(g)];
   const cost=games.filter(g=>!fresh(g)).length*markets.length;
+  if(force===true && cost && !confirm(`Pull all ${games.length} games fresh, even ones pulled recently? About ${cost} The Odds API credits.`)) return;
   if(cost && oddsRemaining!=null && oddsRemaining-cost<ODDSCFG.reserve &&
      !confirm(`This uses about ${cost} The Odds API credits (${games.length} games × ${markets.length} markets). You have ${oddsRemaining} left and your reserve is ${ODDSCFG.reserve}. Go ahead?`)) return;
   btn.disabled=true; const keep=LAST, picks=[], notes=[]; let ch=false;
@@ -3036,12 +3042,13 @@ const floorTxt=c=>{ const f=floorPrice(c.mp, MIN_EDGE); return f?`<span class="b
 // "↩ Bring back" undoes it. Kept 8 days. (Your card on the game tab still shows the whole game.)
 let SKIP=(o=>{ const old=Date.now()-8*864e5; for(const k of Object.keys(o)) if(!(o[k]>old)) delete o[k]; return o; })(lsJ('nfltd_skip', {})||{});
 const skipKey=(game,c)=>game+'|'+c.key+'|'+statOf(c.market);
+const refreshBtn=g=>`<button class="statussel brefresh" data-g="${esc(g)}" title="pull this game's prices again now (about ${pickedMarkets().length} credits): the app otherwise reuses prices pulled recently">↻ price</button>`;
 const skipBtn=(game,c)=>`<button class="statussel bskip" data-skip="${esc(skipKey(game,c))}" title="hide this bet — it stays hidden when you pull again">✕ Skip</button>`;
 const weekSkips=()=>Object.keys(SKIP).filter(k=>SCHED.some(g=>g.away+'@'+g.home===k.split('|')[0]&&Date.parse(g.kickoff)>Date.now()));
 function renderWeek(){
   const out=$('weekBody'), cost=$('weekCost'); if(!out) return;
   const now=Date.now(), left=SCHED.filter(g=>Date.parse(g.kickoff)>now), mk=pickedMarkets().length;
-  if(cost) cost.innerHTML=`≈ <b>${left.length*mk}</b> credits · ${left.length} game${left.length===1?'':'s'} × ${mk} market${mk===1?'':'s'}<br>a game pulled in the last hour is free${oddsRemaining!=null?`<br>${Number(oddsRemaining).toLocaleString()} credits left`:''}`;
+  if(cost) cost.innerHTML=`≈ <b>${left.length*mk}</b> credits · ${left.length} game${left.length===1?'':'s'} × ${mk} market${mk===1?'':'s'}<br>prices pulled recently are reused free (20 min on game day · 1 h the day before · 3 h before that) <button class="statussel" id="weekForce" style="padding:1px 8px;font-size:12px" title="pull every game again now, even ones pulled recently">↻ pull all fresh</button>${oddsRemaining!=null?`<br>${Number(oddsRemaining).toLocaleString()} credits left`:''}`;
   const tt=$('weekTitle'); if(tt) tt.textContent=left.length?`This week · ${left.length} game${left.length===1?'':'s'} left`:'No games left this week';
   if(!WEEK) return;
   const age=Math.round((now-WEEK.at)/60e3), P=WEEK.picks.filter(c=>(!c.kickoff||Date.parse(c.kickoff)>now) && !heldSameStat(c.game, c) && !SKIP[skipKey(c.game, c)]);   // kicked-off games drop out; so does a stat you already bet
@@ -3061,7 +3068,7 @@ function renderWeek(){
     h+=`<div class="bgame">${esc(bookName(b))} · ${L.length} bet${L.length>1?'s':''} · ${stakeTxt(st)}${L.length>1?`<span class="bgo">${openAt(b, L.map(leg), n=>`Open all ${n} on FanDuel`)}</span>`:''}</div><div class="bcards">`+L.map(c=>{ const g=c.game;
       return betCard({nw:true, cls:'spick', attrs:`data-g="${esc(g)}" title="open this game"`, tc:teamColor(c.abbr), name:c.label, mkt:mktLabel(c.market), sub:`${esc(g.replace('@',' @ '))} · ${fmtKick(c.kickoff)}`, odds:c.odds, book:c.book, stake:c.stake,
         conf:c.conf?confBadge(c.conf):'', mp:c.mp, bimp:c.bimp, ev:c.ev, note:c.mkt==null?'<span style="color:var(--warn)">model only — no other book prices it</span>':'',
-        link:openAt(c.book, [leg(c)], 'Open on FanDuel'), extra:skipBtn(g, c)+floorTxt(c)}); }).join('')+'</div>'; }
+        link:openAt(c.book, [leg(c)], 'Open on FanDuel'), extra:refreshBtn(g)+skipBtn(g, c)+floorTxt(c)}); }).join('')+'</div>'; }
   { const n=weekSkips().length; if(n) h+=`<div class="skipnote">${n} skipped this week <button class="statussel" id="unskip">↩ Bring ${n>1?'them':'it'} back</button></div>`; }
   if(WEEK.notes&&WEEK.notes.length) h+=`<div class="muted" style="font-size:12px;margin-top:10px">Skipped: ${WEEK.notes.map(esc).join(' · ')}</div>`;
   out.innerHTML=h;
@@ -3069,7 +3076,9 @@ function renderWeek(){
   out.querySelectorAll('.spick').forEach(el=>{ el.onclick=e=>{ if(e.target.closest('button,a')) return; const [a,hm]=el.dataset.g.split('@'); if(!S.teamList.includes(a)||!S.teamList.includes(hm)) return;
     $('awaySel').value=a; $('homeSel').value=hm; userPicked=true; onMatchupChange(); setTimeout(()=>goTo('mktSec'), 300); }; });
 }
-$('weekBody').addEventListener('click', e=>{ const b=e.target.closest('.bskip'); if(b){ SKIP[b.dataset.skip]=Date.now(); lsW('nfltd_skip', SKIP); renderWeek(); return; }
+$('weekCost').addEventListener('click', e=>{ if(e.target.closest('#weekForce')) pullAllGames(true); });
+$('weekBody').addEventListener('click', e=>{ const r=e.target.closest('.brefresh'); if(r){ r.disabled=true; r.textContent='pulling…'; pullAllGames(new Set([r.dataset.g])); return; }
+  const b=e.target.closest('.bskip'); if(b){ SKIP[b.dataset.skip]=Date.now(); lsW('nfltd_skip', SKIP); renderWeek(); return; }
   if(e.target.closest('#unskip')){ for(const k of weekSkips()) delete SKIP[k]; lsW('nfltd_skip', SKIP); renderWeek(); } });
 function renderSlate(){
   const out=$('slateBody'); if(!out||!SLATE) return;
@@ -3681,7 +3690,7 @@ $('betAdd').onclick=addBet;
 $('betExport').onclick=exportData;
 $('closeApply').onclick=applyClosingPaste;
 $('closePull').onclick=pullCloses;
-$('slateBtn').onclick=buildSlate; $('weekBtn').onclick=pullAllGames;
+$('slateBtn').onclick=buildSlate; $('weekBtn').onclick=()=>pullAllGames();
 setTimeout(()=>{ saveBoards(); savePx(); }, 1500);   // 🧹 once per visit: trim the odds caches so the shared storage has room
 $('pullOdds').onclick=()=>pullOdds(false);
 document.addEventListener('click', e=>{ const b=e.target.closest&&e.target.closest('.fdpull'); if(!b) return; b.disabled=true; b.textContent='pulling…'; if(LAST) PULLED[curGameId()]=0; pullOdds(false); });
