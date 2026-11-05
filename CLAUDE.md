@@ -269,6 +269,14 @@ See README.md for what the model does and how it was validated.
   Raw prices (market_hist/, market_td_*.json, market_props_*.json) and bt_*.json stay local.
   GOTCHA: `node market-backtest.mjs analyze` REWRITES market_anchor.json and drops its props section (props.w) — after
   using it just to read numbers, `git checkout -- market_anchor.json` (happened 2026-10-15, caught before commit).
+- CONSENSUS FIX (2026-11-05, user: "if you are only pricing two books for odds isnt that bad" -> "yes run the test and switch it"):
+  consensusFrom() judged your books only against books that AREN'T yours; with all five of yours on (since 10-24) that left
+  BetRivers / BetOnline / Bovada, and two odd ones faked a +65% edge (Brandin Cooks LV@SF: +200/+215 there, FD/DK/CZR/FAN
+  +450..+525). Now TD = median implied of EVERY book except your best-priced one (the price judged); alerts/watch.mjs
+  matches. Test (scratch cons-test.mjs on market_td_2025 + bt_rows_2025, 8 books, 5,964 active player-games, calibration
+  cross-fit by half): Brier better BOTH halves at the close (.13908/.12536 vs .13921/.12540) and 6 h out (.13980/.12725 vs
+  .13988/.12739); flat EV>3% ROI close +5.3% (969 bets) vs +1.3% (1,027), 6 h out +23.7% vs +6.6% (ROI CIs ~±30%: noise);
+  bets only the old rule took -26.8% (256, close). Props consensus still uses books that aren't yours (untested).
 - 🎉 FUN PICKS — SECTION REMOVED 2026-11-01 (user: "remove fun picks section. but keep td section to find best td prices"): the
   box under 🎯 My TD picks (list, games/theme filters, ⚡ check/refresh, log + open buttons, fun parlay) is gone from renderSlate;
   the TD picks + parlay of the day are unchanged. buildSlate still fills SLATE.funPool / SLATE.fun (pickFun, priceFunGames,
@@ -341,8 +349,8 @@ See README.md for what the model does and how it was validated.
 - 📲 EDGE ALERTS (2026-10-15, user asked for phone notifications, then "yes" to building it with the timer off):
   `alerts/watch.mjs` (Node 20, no deps) run by `.github/workflows/alerts.yml` — workflow_dispatch modes test|dry|live, the
   `schedule:` (*/5) is COMMENTED OUT until the user says to switch it on (credits: ~5K/month at 6 h window). It mirrors
-  the slate's TD rule WITHOUT the sim (TD_W = 0): other books' median implied (app's consensusFrom incl. the <2-books
-  fallback) -> S.marketAnchor.cal -> evalBet/tierOf 'take' -> legConfidence (no weather) -> pickPlays (3/game, 2/team,
+  the slate's TD rule WITHOUT the sim (TD_W = 0): median implied of every book except the one you'd bet (app's
+  consensusFrom since 2026-11-05) -> S.marketAnchor.cal -> evalBet/tierOf 'take' -> legConfidence (no weather) -> pickPlays (3/game, 2/team,
   ¼ Kelly). Keep it in step when those change. Secrets the USER adds: ODDS_API_KEY, NTFY_TOPIC (private ntfy.sh
   channel), optional SYNC_TOKEN (reads the ☁ Sync gist: bankroll -> $ stakes, open bets -> skipped). Dedupe = polls the
   ntfy channel's last 12 h (click link + "TD +price" in the title); re-alerts only on a better price. Stops below
@@ -371,7 +379,8 @@ See README.md for what the model does and how it was validated.
   default + DraftKings). parseOdds() -> best price among YOUR books per TD selection / per prop side at the primary
   (FanDuel's) line, each with a TICKET {b, o, m?, s?, alt:{book:ticket}} filed as FD#<market>#<key> (name kept for
   compatibility); a book with a different prop line -> d.propsX -> pm.books[] -> its own candidates (side(...,x)). tkFor()
-  only trusts a ticket while the box still holds that price. consensusFrom() excludes YOUR books (6 others typically).
+  only trusts a ticket while the box still holds that price. consensusFrom() TD = every book except your best-priced one
+  (2026-11-05; it used to exclude ALL your books, which left ~3 once all five were on — see CONSENSUS FIX).
   Candidates/bets/slip legs carry `book`; d.byBook[book] is that book's own board -> closeView()/applyClose use the
   bet's book (history pulls bookmakers=myBooks). Links: bookLink() — FanDuel addToBetslip, DraftKings ?outcomes=sid+sid
   (API gives the single-leg form; the '+' join is the common format, unverified like FanDuel's multi-leg); other books'

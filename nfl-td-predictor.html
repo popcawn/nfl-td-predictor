@@ -2474,7 +2474,7 @@ function anchorTD(players, mktMap, mk, book){
   return out;
 }
 function lastAnchors(){ const pl=LAST.awayR.concat(LAST.homeR), a={}; for(const m of ['anytime','first','last','two']) a[m]=anchorTD(pl, LAST.mktMap, m, LAST.bookMap); return a; }
-// book consensus from a multi-book pull: TD = median implied prob of the OTHER books (FanDuel's own price is what we judge);
+// book consensus from a multi-book pull: TD = median implied prob of every book except your best-priced one (the price judged);
 // props = median de-vigged P(over) of the other books at FanDuel's line
 const ipOf=a=>a>0?100/(a+100):-a/(-a+100);
 const median=a=>{ const s=a.slice().sort((x,y)=>x-y), n=s.length; return n?(n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2):null; };
@@ -2483,14 +2483,23 @@ function consensusFrom(books){
   for(const b of books) for(const m of (b.markets||[])){
     if(OA_TD[m.key]){ const mk=OA_TD[m.key];
       for(const o of m.outcomes){ if(m.key==='player_tds_over' ? (o.name!=='Over'||+o.point!==1.5) : o.name!=='Yes') continue;
-        const t=((td[mk]=td[mk]||{})[o.description]=(td[mk]&&td[mk][o.description])||{fd:null, oth:[]}); if(mine.includes(b.key)) t.fd=(t.fd||[]).concat(ipOf(o.price)); else t.oth.push(ipOf(o.price)); } }
+        const t=((td[mk]=td[mk]||{})[o.description]=(td[mk]&&td[mk][o.description])||[]); t.push({b:b.key, a:o.price}); } }
     else if(OA_PROP[m.key]){ const s=OA_PROP[m.key], pairs={};
       for(const o of m.outcomes){ if(o.point==null) continue; const k=o.description+'|'+o.point; (pairs[k]=pairs[k]||{name:o.description, line:+o.point})[o.name==='Over'?'O':'U']=o.price; }
       for(const q of Object.values(pairs)){ if(q.O==null||q.U==null) continue; const fo=ipOf(q.O)/(ipOf(q.O)+ipOf(q.U));
         const t=((pr[s]=pr[s]||{})[q.name+'|'+q.line]=(pr[s]&&pr[s][q.name+'|'+q.line])||{fd:null, oth:[]}); if(mine.includes(b.key)) t.fd=(t.fd||[]).concat(fo); else t.oth.push(fo); } }
   }
   const out={td:{}, props:{}};
-  for(const [mk,o] of Object.entries(td)){ out.td[mk]={}; for(const [n,t] of Object.entries(o)){ if(!t.oth.length) continue; const xs=t.oth.length>=2?t.oth:t.oth.concat(t.fd||[]); out.td[mk][n]={ip:median(xs), n:t.oth.length}; } }
+  // TD (2026-11-05 real-price test, user: "if you are only pricing two books for odds isnt that bad" -> "yes run the test and
+  // switch it"): your best price is judged against EVERY other book — the median implied chance of all books but the one you'd
+  // bet. The old rule (only books that aren't yours) left ~3 books once all five of yours were on, and two odd ones faked a
+  // +65% edge (Brandin Cooks: BetRivers / BetOnline +200 while FD / DK / Caesars / Fanatics sat at +450-525). 2025, 8 books,
+  // 5,964 player-games: Brier better on both halves at the close (.13908/.12536 vs .13921/.12540) and 6 h out (.13980/.12725
+  // vs .13988/.12739); flat EV>3% ROI +5.3% vs +1.3% (close), +23.7% vs +6.6% (6 h out); bets only the old rule took: -26.8%.
+  for(const [mk,o] of Object.entries(td)){ out.td[mk]={}; for(const [n,arr] of Object.entries(o)){
+    const my=arr.filter(x=>mine.includes(x.b)).sort((x,y)=>(y.a-x.a)||(mine.indexOf(x.b)-mine.indexOf(y.b)))[0];
+    const xs=arr.filter(x=>!my||x.b!==my.b).map(x=>ipOf(x.a)); if(!xs.length) continue;
+    out.td[mk][n]={ip:median(xs), n:xs.length}; } }
   for(const [s,o] of Object.entries(pr)){ out.props[s]={}; for(const [k,t] of Object.entries(o)){ const xs=t.oth; if(xs.length){ const [n,l]=[k.slice(0,k.lastIndexOf('|')), +k.slice(k.lastIndexOf('|')+1)]; out.props[s][k]={name:n, line:l, fairOver:median(xs), n:xs.length}; } } }
   return out;
 }

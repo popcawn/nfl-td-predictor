@@ -2,7 +2,8 @@
 // make to your phone (ntfy). It never places a bet: each alert carries a link that opens the bet in your book's slip.
 //
 // Same rule as the app's "🎯 Build my TD picks" (nfl-td-predictor.template.html: consensusFrom / anchorTD / evalBet /
-// tierOf / legConfidence / pickPlays — keep them in step): chance = the OTHER books' median implied price, calibrated
+// tierOf / legConfidence / pickPlays — keep them in step): chance = the median implied price of every book except the one
+// you'd bet (since 2026-11-05; before: only books that aren't yours), calibrated
 // (S.marketAnchor.cal; the model's share is 0 for TDs, so no sim is needed); the price judged is the best among your
 // books; tier 'take' (EV > 3%, chance >= 6%, edge <= 22 pts, has history); confidence; 1/4 Kelly; per game the best 3,
 // at most 2 per team, one per player. Not run here: weather (the app trims WR/TE/QB confidence x0.9 in bad weather) and
@@ -201,23 +202,24 @@ async function main() {
     const byName = new Map();
     for (const bk of (body && body.bookmakers) || []) for (const m of (bk.markets || [])) if (m.key === 'player_anytime_td') for (const o of (m.outcomes || [])) {
       if (o.name !== 'Yes' || !o.description) continue;
-      const t = byName.get(o.description) || { oth: [], mine: [], best: null }; byName.set(o.description, t);
-      if (BOOKS.includes(bk.key)) { t.mine.push(americanToProb(o.price)); if (!t.best || o.price > t.best.price || (o.price === t.best.price && BOOKS.indexOf(bk.key) < BOOKS.indexOf(t.best.book))) t.best = { book: bk.key, price: o.price, link: slipLink(bk.key, o) }; }
-      else t.oth.push(americanToProb(o.price));
+      const t = byName.get(o.description) || { all: [], best: null }; byName.set(o.description, t); t.all.push({ book: bk.key, p: americanToProb(o.price) });
+      if (BOOKS.includes(bk.key)) { if (!t.best || o.price > t.best.price || (o.price === t.best.price && BOOKS.indexOf(bk.key) < BOOKS.indexOf(t.best.book))) t.best = { book: bk.key, price: o.price, link: slipLink(bk.key, o) }; }
     }
     const roster = [...(S.rosters[away] || []).map(p => ({ ...p, abbr: away })), ...(S.rosters[home] || []).map(p => ({ ...p, abbr: home }))], idx = buildPlayerIndex(roster);
     const cands = [];
     for (const [name, t] of byName) {
-      if (!t.best || !t.oth.length) continue;   // no other book = no market to beat (the app never shows an edge there)
+      // the app's consensusFrom since 2026-11-05: every book except the one you'd bet (the old "books that aren't yours" left ~3)
+      const loo = t.best ? t.all.filter(x => x.book !== t.best.book).map(x => x.p) : [];
+      if (!t.best || !loo.length) continue;   // no other book = no market to beat (the app never shows an edge there)
       const p = matchPlayer(name, idx); if (!p) continue;
       const status = inj.get(String(p.id)) || 'ACT'; if (status === 'OUT') continue;
       const k = p.abbr + '|' + p.id; if (sync && sync.open.has(gid + '|' + k)) continue;   // you already bet him
-      const ip = t.oth.length >= 2 ? median(t.oth) : median(t.oth.concat(t.mine));
+      const ip = median(loo);
       const mp = cal ? expit(cal.a + cal.b * logit(clamp(ip, 0.003, 0.995))) : ip;
       const dec = americanToDec(t.best.price), bimp = americanToProb(t.best.price), ev = mp * (dec - 1) - (1 - mp), edge = mp - bimp;
       if (tierOf(mp, edge, ev, !p.matched) !== 'take') continue;
       const conf = legConfidence({ role: roleOf(p), pos: p.pos, games: p.games, status, matched: p.matched, edge, bimp }, snapWeeks);
-      cands.push({ key: k, abbr: p.abbr, name: p.name, game: gid, ko: E.commence_time, ...t.best, mp, ip, ev, edge, conf, nOth: t.oth.length, rk: edge > 0 ? conf * edge / (1 - bimp) : 0 });
+      cands.push({ key: k, abbr: p.abbr, name: p.name, game: gid, ko: E.commence_time, ...t.best, mp, ip, ev, edge, conf, nOth: loo.length, rk: edge > 0 ? conf * edge / (1 - bimp) : 0 });
     }
     const picks = pickPlays(cands);
     log(`${gid}: ${byName.size} priced, ${cands.length} edge(s), ${picks.length} on the card`);
