@@ -276,7 +276,11 @@ See README.md for what the model does and how it was validated.
   matches. Test (scratch cons-test.mjs on market_td_2025 + bt_rows_2025, 8 books, 5,964 active player-games, calibration
   cross-fit by half): Brier better BOTH halves at the close (.13908/.12536 vs .13921/.12540) and 6 h out (.13980/.12725 vs
   .13988/.12739); flat EV>3% ROI close +5.3% (969 bets) vs +1.3% (1,027), 6 h out +23.7% vs +6.6% (ROI CIs ~±30%: noise);
-  bets only the old rule took -26.8% (256, close). Props consensus still uses books that aren't yours (untested).
+  bets only the old rule took -26.8% (256, close). PROPS tested the same day (scratch props-test.mjs, market_props_2025 +
+  bt_props_2025, FanDuel's main line; only ~3 books post that exact line): every-book-but-the-two-you'd-bet vs books-not-yours
+  — receiving yards better both halves (.24980/.25064 vs .25000/.25071), rushing yards WORSE both halves on shared lines
+  (.24998/.24949 vs .24975/.24902); pooled shared lines half 2 a tie (.25000 vs .24999) -> props NOT switched (still books
+  that aren't yours).
 - 🎉 FUN PICKS — SECTION REMOVED 2026-11-01 (user: "remove fun picks section. but keep td section to find best td prices"): the
   box under 🎯 My TD picks (list, games/theme filters, ⚡ check/refresh, log + open buttons, fun parlay) is gone from renderSlate;
   the TD picks + parlay of the day are unchanged. buildSlate still fills SLATE.funPool / SLATE.fun (pickFun, priceFunGames,
