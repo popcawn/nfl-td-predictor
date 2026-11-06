@@ -42,6 +42,7 @@
 //   ALERT_STATE   your state, e.g. nj — BetMGM and Caesars put it in their bet-slip links (repo variable ALERT_STATE)
 //   ALERT_CACHE   a JSON file kept between runs: each game's last prop prices + when they were pulled, forecasts, the last run
 //   ALERT_TRIGGER the GitHub event; 'schedule' = the 2-hour backup timer, which does nothing when a run happened < 25 min ago
+//   ALERT_QUIET   quiet hours in Eastern time, e.g. 22-6 = live runs from 10 PM to 6 AM check nothing (dry / test still run)
 //   ALERT_MOCK    a JSON file {events:[...], odds:{eventId: body}} to test without credits or network to The Odds API
 //   ALERT_SYNC_MOCK a JSON file standing in for the ☁ Sync gist's nfl-td-sync / nba-sync / nhl-sync files (tests)
 //   ALERT_NOW     tests: pretend it is this time (ISO)
@@ -72,6 +73,12 @@ const PROP_UNIT = { rec: 'catches', recyd: 'yds', ryd: 'yds', rryd: 'yds', pyd: 
 // minutes between prop checks of a game, by hours to its kickoff (anytime TD: every run). Runs come every 30 min, so 55 =
 // every other run (hourly), 175 = every 6th (3 h), 355 = every 12th (6 h)
 const PROP_EVERY = h => h <= 6 ? 0 : h <= 24 ? 55 : h <= 72 ? 175 : 355;
+// QUIET HOURS, Eastern time (2026-11-06, user: "stops running at 10pm est, then starts back up at 6am est"): ALERT_QUIET '22-6' =
+// live runs from 22:00 to 05:59 ET check nothing (no credits, no buzz). No NFL game kicks off then; the 6 AM run re-checks
+// every game whose props are due. Simulated: ~30% fewer credits (30-min timer: ~870/day instead of ~1,230)
+const QUIET = (m => m ? [+m[1], +m[2]] : null)(/^(\d{1,2})\s*-\s*(\d{1,2})$/.exec((env.ALERT_QUIET || '').trim()));
+const etHour = ms => +new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hourCycle: 'h23' }).format(new Date(ms)) % 24;
+const isQuiet = ms => { if (!QUIET) return false; const h = etHour(ms), [a, b] = QUIET; return a > b ? (h >= a || h < b) : (h >= a && h < b); };
 const log = (...a) => console.log(...a);
 
 // ---- the app's helpers, copied ----
@@ -456,6 +463,7 @@ function saveCache(c) {
   for (const [g, x] of Object.entries(c.wx)) if (!(NOW - x.t < 3 * 3600e3)) delete c.wx[g];
   fs.mkdirSync(path.dirname(path.resolve(CACHE_FILE)), { recursive: true });
   fs.writeFileSync(CACHE_FILE, JSON.stringify(c));
+  if (env.GITHUB_OUTPUT) fs.appendFileSync(env.GITHUB_OUTPUT, 'saved=true\n');   // the workflow keeps the cache only when it changed
 }
 const r4 = x => typeof x === 'number' ? Math.round(x * 1e4) / 1e4 : x;
 const slimProp = c => ({ key: c.key, abbr: c.abbr, name: c.name, market: c.market, price: c.price, book: c.book, mp: r4(c.mp), ev: r4(c.ev), edge: r4(c.edge), bimp: r4(c.bimp), conf: c.conf, tier: c.tier, rk: r4(c.rk) });
@@ -469,6 +477,7 @@ async function main() {
     await ntfySend({ title: '✅ NFL edge alerts are connected', message: 'This channel gets a buzz when one of your books prices an anytime TD or a player prop (receptions, receiving / rushing / rush+rec / passing yards) better than the other books do.', tags: ['football'], priority: 3 });
     log('test alert sent to your channel (no odds pulled, no credits used)'); return;
   }
+  if (MODE === 'live' && isQuiet(NOW)) { log(`Quiet hours (${QUIET[0]}:00–${QUIET[1]}:00 Eastern) — nothing checked, no credits used.`); return; }
   if (!env.ODDS_API_KEY && !MOCK) throw new Error('ODDS_API_KEY is not set — add it as a repository secret.');
   S = JSON.parse(fs.readFileSync(path.join(HERE, '..', 'nfl-td-snapshot.json'), 'utf8'));
   const MA = S.marketAnchor || {}, cal = MA.fitted && MA.cal ? MA.cal : null, snapWeeks = (S.meta && S.meta.snapWeeks) || 0;

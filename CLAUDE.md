@@ -377,6 +377,13 @@ See README.md for what the model does and how it was validated.
   slots but are NEVER alerted (stale: true); dry runs never write the cache; ALERT_MAX cut-offs reset that game's t -> props
   re-pulled next run. The 2-hour GitHub `schedule` backup exits when lastRun < 25 min (ALERT_TRIGGER). Props pause below
   ALERT_PROP_RESERVE (10,000). Alert ids: click link, else the title minus its price (old 'k:' tags still read).
+  QUIET HOURS (same day, user: "stops running at 10pm est, then starts back up at 6am est"): ALERT_QUIET '22-6' (Eastern,
+  Intl America/New_York, DST-safe) -> live runs exit before any pull; dry / test ignore it. The cache is saved only when a live
+  run wrote it (saveCache appends saved=true to GITHUB_OUTPUT; the save step is `if: steps.check.outputs.saved == 'true'`).
+  Credit simulation (scratch cadence-sim.mjs: typical week, TD posted 6 days out, props 4; same PROP_EVERY): per day 24 h /
+  quiet = 15 min 2,030 / 1,440 · 30 min 1,230 / 870 · 60 min 830 / 570. The user asked about 15 min + quiet hours (~43K a
+  month): the interval lives in their cron-job.org job — the script needs no change for 15 min (PROP_EVERY thresholds 55 /
+  175 / 355 still mean hourly / 3 h / 6 h; the backup timer's 25-min rule still stands it down).
   Tests (no credits, nothing to the real channel): ALERT_MOCK (filters markets like the API, 1 credit per market returned),
   ALERT_SYNC_MOCK, ALERT_NOW, ALERT_NTFY=http://localhost:<port> (a tiny POST/`/json` stand-in), ALERT_DEBUG / ALERT_DUMP.
 - 📲 EDGE ALERTS (2026-10-15, user asked for phone notifications, then "yes" to building it with the timer off):

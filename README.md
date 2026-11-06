@@ -173,13 +173,21 @@ Tap the alert and the bet opens in your book's slip — you check the price and 
   2+ TD and defense TDs (they need the app's simulation). Each bet is alerted once (again only if its price gets better).
   On 2025's real prices the TD rule (flat, EV over 3%) went +18% in weeks 1–9 and +2% in weeks 10–18 at closing prices; the
   props rule has no ROI test — **unproven**; your CLV says whether it works.
-- **Credits:** 1 per market per game that has prices (unposted markets are free). Anytime TD: EVERY game every 30 minutes (an
+- **Credits:** 1 per market per game that has prices (unposted markets are free). Anytime TD: EVERY game on every run (an
   outside timer, cron-job.org, calls the workflow; GitHub's own timer is a 2-hour backup that stands down when a run just
-  happened) ≈ 20,000 a month. Props (5 markets): every 30 min within 6 h of kickoff, hourly within 24 h, every 3 h within 72 h,
-  every 6 h before that ≈ 15,000 more a month; between checks the workflow's cache keeps each game's last prop prices so the
-  card still counts them (only freshly pulled prices are alerted). Props pause below 10,000 credits left, everything below
-  1,000. A bet you haven't logged can alert again about every 12 hours while it lasts (the ntfy channel only remembers 12 h);
-  logging it stops that.
+  happened). Props (5 markets): every run within 6 h of kickoff, hourly within 24 h, every 3 h within 72 h, every 6 h before
+  that; between checks the workflow's cache keeps each game's last prop prices so the card still counts them (only freshly
+  pulled prices are alerted). **Quiet hours** (since 2026-11-06): no checks 10 PM – 6 AM Eastern (`ALERT_QUIET`; no NFL game
+  kicks off then, and the 6 AM run re-checks everything). Simulated on a typical week (TD posted 6 days out, props 4):
+
+  | timer | around the clock | quiet 10 PM – 6 AM |
+  |---|---|---|
+  | every 15 min | ~2,030 a day (~61K a month) | ~1,440 a day (~43K a month) |
+  | every 30 min | ~1,230 a day (~37K) | ~870 a day (~26K) |
+  | every 60 min | ~830 a day (~25K) | ~570 a day (~17K) |
+
+  Props pause below 10,000 credits left, everything below 1,000. A bet you haven't logged can alert again about every 12
+  hours while it lasts (the ntfy channel only remembers 12 h); logging it stops that.
 - **Bankroll:** with `SYNC_TOKEN` set, stakes are in dollars and the alerts follow the app's bankroll limit — money on open
   bets across NFL, NBA and NHL never goes above your bankroll, so when it's all in play new bets wait (no alert) until bets settle. It stops if the key drops below 1,000 credits (so the app keeps some).
 - **Setup (once):** in the ntfy app, subscribe to your private channel name. In this repo: *Settings → Secrets and

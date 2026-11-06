@@ -5,7 +5,8 @@ name: Edge alerts
 # (ALERT_HOURS 168 — since 2026-11-05, user: "i want to catch all nfl bets"; was the next 6 hours). It never places a bet.
 # Credits: 1 per market per game that has prices. Anytime TD every run; props (5 markets) every run within 6 h of kickoff,
 # hourly within 24 h, every 3 h within 72 h, every 6 h before that. The cache below carries each game's last prop prices from
-# run to run, so between prop checks the card still knows them. Setup and settings: README.md → "📲 Edge alerts".
+# run to run, so between prop checks the card still knows them. Quiet hours 10 PM - 6 AM Eastern (ALERT_QUIET): those runs
+# check nothing. Setup and settings: README.md → "📲 Edge alerts".
 # Script: alerts/watch.mjs.
 on:
   workflow_dispatch:        # "Run workflow" button on the repo's Actions tab
@@ -15,7 +16,7 @@ on:
         type: choice
         options: [test, dry, live]
         default: test
-  # TIMER: every 30 min (2026-11-05). GitHub runs this account's timed jobs hours late, so the reliable trigger is an
+  # TIMER: every 30 min since 2026-11-05 (15 min works too — set in the cron-job.org job). GitHub runs this account's timed jobs hours late, so the reliable trigger is an
   # outside timer (cron-job.org) calling this workflow's dispatch API every 30 min; this 2-hour schedule is only a backup,
   # and it does nothing when a run happened in the last 25 minutes. To stop everything: pause the cron-job.org job AND put
   # # back in front of the next 2 lines.
@@ -54,6 +55,7 @@ jobs:
           restore-keys: alerts-cache-
 
       - name: Check prices and alert
+        id: check
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
@@ -65,13 +67,14 @@ jobs:
           ALERT_PROPS: 'on'    # 'off' = anytime TD only
           ALERT_RESERVE: '1000'           # below this many credits left: no checks at all
           ALERT_PROP_RESERVE: '10000'     # below this: no prop checks (TD goes on)
+          ALERT_QUIET: '22-6'             # quiet hours, Eastern: no checks 10 PM - 6 AM (2026-11-06, user's ask); '' = around the clock
           ALERT_STATE: ${{ vars.ALERT_STATE }}
           ALERT_CACHE: alerts-cache/state.json
           ALERT_TRIGGER: ${{ github.event_name }}
         run: node alerts/watch.mjs
 
       - name: Keep the prices for the next run
-        if: always()
+        if: steps.check.outputs.saved == 'true'   # only after a live run that checked prices (not quiet hours / test / dry)
         uses: actions/cache/save@v4
         with:
           path: alerts-cache
