@@ -1,9 +1,12 @@
 name: Edge alerts
 
-# Pushes the anytime-TD bets Your card would make to your phone (ntfy) for EVERY game on the board (ALERT_HOURS 168 — since
-# 2026-11-05, user: "i want to catch all nfl bets"; was the next 6 hours).
-# It never places a bet. Costs 1 Odds API credit per game per check; with no game inside the window a run costs nothing.
-# Setup and settings: README.md → "📲 Edge alerts". Script: alerts/watch.mjs.
+# Pushes the bets Your card would make — anytime TD AND player props (receptions, receiving / rushing / rush+rec / passing
+# yards; props since 2026-11-06, user: "ntfy is only sending td picks") — to your phone (ntfy) for EVERY game on the board
+# (ALERT_HOURS 168 — since 2026-11-05, user: "i want to catch all nfl bets"; was the next 6 hours). It never places a bet.
+# Credits: 1 per market per game that has prices. Anytime TD every run; props (5 markets) every run within 6 h of kickoff,
+# hourly within 24 h, every 3 h within 72 h, every 6 h before that. The cache below carries each game's last prop prices from
+# run to run, so between prop checks the card still knows them. Setup and settings: README.md → "📲 Edge alerts".
+# Script: alerts/watch.mjs.
 on:
   workflow_dispatch:        # "Run workflow" button on the repo's Actions tab
     inputs:
@@ -13,10 +16,11 @@ on:
         options: [test, dry, live]
         default: test
   # TIMER: every 30 min (2026-11-05). GitHub runs this account's timed jobs hours late, so the reliable trigger is an
-  # outside timer (cron-job.org) calling this workflow's dispatch API every 30 min; this 2-hour schedule is only a backup. To stop
-  # everything: pause the cron-job.org job AND put # back in front of the next 2 lines.
+  # outside timer (cron-job.org) calling this workflow's dispatch API every 30 min; this 2-hour schedule is only a backup,
+  # and it does nothing when a run happened in the last 25 minutes. To stop everything: pause the cron-job.org job AND put
+  # # back in front of the next 2 lines.
   schedule:
-    - cron: '17 */2 * * *'   # backup only: every 2 h, so it can't double the outside timer's cost
+    - cron: '17 */2 * * *'   # backup only
 
 permissions:
   contents: read
@@ -28,7 +32,7 @@ concurrency:
 jobs:
   watch:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,6 +45,14 @@ jobs:
         with:
           node-version: 20
 
+      # the last run's memory: each game's prop prices and when they were pulled, forecasts, when the last run was
+      - name: Restore the last run's prices
+        uses: actions/cache/restore@v4
+        with:
+          path: alerts-cache
+          key: alerts-cache-${{ github.run_id }}
+          restore-keys: alerts-cache-
+
       - name: Check prices and alert
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
@@ -48,8 +60,19 @@ jobs:
           SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
           ALERT_MODE: ${{ inputs.mode || 'live' }}
           ALERT_HOURS: '168'   # every game on the board (a week ahead)
-          ALERT_MAX: '20'      # up to 20 alerts a run (the first run of a week can find many)
+          ALERT_MAX: '20'      # up to 20 alerts a run (the rest go next run)
           ALERT_BOOKS: 'fanduel,draftkings,betmgm,williamhill_us,fanatics'   # your five books, as in the app (2026-11-05)
-          ALERT_RESERVE: '1000'
+          ALERT_PROPS: 'on'    # 'off' = anytime TD only
+          ALERT_RESERVE: '1000'           # below this many credits left: no checks at all
+          ALERT_PROP_RESERVE: '10000'     # below this: no prop checks (TD goes on)
           ALERT_STATE: ${{ vars.ALERT_STATE }}
+          ALERT_CACHE: alerts-cache/state.json
+          ALERT_TRIGGER: ${{ github.event_name }}
         run: node alerts/watch.mjs
+
+      - name: Keep the prices for the next run
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: alerts-cache
+          key: alerts-cache-${{ github.run_id }}-${{ github.run_attempt }}

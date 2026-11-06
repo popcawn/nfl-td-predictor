@@ -159,27 +159,36 @@ card, markets one team at a time), **📓 Bets** (bankroll, slip, bet log) and *
 notes). Tapping a pick opens its game. Teams, line and weather are filled in for you; ✏️ edits them.
 
 ## 📲 Edge alerts (phone)
-A GitHub Action (`.github/workflows/alerts.yml` → `alerts/watch.mjs`) checks your books' anytime-TD prices for games
-kicking off in the next 6 hours and sends the bets **Your card would make** to your phone through
-[ntfy](https://ntfy.sh) (free app, no account). Tap the alert and the bet opens in FanDuel's / DraftKings' slip — you
-check the price and place it yourself. **It never places a bet.**
+A GitHub Action (`.github/workflows/alerts.yml` → `alerts/watch.mjs`) checks your books' prices — **anytime TD and, since
+2026-11-06, the five player props** (receptions, receiving, rushing, rush + receiving and passing yards) — for every game on
+the board and sends the bets **Your card would make** to your phone through [ntfy](https://ntfy.sh) (free app, no account).
+Tap the alert and the bet opens in your book's slip — you check the price and place it yourself. **It never places a bet.**
 
-- **The rule** is the app's: chance = every other book's price (calibrated; since 2026-11-05 — before, only the books that
-  aren't yours), the price judged = the best among your five books (FanDuel, DraftKings, BetMGM, Caesars, Fanatics), EV over
-  3%, the card's confidence, ¼ Kelly, at most 3 per game / 2 per team / 1 per player. Each bet is alerted once (again only
-  if its price gets better). On 2025's real prices this "every other book" rule (flat, EV over 3%) went +18% in weeks 1–9
-  and +2% in weeks 10–18 at closing prices — **unproven**; your CLV says whether it works.
-- **Credits:** 1 per game per check. Since 2026-11-05 it checks EVERY game on the board every 30 minutes (an outside timer,
-  cron-job.org, calls the workflow; GitHub's own timer is a 2-hour backup) ≈ 20,000 credits a month. A bet you haven't logged
-  can alert again about every 12 hours while it lasts (the ntfy channel only remembers 12 h); logging it stops that.
+- **The rule** is the app's (⚡ Pull all games / Your card), copied line for line: TD chance = every other book's price
+  (calibrated); prop chance = the books that aren't yours, de-vigged at your line (or their nearest line), with the model's 10%
+  share; the price judged = the best among your five books (FanDuel, DraftKings, BetMGM, Caesars, Fanatics); EV over 3%, the
+  card's confidence (weather included), ¼ Kelly, at most 3 per game / 2 per team / 1 per player, one bet per stat you already
+  hold, and your open bets (☁ Sync) keep their places on the card. Checked against the app on 3 real games (2026-11-06,
+  incl. logged bets and forced bad weather): every price, chance, confidence and pick identical. Not alerted: 1st / last /
+  2+ TD and defense TDs (they need the app's simulation). Each bet is alerted once (again only if its price gets better).
+  On 2025's real prices the TD rule (flat, EV over 3%) went +18% in weeks 1–9 and +2% in weeks 10–18 at closing prices; the
+  props rule has no ROI test — **unproven**; your CLV says whether it works.
+- **Credits:** 1 per market per game that has prices (unposted markets are free). Anytime TD: EVERY game every 30 minutes (an
+  outside timer, cron-job.org, calls the workflow; GitHub's own timer is a 2-hour backup that stands down when a run just
+  happened) ≈ 20,000 a month. Props (5 markets): every 30 min within 6 h of kickoff, hourly within 24 h, every 3 h within 72 h,
+  every 6 h before that ≈ 15,000 more a month; between checks the workflow's cache keeps each game's last prop prices so the
+  card still counts them (only freshly pulled prices are alerted). Props pause below 10,000 credits left, everything below
+  1,000. A bet you haven't logged can alert again about every 12 hours while it lasts (the ntfy channel only remembers 12 h);
+  logging it stops that.
 - **Bankroll:** with `SYNC_TOKEN` set, stakes are in dollars and the alerts follow the app's bankroll limit — money on open
   bets across NFL, NBA and NHL never goes above your bankroll, so when it's all in play new bets wait (no alert) until bets settle. It stops if the key drops below 1,000 credits (so the app keeps some).
 - **Setup (once):** in the ntfy app, subscribe to your private channel name. In this repo: *Settings → Secrets and
   variables → Actions → New repository secret* — `NTFY_TOPIC` (that channel name), `ODDS_API_KEY` (your key) and,
-  optionally, `SYNC_TOKEN` (the app's ☁ Sync token: stakes in dollars from your bankroll, and players you've already
-  logged are skipped). Then *Actions → Edge alerts → Run workflow → test*: your phone should buzz (no credits). For BetMGM / Caesars links add a repository **variable** `ALERT_STATE` (e.g. `nj`).
-- **The timer is ON** (since 2026-11-05). To switch it off, put a `#` back in front of `schedule:` and `- cron:` in
-  `.github/workflows/alerts.yml`. `dry` runs check prices and print the alerts in the run's log without sending.
+  optionally, `SYNC_TOKEN` (the app's ☁ Sync token: stakes in dollars from your bankroll, and bets you've already
+  logged are never alerted). Then *Actions → Edge alerts → Run workflow → test*: your phone should buzz (no credits). For BetMGM / Caesars links add a repository **variable** `ALERT_STATE` (e.g. `nj`).
+- **The timer is ON** (since 2026-11-05). To switch it off, pause the cron-job.org job and put a `#` back in front of
+  `schedule:` and `- cron:` in `.github/workflows/alerts.yml`; `ALERT_PROPS: 'off'` there = TD alerts only. `dry` runs check
+  prices and print the alerts in the run's log without sending.
 
 ## Files
 | File | What it is |

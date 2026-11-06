@@ -358,6 +358,27 @@ See README.md for what the model does and how it was validated.
   sports' sync files (one pot: bank = BANK.amt + every sport's settled P/L since BANK.at; riding = every sport's open bets) and
   applies the app's fitRoom to the run's new alerts (biggest $ first, the rest wait; off when BANK.lim === false); stakes in
   dollars only (units only without SYNC_TOKEN). Test: ALERT_SYNC_MOCK (local stand-in for the gist files) + ALERT_MOCK, dry.
+- 📲 ALERTS + PROPS (2026-11-06, user: "ntfy is only sending td picks"): watch.mjs now prices the five props the app pulls
+  (player_receptions / reception_yds / rush_yds / rush_reception_yds / pass_yds) with COPIES of propPOver / propMedian / propMu /
+  propSides / propCons / propConfidence / propTier and the props half of parseOdds + consensusFrom + fillBoard, and runs
+  gameCard() = the app's gameOptions() (prop dups at two lines, heldSameStat, open bets from the sync gist as options with
+  their stored rk, pickPlays). TD part unchanged except: cleanName before matchPlayer, baked status fallback, bad-weather
+  confidence, the anchorTD 4-row minimum. ESPN scoreboard (this week + next) gives lines; Open-Meteo the forecast (gameWeather).
+  VERIFIED 2026-11-06 against the app itself: a throwaway copy of nfl-td-predictor.html with a helper injected before the main
+  IIFE's closing `})();` (window.__T(body, gid, {bets, W}) = pullAllGames' per-game code: simGame + parseOdds + fillBoard +
+  gameOptions) on DAL@IND, GB@NE, NYG@PHI real pulls (+ 8 test bets, forced 20 mph wind): every shared candidate's odds / mp /
+  ev / conf / tier / kelly / dup identical, same picks; only difference = defense TDs (sim-only, not alerted, nor 1st/last/2+).
+  The one mismatch found and fixed: propCons breaks an exact distance tie by insertion order, and consensusFrom inserts a line
+  key when ANY book (yours too) posts it — watch.mjs now gives every book's line a slot (yours without a vote). Re-run that
+  comparison after changing any of the copied functions (ALERT_DUMP writes the alert side's candidates).
+  CADENCE + CACHE: TD every run; props per game by hours to kickoff (PROP_EVERY: <=6 h every run, <=24 h 55 min, <=72 h
+  175 min, else 355 min). alerts.yml restores/saves `alerts-cache/` (actions/cache, key per run, restore-keys prefix): each
+  game's last prop candidates (slim), when pulled, forecasts (2 h), lastRun. Between prop checks the cached props hold card
+  slots but are NEVER alerted (stale: true); dry runs never write the cache; ALERT_MAX cut-offs reset that game's t -> props
+  re-pulled next run. The 2-hour GitHub `schedule` backup exits when lastRun < 25 min (ALERT_TRIGGER). Props pause below
+  ALERT_PROP_RESERVE (10,000). Alert ids: click link, else the title minus its price (old 'k:' tags still read).
+  Tests (no credits, nothing to the real channel): ALERT_MOCK (filters markets like the API, 1 credit per market returned),
+  ALERT_SYNC_MOCK, ALERT_NOW, ALERT_NTFY=http://localhost:<port> (a tiny POST/`/json` stand-in), ALERT_DEBUG / ALERT_DUMP.
 - 📲 EDGE ALERTS (2026-10-15, user asked for phone notifications, then "yes" to building it with the timer off):
   `alerts/watch.mjs` (Node 20, no deps) run by `.github/workflows/alerts.yml` — workflow_dispatch modes test|dry|live, the
   `schedule:` (*/5) is COMMENTED OUT until the user says to switch it on (credits: ~5K/month at 6 h window). It mirrors
