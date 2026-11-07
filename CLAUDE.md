@@ -206,7 +206,7 @@ See README.md for what the model does and how it was validated.
   far) -> nights (collapsed; tonight's marked 📍) -> bets.
 
 - ⚡ PULL ALL GAMES (2026-10-19, user: "adopt the NHL sim pull … all games remaining that week"): #weekSec / pullAllGames() — every
-  game still to kick off × pickedMarkets (a game pulled within freshMs reuses BOARDS; ↻ FORCE 2026-11-05, user: "why isnt the app updated the price when i clean pull": pullAllGames(true) = every game fresh after a cost confirm ["↻ pull all fresh" in #weekCost], pullAllGames(Set of ids) = only those games ["↻ price" on a bet card, ~1 game × markets], the rest reused as-is), each priced by gameOptions() (the card's
+  game still to kick off × pickedMarkets, EVERY PRESS FRESH since 2026-11-07 (user: "when i pull odds manually it doesn refresh but when i click pull all fresh, bets will pop up" — it reused a game's BOARDS for freshMs, 1-3 h, while the phone alerts check every 15 min; the 11-05 "↻ pull all fresh" button is gone, don't bring the reuse back; freshMs now only gates the auto-pull when you open a game, and pullOdds puts PULLED back when its prices went nowhere: switched games -> old value, failed -> retry in 5 min). pullAllGames(Set of ids) = only those games ["↻ price" on a bet card, ~1 game × markets], the rest reused as-is, WEEK.at kept), each priced by gameOptions() (the card's
   candidate + pickPlays rule, extracted from computeTopPlays — Your card = gameOptions() then drawn) on a temporary LAST built
   from simGame (its own injuries + forecast: CTX_BADWX / CTX_WIND feed confFor / propConfidence) and fillBoard(L, d, gid) (the
   pull into any game's maps; fillGameFromOdds = fillBoard(LAST…) + screen). WEEK (nfltd_week) = picks across games ->
