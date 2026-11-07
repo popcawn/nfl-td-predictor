@@ -215,6 +215,15 @@ See README.md for what the model does and how it was validated.
   bet log: P/L pill per week (no "season so far"), CLV red when negative, a prop line that moved AGAINST the bet red, "≈ price
   at your line" inline; 🏆 best sportsbook (all sports) in the summary + Insights table; top bar = pot · bets · open · $ on this game.
 
+- FULL RUN-THROUGH 2026-11-07 (user: "run through full sim and find bugs"; local copy, mocked odds, 0 credits; 15 graded test
+  bets on JAX@BAL all right). Fixed: (1) the slip's ➕ Add leg / Best pick (priceableLegs) and a TD bet logged by hand (addBet)
+  used the MODEL ALONE (p[market]); they now take lastAnchors() like gameOptions — any new place that prices a TD bet must too
+  (the slip showed Darius Cooper +600 at EV +18% while the card had −10%). (2) floorPrice ("bet at X or better", app + alerts,
+  identical) also applies the MIN_STAKE sizing rule with the bet's confidence. (3) money display: fmtUsd's half-dollar steps are
+  for SUGGESTED stakes only — balances, won/lost, riding, spent, the unit and every total use exactUsd (cents unless round),
+  totals = stakesTxt (sum of each bet's rounded dollars); the card's "✓ in log at $X" compares dollars (loggedDiffers).
+  (4) importData stamps st on a result it fills in. (5) paste parser: a lone "E" is a name initial (E.J.), not EVEN.
+
 ## Gotchas
 - In Git Bash, `node -e "..."` containing JS template-literal backticks gets mangled by command substitution —
   use the Edit tool or put the script in a file. `python` may be a Store stub that hangs.

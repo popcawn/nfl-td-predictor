@@ -93,8 +93,10 @@ const fmtAm = v => (v > 0 ? '+' : '') + v;
 const pct = p => (p * 100).toFixed(0) + '%';
 const probToAm = p => p >= 0.5 ? Math.round(-100 * p / (1 - p)) : Math.round(100 * (1 - p) / p);
 const evalBet = (mp, price) => { const dec = americanToDec(price), bimp = americanToProb(price); if (!dec || mp == null) return null; return { ev: mp * (dec - 1) - (1 - mp), edge: mp - bimp, bimp, dec }; };
-// the worst price that still clears the card's EV bar (app: floorPrice)
-const floorPrice = p => { if (!(p > 0 && p < 1)) return null; const d = 1.03 / p + 1e-9; return d >= 2 ? '+' + Math.ceil((d - 1) * 100) : '-' + Math.floor(100 / (d - 1)); };
+// the worst price that still clears the card's EV bar AND still sizes (¼ Kelly on the confidence-adjusted edge reaches
+// MIN_STAKE, else the card drops it as "edge too thin to size") — app: floorPrice, keep identical (2026-11-07)
+const floorPrice = (p, conf) => { if (!(p > 0 && p < 1)) return null; const k = conf > 0 ? MIN_STAKE / KELLY_FRAC / conf : 0; if (k && !(p > k)) return null;
+  const d = Math.max(1.03 / p, k ? (1 - k) / (p - k) : 0) + 1e-9; return d >= 2 ? '+' + Math.ceil((d - 1) * 100) : '-' + Math.floor(100 / (d - 1)); };
 function cleanName(s) {
   return String(s)
     .replace(/[+\-−–—]\s?\d{2,6}/g, ' ').replace(/\b\d+\s*\/\s*\d+\b/g, ' ')
@@ -557,7 +559,7 @@ async function main() {
       for (const x of fresh.slice(n)) if (isProp(x.market) && cache.games[x.game]) cache.games[x.game].t = 0;
       break; }
     const [a, h] = c.game.split('@'), stake = usdOf(c) != null ? usdTxt(usdOf(c)) : `${c.stake.toFixed(1)}u (1u = 1% of your bankroll)`;
-    const book = bookName(c.book), floor = floorPrice(c.mp), when = `${S.teams[a].short} @ ${S.teams[h].short}, ${etTime(c.ko)}`;
+    const book = bookName(c.book), floor = floorPrice(c.mp, c.conf), when = `${S.teams[a].short} @ ${S.teams[h].short}, ${etTime(c.ko)}`;
     let why;
     if (!isProp(c.market)) why = `The other books (${c.nOth}) have him around ${fmtAm(probToAm(c.ip))}; fair chance ${pct(c.mp)} → EV +${(c.ev * 100).toFixed(0)}%.`;
     else { const { s, med } = c.prop, proj = `${med.toFixed(s === 'rec' ? 1 : 0)} ${PROP_UNIT[s]}`;
