@@ -916,7 +916,9 @@ function refreshFav(){
 }
 // ---------- auto weather: dome/outdoor from the home stadium + live game-day forecast ----------
 function fmtKick(iso){ try{ const d=new Date(iso); return d.toLocaleDateString([], {weekday:'short'})+' '+d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}); }catch(e){ return ''; } }
-function nearestHourIdx(times, whenMs){ const t=whenMs/1000; let best=-1,bd=Infinity; for(let i=0;i<times.length;i++){ const d=Math.abs(times[i]-t); if(d<bd){bd=d;best=i;} } return best; }
+// -1 when no forecast hour is within 3 h of kickoff: the 7-day forecast ends before a game a week out, and its last hour
+// (up to a day early) used to stand in for game time (2026-11-07 sweep). alerts/watch.mjs has the same guard.
+function nearestHourIdx(times, whenMs){ const t=whenMs/1000; let best=-1,bd=Infinity; for(let i=0;i<times.length;i++){ const d=Math.abs(times[i]-t); if(d<bd){bd=d;best=i;} } return bd<=3*3600?best:-1; }
 // live game-time condition (drives the display AND a light run-lean nudge in bad weather).
 // precip type only shifts run/pass share — it never touches the Vegas-anchored scoring LEVEL
 // (that would need to be in the backtest), exactly like the wind adjustment.
@@ -946,7 +948,7 @@ async function setWeather(){
   WX={precip:'none', pp:0, temp:null, kind:'', icon:'🏟️'};   // reset until forecast lands
   $('outdoor').checked = !indoor;
   if(indoor){ $('wind').value=0; $('wind').disabled=true; $('wxStatus').innerHTML=`🏟️ ${name} · <b>indoor</b> <span class="muted">— climate-controlled, no weather</span>`; scheduleRun(); return; }
-  $('wind').disabled=false;
+  $('wind').disabled=false; $('wind').value=0;   // not the last game's wind while this one's forecast loads (or if it never does)
   $('wxStatus').innerHTML=`🏟️ ${name} · <b>outdoor</b>${game?` · ${fmtKick(game.kickoff)}`:''} <span class="muted">— checking forecast…</span>`;
   scheduleRun();
   if(!st && neutral && game.city){ try{
@@ -960,7 +962,7 @@ async function setWeather(){
     if(my!==wxToken) return;   // a newer matchup selection superseded this
     const whenMs = game ? new Date(game.kickoff).getTime() : Date.now();
     const i=nearestHourIdx(j.hourly.time, whenMs);
-    if(i<0) throw 0;
+    if(i<0){ $('wxStatus').innerHTML=`🏟️ ${name} · <b>outdoor</b>${game?` · ${fmtKick(game.kickoff)}`:''} <span class="muted">— ${whenMs<Date.now()?'already kicked off — no forecast for it':'no forecast for kickoff yet (it reaches about 7 days out); enter wind manually'}</span>`; return; }
     const wind=Math.round(j.hourly.wind_speed_10m[i]), temp=Math.round(j.hourly.temperature_2m[i]), pp=j.hourly.precipitation_probability[i]||0;
     const k=wxKind(j.hourly.weather_code[i], pp);
     WX={precip:k.precip, pp, temp, kind:k.label, icon:k.icon};
@@ -1637,7 +1639,8 @@ function computeTopPlays(){
   for(const c of cand){ if(opts.some(o=>o.key===c.key&&o.market===c.market)) continue;
     if(c.tier==='flag') skipped.push({c, why:'edge too big to trust — check injury/role'});
     else if(c.tier==='dart' && c.ev>0) skipped.push({c, why:'lottery — too rare to price'});
-    else if(c.tier==='pass' && c.cal<1){ const rr=evalBet(c.mpRaw,c.odds); if(rr && tierOf(c.mpRaw,rr.edge,rr.ev,c.prior)==='take') skipped.push({c, why:`edge gone after role calibration (${c.role.split(' (')[0]})`}); }
+    else if(c.tier==='pass' && c.cal<1){ const raw=c.mkt!=null ? blendP(c.mkt, c.mpRaw, TD_W) : c.mpRaw, rr=evalBet(raw,c.odds);   // anchored: the model's share is TD_W (0), so calibration can't be why
+      if(rr && tierOf(raw,rr.edge,rr.ev,c.prior)==='take') skipped.push({c, why:`edge gone after role calibration (${c.role.split(' (')[0]})`}); }
   }
   SKIPWHY=new Map(); for(const x of skipped){ const k=x.c.key+'|'+x.c.market; if(!SKIPWHY.has(k)) SKIPWHY.set(k, x.why); }
   const unlogged=picks.filter(c=>!c.bet);
@@ -2406,7 +2409,7 @@ async function fetchGameOdds(away, home, markets, mustBeUpcoming){ await opened(
   const r=await fetch(`${ODDS_API}/events/${ev.id}/odds?apiKey=${encodeURIComponent(key)}&regions=us&markets=${markets.join(',')}&oddsFormat=american&includeLinks=true&includeSids=true`);   // all US books: same credits, gives the consensus; links/sids = FanDuel's own bet-slip ids (free)
   const rem=r.headers.get('x-requests-remaining'); if(rem!=null){ oddsRemaining=+rem; lsW('nfltd_oddsleft', oddsRemaining); }
   if(!r.ok) throw oddsFail(r.status);
-  return parseOdds(await r.json());
+  const d=parseOdds(await r.json()); d.asked=markets; return d;   // asked: fillBoard replaces exactly these markets
 }
 // an Odds API event-odds body -> the best price among YOUR books for every selection (+ its ticket), each of your books'
 // own board (byBook, for closing lines) and the other books' consensus.
@@ -2520,19 +2523,34 @@ function fillBoard(L, d, gid){
   const idx=buildPlayerIndex(L.awayR.concat(L.homeR)), miss=new Set(); let n=0;
   const dstOf=name=>{ const nn=normName(name); return [L.away,L.home].find(a=>nn.includes(normName(S.teams[a].short))||nn.includes(normName(S.teams[a].name))); };
   const C2=d.cons||{td:{}, props:{}}; L.mktMap=L.mktMap||{};
+  // a pull REPLACES the markets it asked for (2026-11-07 sweep: Tyler Goodson's rush+rec under stayed on the card after every
+  // book took the line down). Before, a player your books stopped pricing (scratched, market pulled) kept his old price, and a
+  // consensus that vanished (no other book now) stayed his anchor. Prices you pasted or typed (no ticket) stay, and so do
+  // markets this pull didn't ask for.
+  const asked=d.asked||[], tdIn=new Set(asked.map(k=>OA_TD[k]).filter(Boolean).concat(Object.keys(d.td), Object.keys(C2.td))),
+    stIn=new Set(asked.map(k=>OA_PROP[k]).filter(Boolean).concat(Object.keys(d.props), Object.keys(C2.props)));
+  const was=new Set(), got=new Set();   // 'mk|who' / 'P|stat|who' this board had from an earlier pull · filled by this one
+  for(const k of Object.keys(L.mktMap)){
+    if(k.startsWith('FD#')){ const i=k.lastIndexOf('#'), mk=k.slice(3,i), who=k.slice(i+1), st=isPropMkt(mk)?mk.split('|')[1]:null;
+      if(st ? stIn.has(st) : tdIn.has(mk)){ was.add(st ? 'P|'+st+'|'+who : mk+'|'+who); delete L.mktMap[k]; } }
+    else { const [a,b]=k.split('|'); if(a==='P' ? stIn.has(b) : tdIn.has(a)) delete L.mktMap[k]; } }
   for(const [mk,o] of Object.entries(C2.td)) for(const [name,c] of Object.entries(o)){ const p=matchPlayer(cleanName(name), idx); if(p) L.mktMap[mk+'|'+p._key]={ip:c.ip, n:c.n}; }
   // a pull REPLACES each player's prop consensus (lines move; an old line's consensus mustn't outlive the pull)
   const freshP={}; for(const [st,o] of Object.entries(C2.props)) for(const c of Object.values(o)){ const p=matchPlayer(cleanName(c.name), idx); if(p) (freshP['P|'+st+'|'+p._key]=freshP['P|'+st+'|'+p._key]||{})[c.line]=c.fairOver; }
   Object.assign(L.mktMap, freshP);
   for(const [mk,arr] of Object.entries(d.td)) for(const o of arr){
-    const p=matchPlayer(cleanName(o.name), idx); if(p){ L.bookMap[mk+'|'+p._key]=fmtAm(o.price); if(o.fd) L.mktMap['FD#'+mk+'#'+p._key]=o.fd; n++; continue; }
-    const t=dstOf(o.name); if(t){ if(mk!=='two'){ L.bookMap[mk+'|DST|'+t]=fmtAm(o.price); if(o.fd) L.mktMap['FD#'+mk+'#DST|'+t]=o.fd; n++; } continue; }   // defenses have no 2+ market here
+    const p=matchPlayer(cleanName(o.name), idx); if(p){ L.bookMap[mk+'|'+p._key]=fmtAm(o.price); if(o.fd) L.mktMap['FD#'+mk+'#'+p._key]=o.fd; got.add(mk+'|'+p._key); n++; continue; }
+    const t=dstOf(o.name); if(t){ if(mk!=='two'){ L.bookMap[mk+'|DST|'+t]=fmtAm(o.price); if(o.fd) L.mktMap['FD#'+mk+'#DST|'+t]=o.fd; got.add(mk+'|DST|'+t); n++; } continue; }   // defenses have no 2+ market here
     miss.add(o.name); }
   for(const [s,arr] of Object.entries(d.props)) for(const o of arr){
     const p=matchPlayer(cleanName(o.name), idx); if(!p){ miss.add(o.name); continue; }
     const k=s+'|'+p._key, cur=L.propMap[k]||(L.propMap[k]={line:null, over:'', under:'', alts:[]});
     if(cur.line!==o.line){ cur.line=o.line; cur.over=''; cur.under=''; }
-    cur[o.side==='O'?'over':'under']=fmtAm(o.price); if(o.fd) L.mktMap['FD#'+propMktKey(s,o.side,o.line)+'#'+p._key]=o.fd; n++; }
+    cur[o.side==='O'?'over':'under']=fmtAm(o.price); if(o.fd) L.mktMap['FD#'+propMktKey(s,o.side,o.line)+'#'+p._key]=o.fd; got.add('P|'+k); n++; }
+  // a player your books priced last pull but not in this one: his old price goes (a pasted ladder stays)
+  for(const k of was){ if(got.has(k)) continue;
+    if(k.startsWith('P|')){ const pk=k.slice(2), cur=L.propMap[pk]; if(!cur) continue; cur.line=null; cur.over=''; cur.under=''; delete cur.books; if(!(cur.alts||[]).length) delete L.propMap[pk]; }
+    else delete L.bookMap[k]; }
   // one of your books posts a DIFFERENT line for a player: keep it as an extra offer (replaced on every pull)
   for(const st of new Set(Object.keys(d.props).concat(Object.keys(d.propsX||{})))) for(const k of Object.keys(L.propMap)) if(k.startsWith(st+'|')) delete L.propMap[k].books;
   for(const [st,arr] of Object.entries(d.propsX||{})) for(const x of arr){ const p=matchPlayer(cleanName(x.name), idx), cur=p&&L.propMap[st+'|'+p._key]; if(!cur) continue;

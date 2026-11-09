@@ -223,6 +223,23 @@ See README.md for what the model does and how it was validated.
   for SUGGESTED stakes only — balances, won/lost, riding, spent, the unit and every total use exactUsd (cents unless round),
   totals = stakesTxt (sum of each bet's rounded dollars); the card's "✓ in log at $X" compares dollars (loggedDiffers).
   (4) importData stamps st on a result it fills in. (5) paste parser: a lone "E" is a name initial (E.J.), not EVEN.
+- SECOND RUN-THROUGH 2026-11-07 (user: "check for bugs again"; mocked odds, 0 credits). Fixed: (1) A PULL REPLACES THE MARKETS
+  IT ASKED FOR — fetchGameOdds sets d.asked; fillBoard first drops those markets' tickets (FD#…) and other-book consensus, then
+  a player your books priced last pull but not in this one loses his price (bookMap / propMap). Before: Tyler Goodson's rush+rec
+  under stayed on the card (and in ⚡ Pull all games) after every book took the line down, and a consensus that vanished (only
+  your book left) stayed the anchor. Prices you pasted or typed (no ticket), pasted ladders (alts) and markets not asked for
+  stay. RULE: anything new a pull writes into bookMap / propMap must add its key to `got`, or the next pull deletes it.
+  (2) "Left off: edge gone after role calibration" is only shown when true — a market-anchored TD bet re-checks with
+  blendP(mkt, mpRaw, TD_W) (TD_W 0: calibration can't move it; Ferguson / Prescott / Jones said it wrongly). (3) nearestHourIdx
+  (app + alerts) = -1 when no forecast hour is within 3 h of kickoff: the 7-day forecast's LAST hour (up to a day early) stood
+  in for games a week out (the alerts look 168 h ahead); setWeather says "no forecast for kickoff yet" / "already kicked off".
+  (4) setWeather zeroes the wind box for an outdoor game (the last game's wind carried over while the forecast loaded, and
+  stayed when it failed). (5) alerts/watch.mjs repeats: betId = the title minus price and book, so the best price hopping to
+  another of your books — even a worse one — no longer buzzes again (FanDuel +140 alerted, then DraftKings +130); cache.sent
+  {id: {p, ko}} keeps alerts until kickoff (ntfy forgets after 12 h, so a bet alerted days early buzzed every 12 h). Tested
+  old vs new script with a local ntfy stand-in: old = both repeats, new = none, a better price (+160) still alerts.
+  Checked OK: snapshot (32 teams, no dup ids / names, no NaN, QB/RB/WR/TE everywhere), ESPN lines (NYG really -3 at PHI),
+  workflows (alerts concurrency group, cache keys, refresh rebase), sim tallies.
 
 ## Gotchas
 - In Git Bash, `node -e "..."` containing JS template-literal backticks gets mangled by command substitution —
@@ -382,7 +399,8 @@ See README.md for what the model does and how it was validated.
   comparison after changing any of the copied functions (ALERT_DUMP writes the alert side's candidates).
   CADENCE + CACHE: TD every run; props per game by hours to kickoff (PROP_EVERY: <=6 h every run, <=24 h 55 min, <=72 h
   175 min, else 355 min). alerts.yml restores/saves `alerts-cache/` (actions/cache, key per run, restore-keys prefix): each
-  game's last prop candidates (slim), when pulled, forecasts (2 h), lastRun. Between prop checks the cached props hold card
+  game's last prop candidates (slim), when pulled, forecasts (2 h), lastRun, sent (alert ids until kickoff — see SECOND
+  RUN-THROUGH). Between prop checks the cached props hold card
   slots but are NEVER alerted (stale: true); dry runs never write the cache; ALERT_MAX cut-offs reset that game's t -> props
   re-pulled next run. The 2-hour GitHub `schedule` backup exits when lastRun < 25 min (ALERT_TRIGGER). Props pause below
   ALERT_PROP_RESERVE (10,000). Alert ids: click link, else the title minus its price (old 'k:' tags still read).

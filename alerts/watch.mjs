@@ -274,7 +274,8 @@ async function espnSchedule() {   // this week's games and next week's (the wind
     return weeks.flatMap(w => schedFromESPN(w, idToAbbr));
   } catch (e) { log('ESPN schedule unavailable (lines fall back to the snapshot):', e.message); return []; }
 }
-function nearestHourIdx(times, whenMs) { const t = whenMs / 1000; let best = -1, bd = Infinity; for (let i = 0; i < times.length; i++) { const d = Math.abs(times[i] - t); if (d < bd) { bd = d; best = i; } } return best; }
+// -1 when no forecast hour is within 3 h of kickoff (the 7-day forecast ends before a game a week out) — the app's guard
+function nearestHourIdx(times, whenMs) { const t = whenMs / 1000; let best = -1, bd = Infinity; for (let i = 0; i < times.length; i++) { const d = Math.abs(times[i] - t); if (d < bd) { bd = d; best = i; } } return bd <= 3 * 3600 ? best : -1; }
 const wxPrecip = c => { c = +c; return (c >= 71 && c <= 77) || c === 85 || c === 86 ? 'snow' : c >= 95 || (c >= 51 && c <= 67) || (c >= 80 && c <= 82) ? 'rain' : 'none'; };
 async function gameWeather(g) {   // the app's gameWeather: {outdoor, wind (mph), bad}
   const st = g.neutral ? null : ((S.stadiums && S.stadiums[g.home]) || null), indoor = g.neutral ? !!g.indoor : !!((st && st.dome) || g.indoor);
@@ -409,13 +410,17 @@ async function ntfySend(msg) {
 // only if the price gets better. Id = the bet-slip link, else the title without its price (older alerts: a 'k:' tag)
 const PRICE_RE = /\s([+-]\d{3,5}) at /;
 const titleId = t => 't:' + String(t || '').replace(PRICE_RE, ' at ');
+// the bet whatever the book (2026-11-07 sweep): the best price hopping to another of your books — even a WORSE one — used
+// to read as a new bet and buzz again (FanDuel +300 alerted, then DraftKings +295 the next run)
+const betId = t => 'u:' + String(t || '').replace(/\s[+-]\d{3,5} at .*$/, '');
+const idsOf = (link, title) => [link, titleId(title), betId(title)].filter(Boolean);
 async function sentBefore() {
   const out = new Map(); if (!TOPIC) return out;
   try {
     const r = await fetch(`${NTFY}/${encodeURIComponent(TOPIC)}/json?poll=1&since=12h`); if (!r.ok) return out;
     for (const line of (await r.text()).split('\n')) { if (!line.trim()) continue; let m; try { m = JSON.parse(line); } catch (e) { continue; }
       const am = PRICE_RE.exec(m.title || ''); if (!am) continue;
-      const ids = [m.click, ...(m.tags || []).filter(t => t.startsWith('k:')), titleId(m.title)].filter(Boolean);
+      const ids = [...idsOf(m.click, m.title), ...(m.tags || []).filter(t => t.startsWith('k:'))];
       for (const k of ids) out.set(k, Math.max(out.get(k) ?? -Infinity, +am[1])); }
   } catch (e) { log('could not read past alerts:', e.message); }
   return out;
@@ -453,16 +458,19 @@ async function syncState() {
     return potFrom(files);
   } catch (e) { log('sync: could not read your bet log —', e.message); return null; }
 }
-// the run-to-run memory (ALERT_CACHE): {lastRun, games: {gid: {t: props pulled at, ko, props: [...]}}, wx: {gid: {t, w}}}
+// the run-to-run memory (ALERT_CACHE): {lastRun, games: {gid: {t: props pulled at, ko, props: [...]}}, wx: {gid: {t, w}},
+// sent: {alert id: {p: best price alerted, ko}}} — sent outlasts ntfy's 12 h, so a bet alerted days before kickoff isn't
+// alerted again every 12 h (2026-11-07 sweep); kept until kickoff
 function loadCache() {
-  try { if (CACHE_FILE && fs.existsSync(CACHE_FILE)) { const c = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); return { lastRun: c.lastRun || null, games: c.games || {}, wx: c.wx || {} }; } }
+  try { if (CACHE_FILE && fs.existsSync(CACHE_FILE)) { const c = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); return { lastRun: c.lastRun || null, games: c.games || {}, wx: c.wx || {}, sent: c.sent || {} }; } }
   catch (e) { log('cache unreadable — starting fresh:', e.message); }
-  return { lastRun: null, games: {}, wx: {} };
+  return { lastRun: null, games: {}, wx: {}, sent: {} };
 }
 function saveCache(c) {
   if (!CACHE_FILE || MODE !== 'live') return;   // a dry run must not make the next live run think its props are fresh
   for (const [g, x] of Object.entries(c.games)) if (!(Date.parse(x.ko) > NOW) || !(NOW - x.t < 12 * 3600e3)) delete c.games[g];
   for (const [g, x] of Object.entries(c.wx)) if (!(NOW - x.t < 3 * 3600e3)) delete c.wx[g];
+  for (const [k, x] of Object.entries(c.sent)) if (!(Date.parse(x.ko) > NOW)) delete c.sent[k];
   fs.mkdirSync(path.dirname(path.resolve(CACHE_FILE)), { recursive: true });
   fs.writeFileSync(CACHE_FILE, JSON.stringify(c));
   if (env.GITHUB_OUTPUT) fs.appendFileSync(env.GITHUB_OUTPUT, 'saved=true\n');   // the workflow keeps the cache only when it changed
@@ -497,6 +505,7 @@ async function main() {
   log(`${events.length} game(s) in the next ${HOURS} h; your books: ${BOOKS.map(bookName).join(' + ')}${PROPS_ON && PM ? '' : ' · props OFF'}`);
   let inj = new Map(); try { inj = parseInjuries(await (await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries')).json()); } catch (e) { log('injuries unavailable:', e.message); }
   const [sync, sent, sched] = await Promise.all([syncState(), sentBefore(), espnSchedule()]);
+  for (const [k, x] of Object.entries(cache.sent)) sent.set(k, Math.max(sent.get(k) ?? -Infinity, x.p));   // alerts older than ntfy keeps
   const statusOf = p => inj.get(String(p.id)) || p.status || 'ACT';
   const alerts = [], freshGames = new Set();
   for (const E of events) {
@@ -541,7 +550,7 @@ async function main() {
     if (!isProp(c.market)) return `🏈 ${c.name} anytime TD ${fmtAm(c.price)} at ${book}`;
     const { s, side, line } = c.prop; return `📈 ${c.name} ${PROP_NAME[s]} ${side === 'O' ? 'over' : 'under'} ${line} ${fmtAm(c.price)} at ${book}`; };
   const usdOf = c => sync && sync.unitUsd ? Math.round(c.stake * sync.unitUsd * 2) / 2 : null;
-  const seen = c => { const ids = [idOf(c), titleId(titleOf(c))]; return ids.some(k => sent.has(k) && sent.get(k) >= c.price); };
+  const seen = c => idsOf(idOf(c), titleOf(c)).some(k => sent.has(k) && sent.get(k) >= c.price);
   let fresh = alerts.filter(c => !seen(c));   // not yet alerted at this price or better
   // 💰 BANKROLL LIMIT (the app's fitRoom): money on open bets across NFL, NBA and NHL never goes above your bankroll — new
   // bets take the room biggest $ first; the rest wait (no alert) until settled bets free some up. Off when the app's limit is off.
@@ -573,6 +582,7 @@ async function main() {
       ...(c.link ? { click: c.link, actions: [{ action: 'view', label: `Open in ${book}`, url: c.link, clear: true }] }
         : BOOK_HOME[c.book] ? { actions: [{ action: 'view', label: `Open ${book} (find him)`, url: BOOK_HOME[c.book], clear: true }] } : {})
     });
+    if (MODE === 'live') for (const k of idsOf(idOf(c), titleOf(c))) cache.sent[k] = { p: Math.max(cache.sent[k] ? cache.sent[k].p : -Infinity, c.price), ko: c.ko };
     n++; log(`alert: ${titleOf(c)} · EV +${(c.ev * 100).toFixed(1)}% · ${stake}`);
   }
   cache.lastRun = NOW; saveCache(cache);
