@@ -61,7 +61,7 @@ jobs:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
           ALERT_MODE: ${{ inputs.mode || 'live' }}
-          ALERT_HOURS: '168'   # every game on the board (a week ahead)
+          ALERT_HOURS: '168'   # every game on the board (a week ahead) — = LOOKAHEAD_H in the app (⚡ Pull all games), keep equal
           ALERT_MAX: '20'      # up to 20 alerts a run (the rest go next run)
           ALERT_BOOKS: 'fanduel,draftkings,betmgm,williamhill_us,fanatics'   # your five books, as in the app (2026-11-05)
           ALERT_PROPS: 'on'    # 'off' = anytime TD only

@@ -215,6 +215,19 @@ See README.md for what the model does and how it was validated.
   bet log: P/L pill per week (no "season so far"), CLV red when negative, a prop line that moved AGAINST the bet red, "≈ price
   at your line" inline; 🏆 best sportsbook (all sports) in the summary + Insights table; top bar = pot · bets · open · $ on this game.
 
+- 👀 LOOK AHEAD (2026-11-09, user: "phone alert sent me a prop that i cant pull on the site" -> "let the board look ahead too"):
+  the alerts watch every game on the odds board for ALERT_HOURS 168, but the board (⚡ Pull all games, the game picker) only had
+  ESPN's active week, so from Sunday night until ESPN rolls over after Monday night, next week's games (13 on Nov 9) could be
+  alerted but not pulled. Now refreshSlate adds nextWeekSlate() (ESPN week N+1, after week 18 the playoffs' week 1) games kicking
+  off within LOOKAHEAD_H = 168 h, tagged g.ahead + their own g.wk (koStamp uses it for the log's week label); the picker shows
+  them under "Next week"; the board title reads "Next 7 days · N games left"; renderWeek runs after the live slate lands (the
+  count and credit estimate used to come from the baked slate). 🎯 TD picks stay on this week (!g.ahead). Early-week pulls cost
+  more (up to 14 games × 9 markets; markets no book has posted are free). Investigation the same day: Sunday's alerts (read from
+  the Actions run logs in the user's Chrome; ntfy keeps only 12 h) were 4 TB@CHI props 6:00-7:30 PM (Hurst III rec U1.5 DK,
+  Roschon Johnson rec O0.5 FD, Sam Roush rec U1.5 DK, Johnson recyd O1.5 MGM); the user logged 2 within a minute, so the site
+  had them; the user's Chrome had all 5 books and the same markets as the bot. No backtest covers betting days ahead; the
+  user's own log (712 NFL bets) beat the close by +12.1% avg (67% of bets) when placed 3+ days out, +5-6% at 6 h-3 days, +0.1%
+  under 1 h — CLV supports looking ahead; ROI by lead time is still noise.
 - FULL RUN-THROUGH 2026-11-07 (user: "run through full sim and find bugs"; local copy, mocked odds, 0 credits; 15 graded test
   bets on JAX@BAL all right). Fixed: (1) the slip's ➕ Add leg / Best pick (priceableLegs) and a TD bet logged by hand (addBet)
   used the MODEL ALONE (p[market]); they now take lastAnchors() like gameOptions — any new place that prices a TD bet must too

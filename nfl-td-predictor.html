@@ -434,7 +434,7 @@
   <!-- CONTROLS -->
   <div class="panel" style="margin-top:16px">
     <div class="ctl" style="margin-bottom:4px">
-      <label>This week's games <span class="muted" style="text-transform:none;letter-spacing:0">— one click sets both teams, the line and the stadium</span></label>
+      <label>Upcoming games <span class="muted" style="text-transform:none;letter-spacing:0">— one click sets both teams, the line and the stadium</span></label>
       <select id="gameSel"></select>
       <button class="statussel mobonly" id="ctlToggle" style="margin-top:7px;padding:4px 10px;font-size:12px">✏️ teams · line · weather</button>
     </div>
@@ -890,12 +890,17 @@ function opt(sel,arr,val){ sel.innerHTML=arr.map(a=>`<option value="${a}">${S.te
 // this week's games (kickoff order); the app opens on the next game to kick off, not a fixed matchup.
 // The baked slate is replaced live on every visit (refreshSlate), so it never goes stale between builds.
 let SCHED=[], userPicked=false, CUR_WK=null;   // CUR_WK: the active regular-season week number (from ESPN)
+// LOOK AHEAD (2026-11-09, user: "let the board look ahead too"): next week's games that kick off within this many hours join
+// the slate (g.ahead, with their own g.wk). The phone alerts watch every game on the odds board for ALERT_HOURS (168,
+// alerts.yml), and a next-week bet they buzzed couldn't be pulled here until ESPN rolled over after Monday night. Keep equal.
+const LOOKAHEAD_H=168;
 const koOf=game=>{ const g=SCHED.find(x=>x.away+'@'+x.home===game); return g?g.kickoff:null; };
-const koStamp=game=>{ const k=koOf(game); return k ? {ko:k, ...(CUR_WK?{wk:CUR_WK}:{})} : {}; };
+const koStamp=game=>{ const g=SCHED.find(x=>x.away+'@'+x.home===game); if(!g) return {}; const wk=g.wk!==undefined?g.wk:CUR_WK; return {ko:g.kickoff, ...(wk?{wk}:{})}; };
 function setSchedule(list){
   S.schedule=list;
   SCHED=list.filter(g=>S.teamList.includes(g.home)&&S.teamList.includes(g.away)).sort((a,b)=>new Date(a.kickoff)-new Date(b.kickoff));
-  $('gameSel').innerHTML=`<option value="">— or pick any two teams below —</option>`+SCHED.map((g,i)=>`<option value="${i}">${gameLabel(g)}</option>`).join('');
+  const o=(g,i)=>`<option value="${i}">${gameLabel(g)}</option>`, nx=SCHED.map((g,i)=>g.ahead?o(g,i):'').join('');
+  $('gameSel').innerHTML=`<option value="">— or pick any two teams below —</option>`+SCHED.map((g,i)=>g.ahead?'':o(g,i)).join('')+(nx?`<optgroup label="Next week">${nx}</optgroup>`:'');
 }
 const nextGame=()=>SCHED.find(g=>new Date(g.kickoff).getTime()>Date.now()-3.5*3600e3)||null;
 function gameLabel(g){
@@ -1014,13 +1019,24 @@ function schedFromESPN(sb){
   }
   return out;
 }
+// next week's games (after week 18: the playoffs' first round), tagged ahead with their own week — the look-ahead slate
+async function nextWeekSlate(sb){
+  if(!(sb&&sb.week&&sb.season)) return [];
+  try{ const get=async q=>(await fetch(SB_URL+q,{cache:'no-store'})).json(), t=sb.season.type;
+    let nx=await get(`?seasontype=${t}&week=${sb.week.number+1}`), wk=t===2?sb.week.number+1:null;
+    if(!(nx.events||[]).length && t===2){ nx=await get('?seasontype=3&week=1'); wk=null; }
+    return schedFromESPN(nx).map(g=>Object.assign(g, {ahead:true, wk})); }catch(e){ return []; }
+}
 async function refreshSlate(){
   try{
     const sb=await activeWeek(), list=schedFromESPN(sb); if(!list.length) return;
     CUR_WK=sb.season&&sb.season.type===2&&sb.week ? sb.week.number : null;
     const sig=l=>l.map(g=>g.away+'@'+g.home+'@'+g.kickoff).sort().join(',');
-    const newWeek=sig(list)!==sig(S.schedule||[]);
-    setSchedule(list);   // same games too: refreshes the dropdown's lines
+    const newWeek=sig(list)!==sig((S.schedule||[]).filter(g=>!g.ahead));
+    list.forEach(g=>{ g.wk=CUR_WK; });
+    const now=Date.now(), ahead=(await nextWeekSlate(sb)).filter(g=>{ const k=Date.parse(g.kickoff); return k>now && k-now<=LOOKAHEAD_H*3600e3 && !list.some(x=>x.away===g.away&&x.home===g.home); });
+    setSchedule(list.concat(ahead));   // same games too: refreshes the dropdown's lines
+    renderWeek();   // the board's game count and credit estimate follow the live slate (they were drawn from the baked one)
     const nx=nextGame(), cur=$('awaySel').value+'@'+$('homeSel').value;
     // opened on a stale game and the user hasn't picked one yet -> jump to the real next kickoff
     if(newWeek && !userPicked && nx && cur!==nx.away+'@'+nx.home){ $('awaySel').value=nx.away; $('homeSel').value=nx.home; onMatchupChange(); }
@@ -2908,7 +2924,7 @@ const realKeysOf=SL=>new Set(((SL&&SL.picks)||[]).map(c=>c.game+'|'+c.key));
 async function buildSlate(){
   const out=$('slateBody'), btn=$('slateBtn'), scope=$('slateScope').value, nPick=+$('slateN').value||5;
   if(!oddsKey()){ out.innerHTML=`The picks need FanDuel's prices — add your The Odds API key once under <b>Price this game → odds settings</b>.`; $('oddsCfg').open=true; goTo('priceSec'); return; }
-  const now=Date.now(), up=SCHED.filter(g=>new Date(g.kickoff).getTime()>now);
+  const now=Date.now(), up=SCHED.filter(g=>!g.ahead&&new Date(g.kickoff).getTime()>now);   // TD picks stay on this week (the board looks ahead)
   if(!up.length){ out.textContent='No upcoming games on this week\'s slate.'; return; }
   const day=iso=>new Date(iso).toDateString(), games=scope==='week'?up:up.filter(g=>day(g.kickoff)===day(up[0].kickoff));
   const cost=games.filter(g=>!pxFresh(g.away+'@'+g.home)).length;
@@ -3092,11 +3108,11 @@ function renderWeek(){
   const out=$('weekBody'), cost=$('weekCost'); if(!out) return;
   const now=Date.now(), left=SCHED.filter(g=>Date.parse(g.kickoff)>now), mk=pickedMarkets().length;
   if(cost) cost.innerHTML=`≈ <b>${left.length*mk}</b> credits a pull · ${left.length} game${left.length===1?'':'s'} × ${mk} market${mk===1?'':'s'}<br>every pull gets fresh prices for every game${oddsRemaining!=null?`<br>${Number(oddsRemaining).toLocaleString()} credits left`:''}`;
-  const tt=$('weekTitle'); if(tt) tt.textContent=left.length?`This week · ${left.length} game${left.length===1?'':'s'} left`:'No games left this week';
+  const ah=left.some(g=>g.ahead), tt=$('weekTitle'); if(tt) tt.textContent=left.length?`${ah?'Next 7 days':'This week'} · ${left.length} game${left.length===1?'':'s'} left`:'No games left this week';
   if(!WEEK) return;
   const age=Math.round((now-WEEK.at)/60e3), P=WEEK.picks.filter(c=>(!c.kickoff||Date.parse(c.kickoff)>now) && !heldSameStat(c.game, c) && !SKIP[skipKey(c.game, c)]);   // kicked-off games drop out; so does a stat you already bet
   const isNew=c=>!bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&b.market===c.market), ALLNEW=P.filter(isNew), WR=fitRoom(ALLNEW, c=>roundUsd(c.stake*(unitUsd()||0))), NEW=ALLNEW.filter(c=>WR.fit.includes(c)), nNew=NEW.length, tot=NEW.reduce((a,c)=>a+c.stake,0);
-  let h= !P.length ? cardStat('none','NO BETS THIS WEEK','nothing at your books clears the bar') : nNew ? cardStat('new',`🆕 ${nNew} NEW BET${nNew>1?'S':''}`, `${stakesTxt(NEW)} · ${(tot/getBankroll()*100).toFixed(1)}% of bankroll${P.length-nNew?` · ${P.length-nNew} already in your log`:''}`) : cardStat('done','✅ NO NEW BETS',`${P.length>1?'all '+P.length+' are':'it\'s'} already in your log`);
+  let h= !P.length ? cardStat('none',ah?'NO BETS RIGHT NOW':'NO BETS THIS WEEK','nothing at your books clears the bar') : nNew ? cardStat('new',`🆕 ${nNew} NEW BET${nNew>1?'S':''}`, `${stakesTxt(NEW)} · ${(tot/getBankroll()*100).toFixed(1)}% of bankroll${P.length-nNew?` · ${P.length-nNew} already in your log`:''}`) : cardStat('done','✅ NO NEW BETS',`${P.length>1?'all '+P.length+' are':'it\'s'} already in your log`);
   h+=`<div class="muted" style="font-size:13px;margin:-2px 0 8px">${WEEK.n} game${WEEK.n===1?'':'s'} checked ${age<1?'just now':age<60?age+' min ago':Math.round(age/60)+' h ago'}${age>60?' — <span style="color:var(--warn)">pull again for fresh prices</span>':''} · each game's bets are exactly what its card says · tap a bet to open its game</div>`;
   if(WR.out.length) h=(nNew?h:cardStat('done','💰 BANKROLL IN PLAY', `${WR.out.length} bet${WR.out.length>1?'s':''} wait${WR.out.length>1?'':'s'} for room`))+roomNote(WR);
   if(nNew) h+=`<div class="bacts"><button class="statussel" id="weekLog">📓 Log the ${nNew} new</button></div>`;
