@@ -137,6 +137,14 @@ See README.md for what the model does and how it was validated.
 - One-time stake fix (2026-10-21, user: "a 2 bet at +100 wins $2 not 1.97"): bets logged before "logged as shown" are rounded to
   what the card showed (flag *_usdround; NFL only touches app-logged bets — book / legs / mktP / rawP / fun — never a hand-typed
   stake), stamped mt so Sync spreads it. The log's stake shows exactUsd(): the usual format for round amounts, else cents.
+- ✏️ TAP TO EDIT A STAKE (2026-11-10, user limited at Fanatics — "the max i can place for this bet is 10.67" → "yes add tap to
+  edit stakes"): the log's Stake is a button (stakeBtn, dashed underline); a tap swaps in a box (openStake: dollars to the cent
+  with a bankroll, else units; inputmode decimal). Enter / tapping away saves through the change listener (b.usd = the new $,
+  b.stake units scaled to match; units mode scales a stored usd the same way), Esc or a bad number puts back only that cell
+  (closeStake), a save redraws a tick later (stakeRender) and re-opens the stake you moved to, so one tap on another stake opens
+  it. Open or settled bets alike (P/L and the pot follow). saveBets stamps mt -> ☁ Sync. Tested 2026-11-10 in a local copy
+  (sims-all server, fake bets): edit, Esc, tap away, letters, A->B with and without a change, settled win P/L + pot, units
+  mode, 375 px phone, NBA page's pot. NFL only — NBA / NHL logs are paper and have no stake edit.
 - BetMGM STAKES ARE TYPED BY THE USER (2026-10-26, final — user: "i dont want the average. i want each respective ... just
   open all with a click and i fill it in"). Every bet keeps its own stake on the card; BetMGM links carry NO stake (single or
   open-all), one "Open all N on BetMGM" per book group. History: 10-25 a stake in a multi-bet link filled ONE amount on every

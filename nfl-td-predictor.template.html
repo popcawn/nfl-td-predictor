@@ -89,6 +89,7 @@
   .mktbtn.active{background:var(--accent);color:#04121f;border-color:var(--accent)}
   td.probcell.active{color:var(--ink);font-weight:800}
   .bookin{width:78px;font-family:var(--mono);font-size:13px;padding:5px 7px;text-align:right}
+  .stkedit{background:none;border:0;border-bottom:1px dashed var(--ink2);border-radius:0;padding:0;margin:0;font:inherit;color:inherit;cursor:pointer} .stkedit:hover{color:var(--accent);border-bottom-color:var(--accent)}
   .ev-pos{color:var(--good);font-weight:800}
   .ev-neg{color:var(--ink3)}
   .plpill{display:inline-block;font-weight:900;font-size:14px;padding:1px 10px;border-radius:999px;margin-left:8px;vertical-align:1px}
@@ -3288,7 +3289,7 @@ function renderBets(){
         html+=`<tr><td class="l"><b${b.modelProb!=null?` title="chance when logged: ${pct(b.modelProb)}"`:''}>${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)}</span> ${tags}</td>`+
           `<td class="odds">${esc(b.odds)}${b.book&&myBooks().length>1?bkBadge(b.book):''}</td>`+
           `<td><input class="bookin betclose" data-id="${b.id}" value="${(b.closeOdds||'').replace(/"/g,'&quot;')}" placeholder="close" style="width:62px">${clvTxt}</td>`+
-          `<td title="${b.stake}u">${betStakeTxt(b)}</td>`+
+          `<td>${stakeBtn(b)}</td>`+
           `<td class="${b.result==='pending'?'':'muted'}" title="what it pays in profit if it wins">${dec?amtc((stk||0)*(dec-1)):'—'}</td>`+
           `<td style="white-space:nowrap"><select class="statussel betres" data-id="${b.id}">${['pending','win','loss','push'].map(s=>`<option ${s===b.result?'selected':''}>${s}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span class="whytap" title="${esc((b.mid?'settled mid-game from ESPN\'s live box score — it was already decided; checked again at the final: ':'auto-settled from ESPN: ')+b.auto)}">${b.mid?'⏱':'🤖'}</span>`:''}${b.result==='pending'&&b.autoNote?` <span class="whytap" title="${esc(b.autoNote)}">✋</span>`:''}</td>`+
           `<td class="${pl!=null?g(pl):''}">${pl==null?'—':usdOn?mny(pl):sgn(pl.toFixed(2))}</td>`+
@@ -3775,7 +3776,20 @@ $('betClear').onclick=()=>{ if(bets.length && confirm('Clear all '+bets.length+'
 $('betBody').addEventListener('change', e=>{ const id=e.target.dataset.id; if(!id) return; const b=bets.find(x=>x.id===id); if(!b) return;
   if(e.target.classList.contains('betclose')){ b.closeOdds=e.target.value.trim(); delete b.closeEst; }
   else if(e.target.classList.contains('betres')){ b.result=e.target.value; delete b.auto; delete b.mid; if(b.result==='pending') delete b.st; else b.st=Date.now(); }   // your call replaces the auto one
+  else if(e.target.classList.contains('betstake')){ if(e.target.dataset.cancel) return; const v=parseFloat(String(e.target.value).replace(/[$,\s]/g,'')); if(!(v>0)){ closeStake(e.target); return; } if(BANK.amt){ const old=betUsd(b), nu=Math.round(v*100)/100; if(old>0&&+b.stake) b.stake=+(+b.stake*nu/old).toFixed(2); b.usd=nu; } else { if(b.usd!=null&&+b.stake>0) b.usd=Math.round(+b.usd*v/(+b.stake)*100)/100; b.stake=+v.toFixed(2); } saveBets(); stakeRender(); return; }
   saveBets(); renderBets(); });
+// ✏️ TAP TO EDIT A STAKE (2026-11-10, user limited at Fanatics: "the max i can place for this bet is 10.67"): the log's stake is a
+// button; a tap swaps in a box (dollars to the cent with a bankroll, else units). Enter or tapping away saves (the change listener
+// above), Esc or a bad number puts the button back — only that cell, so a tap on another stake still opens it. A save redraws the
+// log a tick later and re-opens the stake you moved to. saveBets stamps mt, so ☁ Sync carries the new amount.
+function stakeBtn(b){ return `<button class="stkedit" data-id="${b.id}" title="${b.stake}u — tap to change what you bet (e.g. the book capped it)">${betStakeTxt(b)}</button>`; }
+function openStake(id, val){ const s=document.querySelector('#betBody .stkedit[data-id="'+id+'"]'), b=bets.find(x=>x.id===id); if(!s||!b) return; const usd=!!BANK.amt&&betUsd(b)!=null, v=val!=null?String(val):usd?(+betUsd(b)).toFixed(2):String(+b.stake||0), td=s.closest('td');
+  td.innerHTML=`<input class="bookin betstake" data-id="${b.id}" type="text" inputmode="decimal" autocomplete="off" value="${esc(v)}" style="width:72px" title="${usd?'the dollars you actually bet':'units you bet'} — Enter saves, Esc cancels">`; const i=td.querySelector('input'); i.focus(); if(val==null) i.select(); else i.setSelectionRange(v.length, v.length); }
+function closeStake(t){ const b=bets.find(x=>x.id===t.dataset.id), td=t.closest('td'); if(b&&td&&document.contains(t)) td.innerHTML=stakeBtn(b); }
+function stakeRender(){ setTimeout(()=>{ const a=document.activeElement, c=a&&a.classList, o=c&&c.contains('betstake')?[a.dataset.id, a.value]:c&&c.contains('stkedit')?[a.dataset.id, null]:null; renderBets(); if(o) openStake(o[0], o[1]); }, 0); }
+$('betBody').addEventListener('click', e=>{ const s=e.target.closest('.stkedit'); if(s) openStake(s.dataset.id); });
+$('betBody').addEventListener('keydown', e=>{ const t=e.target; if(!t.classList||!t.classList.contains('betstake')) return; if(e.key==='Enter'){ e.preventDefault(); t.blur(); } else if(e.key==='Escape'){ t.dataset.cancel='1'; closeStake(t); } });
+$('betBody').addEventListener('focusout', e=>{ const t=e.target; if(t.classList&&t.classList.contains('betstake')) setTimeout(()=>closeStake(t), 0); });
 $('betBody').addEventListener('toggle', e=>{ const d=e.target; if(!d||!d.classList) return; if(d.classList.contains('gamegrp')) LOGOPEN.set(d.dataset.k, d.open); else if(d.classList.contains('weekgrp')) LOGOPEN.set('W'+d.dataset.w, d.open); }, true);
 $('betBody').addEventListener('click', e=>{ const d=e.target.closest('.betdel'); if(!d) return; bets=bets.filter(x=>x.id!==d.dataset.id); saveBets(); renderBets(); });
 $('oddsPaste').addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); applyPastedOdds(); }});
