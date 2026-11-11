@@ -1608,12 +1608,12 @@ let CANDS=[], BOARDROWS=[];
 function gameOptions(){
   const cand=[];
   const add=o=>{ const r=evalBet(o.mp,o.odds); if(!r) return; const conf=confFor(o.ref,o.market,r,CTX_BADWX);
-    cand.push({...o, ...r, conf, tier:tierOf(o.mp,r.edge,r.ev,o.prior), kelly:r.edge>0 ? conf.score*r.edge/(1-r.bimp) : 0}); };   // Kelly on the confidence-adjusted edge
+    cand.push({...o, ...r, conf, tier:o.thin&&r.ev>0.03?'dart':tierOf(o.mp,r.edge,r.ev,o.prior), kelly:r.edge>0 ? conf.score*r.edge/(1-r.bimp) : 0}); };   // Kelly on the confidence-adjusted edge
   const ANC=lastAnchors();
   for(const p of LAST.awayR.concat(LAST.homeR)){ if(p._status==='OUT') continue;
     for(const m of ['anytime','first','last','two']){ const odds=LAST.bookMap[m+'|'+p._key]; if(!odds) continue;
       const f=m==='two'?(p._cal||1)**2:(p._cal||1), A=ANC[m].get(p._key);
-      add({key:p._key, label:p.name, abbr:p._abbr, market:m, odds, book:bookOfTk(tkFor(curGameId(), m, p._key, odds)), mp:A?A.p:p[m], model:p[m], mkt:A?A.mkt:null, mktSrc:A?A.src:null, mpRaw:p[m]/f, prior:!p.matched, role:roleLabel(p), cal:f, ref:p}); } }
+      add({key:p._key, label:p.name, abbr:p._abbr, market:m, odds, book:bookOfTk(tkFor(curGameId(), m, p._key, odds)), mp:A?A.p:p[m], model:p[m], mkt:A?A.mkt:null, mktSrc:A?A.src:null, mpRaw:p[m]/f, prior:!p.matched, role:roleLabel(p), cal:f, ref:p, thin:m!=='anytime'&&(!A||!!A.thin)}); } }
   for(const [abbr,d] of [[LAST.away,LAST.dst.dstAway],[LAST.home,LAST.dst.dstHome]])
     for(const m of ['anytime','first','last']){ const odds=LAST.bookMap[m+'|DST|'+abbr]; if(!odds) continue;
       add({key:'DST|'+abbr, label:S.teams[abbr].short+' Defense', abbr, market:m, odds, book:bookOfTk(tkFor(curGameId(), m, 'DST|'+abbr, odds)), mp:d[m], mpRaw:d[m], prior:false, role:'defense (pick-6 / fumble return)', cal:1, ref:{dst:true}}); }
@@ -2213,12 +2213,15 @@ async function readSyncGist(g){
   let txt=f.content; if(f.truncated && f.raw_url) txt=await (await fetch(f.raw_url,{cache:'no-store'})).text();
   try{ const d=JSON.parse(txt); return d&&d.app==='nfl-td-predictor'?d:null; }catch(e){ return null; }
 }
-let syncBusy=false, syncAgain=false, syncTimer=null;
+let syncBusy=false, syncAgain=false, syncTimer=null, followTimer=null;
 function syncSoon(ms){ if(!SYNC.token) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncNow, ms==null?2500:ms); }
-async function syncNow(){
+// fix 9 (2026-11-11 audit): the sync is read -> merge -> write with no version check, so two devices writing in the same
+// second leave the gist without one device's newest bet until that device syncs again (the alert bot reads less riding).
+// After a write this window syncs ONCE more, 8 s later (follow === true never chains, so two devices can't ping-pong).
+async function syncNow(follow){
   if(adoptSyncToken()) syncStatus();
   if(!SYNC.token) return; if(syncBusy){ syncAgain=true; return; }
-  syncBusy=true; syncStatus(true);
+  syncBusy=true; syncStatus(true); let wrote=false;
   try{
     let g=null;
     if(SYNC.gistId){ try{ g=await ghApi('/gists/'+SYNC.gistId); }catch(e){ if(e.status!==404) throw e; SYNC.gistId=null; } }
@@ -2230,11 +2233,11 @@ async function syncNow(){
     const remote=g?await readSyncGist(g):null;
     if(remote) applyRemote(remote);
     const mine=syncPayload(), content=JSON.stringify(mine);
-    if(!g){ const c=await ghApi('/gists',{method:'POST', body:JSON.stringify({description:'NFL TD predictor — bet log sync (private, used by the app)', public:false, files:{[SYNC_FILE]:{content}}})}); SYNC.gistId=c.id; }
-    else if(!remote || syncCanon(mine)!==syncCanon(remote)) await ghApi('/gists/'+SYNC.gistId,{method:'PATCH', body:JSON.stringify({files:{[SYNC_FILE]:{content}}})});
+    if(!g){ const c=await ghApi('/gists',{method:'POST', body:JSON.stringify({description:'NFL TD predictor — bet log sync (private, used by the app)', public:false, files:{[SYNC_FILE]:{content}}})}); SYNC.gistId=c.id; wrote=true; }
+    else if(!remote || syncCanon(mine)!==syncCanon(remote)){ await ghApi('/gists/'+SYNC.gistId,{method:'PATCH', body:JSON.stringify({files:{[SYNC_FILE]:{content}}})}); wrote=true; }
     SYNC.last=Date.now(); SYNC.err=null;
   }catch(e){ SYNC.err = (e.status===401) ? 'key rejected (expired or deleted) — make a new one and reconnect' : e.limited ? 'GitHub is limiting requests — will retry by itself' : (e.status===403||e.status===404) ? 'GitHub refused — does the token have the gist scope?' : 'offline — will retry'; }
-  finally{ saveSyncCfg(); syncBusy=false; syncStatus(); if(syncAgain){ syncAgain=false; syncSoon(400); } }
+  finally{ saveSyncCfg(); syncBusy=false; syncStatus(); if(syncAgain){ syncAgain=false; syncSoon(400); } else if(wrote && follow!==true){ clearTimeout(followTimer); followTimer=setTimeout(()=>syncNow(true), 8000); } }
 }
 function syncStatus(busy){
   const b=$('syncBtn'), m=$('syncMsg'); if(!b) return;
@@ -2499,11 +2502,15 @@ const TD_W=MA.fitted&&MA.w!=null ? MA.w : 0;
 const PROP_W=MA.props&&MA.props.fitted&&MA.props.w!=null ? MA.props.w : 0.1;
 const anchorFor=mk=>({w:TD_W, cal:mk==='anytime'&&MA.fitted&&MA.cal ? MA.cal : null});
 const logit=p=>Math.log(p/(1-p)), expit=x=>1/(1+Math.exp(-x));
-const blendP=(mkt, model, w)=>expit((1-w)*logit(clamp(mkt,0.003,0.995))+w*logit(clamp(model,0.003,0.995)));
+const blendP=(mkt, model, w)=>expit((1-w)*logit(clamp(mkt,0.003,0.997))+w*logit(clamp(model,0.003,0.997)));   // same clamp on both ends: the two sides of a bet add to 1
 // one TD market for one game: Map(player key -> {p: blended, mkt: market fair, model})
 // book (optional) = FanDuel's own prices: a player no other book prices is anchored to FanDuel's price instead of the
 // model alone — on 2025's real prices FanDuel's own (calibrated) number was exactly as accurate as the other books'
 // (Brier .1399/.1262 vs .1399/.1263) and the model alone worse (.1451/.1304). So a lone FanDuel price never shows an edge.
+// fix 12 (2026-11-11 audit): 1st / last / 2+ TD take the market's SHAPE at the MODEL's level (k below) and were never tested on
+// real prices. With a handful of priced players k is noise, so under TD_SHAPE_MIN rows — or with no anchor at all — these
+// three markets are priced and shown but never carded (tier "dart"). Anytime (calibrated on real prices) is unchanged.
+const TD_SHAPE_MIN=8;
 function anchorTD(players, mktMap, mk, book){
   const out=new Map(); if(!mktMap && !book) return out;
   const rows=[]; let sm=0, si=0;
@@ -2513,7 +2520,7 @@ function anchorTD(players, mktMap, mk, book){
   if(rows.length<4 || !(si>0)) return out;   // too few prices to read the market's shape -> model only
   const k=sm/si, A=anchorFor(mk);
   for(const [p,m] of rows){ const fair=A.cal ? expit(A.cal.a+A.cal.b*logit(clamp(m.ip,0.003,0.995))) : clamp(m.ip*k,0.002,0.97);
-    out.set(p._key,{p:blendP(fair,p[mk],A.w), mkt:fair, model:p[mk], src:m.fd?'fd':'books'}); }
+    out.set(p._key,{p:blendP(fair,p[mk],A.w), mkt:fair, model:p[mk], src:m.fd?'fd':'books', thin:mk!=='anytime'&&rows.length<TD_SHAPE_MIN}); }
   return out;
 }
 function lastAnchors(){ const pl=LAST.awayR.concat(LAST.homeR), a={}; for(const m of ['anytime','first','last','two']) a[m]=anchorTD(pl, LAST.mktMap, m, LAST.bookMap); return a; }
@@ -2697,6 +2704,10 @@ const HIST_API='https://api.the-odds-api.com/v4/historical/sports/americanfootba
 let AUTO=Object.assign({settle:true, close:true, hist:false}, lsJ('nfltd_auto',{}));   // hist: after-kickoff closes cost 10 credits per bet type — opt-in since 2026-10-16
 let CLOSED=(c=>{ const old=Date.now()-21*86400e3; for(const k of Object.keys(c)) if(!(c[k].t>old)) delete c[k]; return c; })(lsJ('nfltd_closed',{}));
 let AUTO_NOTE='', autoBusy=false, autoLast=0;
+// ⏱ TWO LOOKS (2026-11-11 audit, fix 6): a mid-game result settles only when a later check, at least MID_CONFIRM_MS after the
+// first, still says the same (b.midSeen = {r, t}). Every scoring play is reviewed, and ESPN shows a TD or a catch before a
+// replay takes it back: one look could settle a win that is gone two minutes later (the pot grew and room opened until the final).
+const MID_CONFIRM_MS=4*60e3;
 const evCache=new Map(), liveCache=new Map();   // ESPN event id -> parsed final (finals don't change) / a game being played (this check only)
 function renderAutoNote(){ const el=$('autoMsg'); if(el) el.innerHTML=AUTO_NOTE; }
 // ESPN events for the active week and the weeks back to the oldest open bet (ESPN refuses date ranges; weeks work),
@@ -2717,7 +2728,10 @@ async function espnEventsFor(bs){
 const eventFor=(evs,b)=>evs.filter(e=>e.game===b.game && Date.parse(e.kickoff)>=(Date.parse(b.ts)||0)-86400e3).sort((x,y)=>Date.parse(x.kickoff)-Date.parse(y.kickoff))[0]||null;
 async function espnResult(ev){
   const cache=ev.final?evCache:liveCache; if(cache.has(ev.id)) return cache.get(ev.id);
-  const sum=await (await fetch(ESPN_SUM+ev.id)).json();
+  const sum=await (await fetch(ESPN_SUM+ev.id,{cache:'no-store'})).json();
+  // fix 8 (2026-11-11 audit): "final" comes from the scoreboard; these stats come from the summary, a different feed. If the
+  // summary names its own status and isn't final yet, wait for the next check (a missing status counts as final)
+  const stt=((((sum.header||{}).competitions||[])[0]||{}).status||{}).type, done=stt?!!stt.completed:true;
   const P=new Map(), num=v=>{ const x=parseFloat(String(v).replace(/,/g,'')); return isNaN(x)?0:x; };
   const pl=id=>P.get(id)||P.set(id,{td:0, dtd:0, rec:0, recyd:0, ryd:0, pyd:0}).get(id);
   for(const tb of ((sum.boxscore&&sum.boxscore.players)||[])) for(const cat of (tb.statistics||[])){
@@ -2730,14 +2744,14 @@ async function espnResult(ev){
       else if(cat.name==='interceptions'||cat.name==='defensive') p.dtd=Math.max(p.dtd, v('TD')); } }
   for(const p of P.values()) p.td+=p.dtd;
   const dnp=new Set(), seen=new Set(); let rosters=0;
-  await Promise.all(ev.tids.map(async tid=>{ try{ const r=await (await fetch(`${ESPN_CORE}${ev.id}/competitions/${ev.id}/competitors/${tid}/roster`)).json();
+  await Promise.all(ev.tids.map(async tid=>{ try{ const r=await (await fetch(`${ESPN_CORE}${ev.id}/competitions/${ev.id}/competitors/${tid}/roster`,{cache:'no-store'})).json();
     if((r.entries||[]).length) rosters++; for(const x of (r.entries||[])){ const id=String(x.playerId); seen.add(id); if(x.didNotPlay) dnp.add(id); } }catch(e){} }));
   const inj=new Map(); for(const t of (sum.injuries||[])) for(const i of (t.injuries||[])) if(i.athlete&&i.athlete.id) inj.set(String(i.athlete.id), i.status||'');
   const tds=(sum.scoringPlays||[]).filter(p=>p.scoringType&&p.scoringType.name==='touchdown').map(p=>{ const ty=(p.type&&p.type.text)||'', tx=String(p.text||'');
     return {team:espnIdToAbbr[String(p.team&&p.team.id)]||null, name:(tx.match(/^(.+?)\s+\d+\s+(?:Yd|Yard)/i)||[])[1]||tx.split(/\s+(?:\d|Fumble|Blocked|Recover)/i)[0],
       def:/interception|fumble return|defensive/i.test(ty), blocked:/blocked/i.test(ty), type:ty}; });
-  const R={P, dnp, seen, tds, inj, rostersOk:seen.size>0, rostersAll:rosters===ev.tids.length};
-  cache.set(ev.id, R); return R;
+  const R={P, dnp, seen, tds, inj, done, rostersOk:seen.size>0, rostersAll:rosters===ev.tids.length};
+  if(!ev.final || done) cache.set(ev.id, R); return R;
 }
 // one leg on a final game -> {r:'win'|'loss'|'push'(void)|null(can't tell), why}
 function legResult(R, l){
@@ -2758,8 +2772,12 @@ function legResult(R, l){
   p=p||{td:0, rec:0, recyd:0, ryd:0, pyd:0};
   if(isPropMkt(l.market)){ const [,s,side,line]=l.market.split('|'), v=s==='rryd'?p.ryd+p.recyd:(p[s]||0), L=+line;
     return {r:v===L?'push':((v>L)===(side==='O')?'win':'loss'), why:`${PROP_SHORT[s]||s} ${v}`}; }
-  if(l.market==='anytime') return {r:p.td>=1?'win':'loss', why:`${p.td} TD`};
-  if(l.market==='two') return {r:p.td>=2?'win':'loss', why:`${p.td} TD`};
+  // fix 7 (2026-11-11 audit): a TD the box score files nowhere he has a line for — an offensive player falling on a fumble in
+  // the end zone ("Tyler Lockett 0 Yd Fumble Recovery") — is still his TD at the books. The scoring plays name the scorer:
+  // count the ones that are cleanly his (a short name, his team) and take the larger number.
+  const spTD=l.name?R.tds.filter(x=>x.team===a && x.name && x.name.trim().split(/\s+/).length<=4 && sameName(x.name, l.name)).length:0, td=Math.max(p.td||0, spTD);
+  if(l.market==='anytime') return {r:td>=1?'win':'loss', why:`${td} TD`};
+  if(l.market==='two') return {r:td>=2?'win':'loss', why:`${td} TD`};
   if(l.market==='first'||l.market==='last'){ if(!nth) return {r:'loss', why:'no TD scored'};
     return {r:nth.team===a && sameName(nth.name, l.name)?'win':'loss', why:`${lab}: ${nth.name}`}; }
   return {r:null, why:'settle by hand'};
@@ -2788,7 +2806,7 @@ async function autoSettle(manual){
   autoBusy=true; autoLast=Date.now(); if(manual){ AUTO_NOTE='🤖 checking ESPN…'; renderAutoNote(); }
   try{
     const evs=await espnEventsFor(pend.concat(noClose, noKo));
-    let settled=0, byHand=0, changed=false, mid=0, fixed=0; liveCache.clear();
+    let settled=0, byHand=0, changed=false, mid=0, fixed=0, waiting=0; liveCache.clear();
     for(const b of noKo){ const es=(b.legs&&b.legs.length?b.legs:[b]).map(l=>eventFor(evs,{game:l.game, ts:b.ts})).filter(Boolean).sort((x,y)=>Date.parse(x.kickoff)-Date.parse(y.kickoff));
       if(es.length){ b.ko=es[0].kickoff; if(es[0].week) b.wk=es[0].week; } else b.koX=1;   // koX: not found, don't look again
       changed=true; }
@@ -2798,13 +2816,17 @@ async function autoSettle(manual){
       if(!fin && (b.result!=='pending' || !E.some(e=>e&&(e.final||e.live)))) continue;
       const res=[]; let ready=true;
       for(let i=0;i<legs.length;i++){ const e=E[i]; if(!e||!(e.final||e.live)){ res.push({r:null, why:''}); continue; }
-        try{ const R=await espnResult(e); res.push(e.final?legResult(R, legs[i]):legLive(R, legs[i])); }catch(err){ ready=false; break; } }
+        try{ const R=await espnResult(e); if(e.final && !R.done){ ready=false; break; } res.push(e.final?legResult(R, legs[i]):legLive(R, legs[i])); }catch(err){ ready=false; break; } }
       if(!ready) continue;
       // ⏱ not every game is final: settle only when it's already decided — a leg lost, or every leg already won
-      if(!fin){ const r=res.some(x=>x.r==='loss')?'loss':res.every(x=>x.r==='win')?'win':null; if(!r) continue;
+      if(!fin){ const r=res.some(x=>x.r==='loss')?'loss':res.every(x=>x.r==='win')?'win':null; if(!r){ if(b.midSeen){ delete b.midSeen; changed=true; } continue; }
+        if(!b.midSeen || b.midSeen.r!==r){ b.midSeen={r, t:Date.now()}; changed=true; waiting++; continue; }
+        if(Date.now()-b.midSeen.t<MID_CONFIRM_MS){ waiting++; continue; }
+        delete b.midSeen;
         b.result=r; b.mid=1; b.auto=res.map(x=>x.why).filter(Boolean).join(' · ')+' — mid-game'; b.st=Date.now(); delete b.autoNote; settled++; mid++; changed=true; continue; }
       const r = res.some(x=>x.r==='loss') ? 'loss' : res.some(x=>x.r===null) ? null : (legs.length>1 && res.some(x=>x.r==='push')) ? null : res.every(x=>x.r==='win') ? 'win' : 'push';
       const txt=res.map(x=>x.why).join(' · ')+(legs.length>1 && r===null && res.some(x=>x.r==='push')?' — a leg was void, FanDuel reprices the parlay: settle by hand':'');
+      if(b.midSeen){ delete b.midSeen; changed=true; }
       if(b.mid){ delete b.mid; changed=true; if(r){ b.auto=txt; if(r!==b.result){ b.result=r; b.st=Date.now(); fixed++; } } continue; }
       if(!r){ if(b.autoNote!==txt){ b.autoNote=txt; changed=true; } byHand++; continue; }
       b.result=r; b.auto=txt; b.st=Date.now(); delete b.autoNote; settled++; changed=true;
@@ -2813,6 +2835,7 @@ async function autoSettle(manual){
     const closeTxt=AUTO.hist ? await autoHistCloses(evs) : '';
     AUTO_NOTE=[settled?`🤖 settled <b>${settled}</b> bet${settled>1?'s':''} ${mid===settled?'mid-game — already decided, checked again at the final':`from ESPN's box scores${mid?` (${mid} mid-game — already decided, checked again at the final)`:''}`}`:'',
       fixed?`<span style="color:var(--warn)">${fixed} mid-game result${fixed>1?'s':''} changed at the final</span>`:'',
+      waiting?`⏱ ${waiting} bet${waiting>1?'s':''} decided mid-game — settled once the next check agrees`:'',
       byHand?`<span style="color:var(--warn)">${byHand} to settle by hand</span> (tap ✋ for why)`:'', closeTxt].filter(Boolean).join(' · ')
       || (manual?'🤖 nothing to do yet — no open bet is decided yet, and every started game has its Close':'');
     renderAutoNote();
@@ -3112,10 +3135,10 @@ async function pullAllGames(only){
 // thin to size"), so a medium-confidence bet stops sooner (2026-11-07: Barkley rec under 1.5 said -104, the card's rule -102).
 // Copied in alerts/watch.mjs — keep them identical.
 const MIN_EDGE=0;
-function floorPrice(p, minEdge, conf){ if(!(p>minEdge&&p<1)) return null; const k=conf>0?MIN_STAKE/KELLY_FRAC/conf:0; if(k && !(p>k)) return null;
-  const d=Math.max(1.03/p, minEdge?1/(p-minEdge):0, k?(1-k)/(p-k):0)+1e-9;
+function floorPrice(p, minEdge, conf, push){ if(!(p>minEdge&&p<1)) return null; const k=conf>0?MIN_STAKE/KELLY_FRAC/conf:0; if(k && !(p>k)) return null;
+  const d=Math.max((1+0.03/(1-(push||0)))/p, minEdge?1/(p-minEdge):0, k?(1-k)/(p-k):0)+1e-9;
   return d>=2 ? '+'+Math.ceil((d-1)*100) : '-'+Math.floor(100/(d-1)); }
-const floorTxt=c=>{ const f=floorPrice(c.mp, MIN_EDGE, c.conf&&c.conf.score); return f?`<span class="bcfloor" title="still a bet down to this price — if the slip shows a worse price, skip it">bet at <b>${f}</b> or better</span>`:''; };
+const floorTxt=c=>{ const f=floorPrice(c.mp, MIN_EDGE, c.conf&&c.conf.score, c.prop&&c.prop.push); return f?`<span class="bcfloor" title="still a bet down to this price — if the slip shows a worse price, skip it">bet at <b>${f}</b> or better</span>`:''; };
 // ✕ Skip (user, 2026-10-21: "should it be a removed button … when i recheck for bets it doesnt pop up again"): a bet you pass
 // on stays out of this list for that game — through re-pulls — keyed game + player + stat like the one-bet-per-stat rule;
 // "↩ Bring back" undoes it. Kept 8 days. (Your card on the game tab still shows the whole game.)
@@ -3438,14 +3461,16 @@ function propCandidates(){
       const two=x?x:(!alt&&line===pm.line?pm:null);   // no other-book line: that book's own two-way price is the market
       if(mo==null && two){ const io=americanToProb(two.over), iu=americanToProb(two.under); if(io>0&&iu>0){ mo=io/(io+iu); src='fd'; } }
       const mkt=mo!=null?(sd==='O'?mo:1-mo):null;
-      out.push({key:p._key, label:p.name, abbr:p._abbr, market:propMktKey(s,sd,line), odds, book:x?x.book:bookOfTk(tkFor(curGameId(), propMktKey(s,sd,line), p._key, odds)), mp:mkt!=null?blendP(mkt,model,PROP_W):model, model, mkt, mktSrc:src, ref:p, prop:{s,side:sd,line,mu,med,alt}}); };
+      out.push({key:p._key, label:p.name, abbr:p._abbr, market:propMktKey(s,sd,line), odds, book:x?x.book:bookOfTk(tkFor(curGameId(), propMktKey(s,sd,line), p._key, odds)), mp:mkt!=null?blendP(mkt,model,PROP_W):model, model, mkt, mktSrc:src, ref:p, prop:{s,side:sd,line,mu,med,alt,push:pr.push}}); };
     if(pm.line!=null){ side('O',pm.line,pm.over); side('U',pm.line,pm.under); }
     for(const x of (pm.books||[])) if(x.line!==pm.line){ side('O',x.line,x.over,false,x); side('U',x.line,x.under,false,x); }
     for(const a of (pm.alts||[])) side('O',a.line,a.odds,true);
   }
   return out;
 }
-function propEval(c){ const r=evalBet(c.mp,c.odds); if(!r) return null; const conf=propConfidence(c.ref,c.prop.s,r,c.prop.mu);
+// fix 10 (2026-11-11 audit): on a whole-number line the chance is "given no push", so the EV was too high by the push's share
+// (a 3.5% EV with an 18% push is 2.9%). The EV shown and tested is now x (1 - push); the stake (Kelly) doesn't change.
+function propEval(c){ const r=evalBet(c.mp,c.odds); if(!r) return null; r.ev*=1-(c.prop.push||0); const conf=propConfidence(c.ref,c.prop.s,r,c.prop.mu);
   return {...c, ...r, conf, tier:propTier(r), kelly:r.edge>0?conf.score*r.edge/(1-r.bimp):0, cal:1, prior:false,
     role:`model line ${fmtStat(c.prop.med)}${c.prop.alt?' · ladder rung':''}`}; }
 

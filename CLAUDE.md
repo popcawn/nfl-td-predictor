@@ -252,6 +252,23 @@ See README.md for what the model does and how it was validated.
   out games 3 credits a run -> 0 between checks; $15 of room: old alerted $27, new $14.50; logged bets move from held to
   riding; hold ends after 3 h) and in two local windows (NBA bet -> NFL list re-fits; log / stake edit / delete cross over).
   NBA / NHL apps still only redraw their bankroll box on another sport's bets (paper only) — same fix if they go real.
+- 🔎 AUDIT FIXES 6-12 (2026-11-11, user: "fix 6 through 12"). (6) TWO LOOKS: a mid-game result settles only when a later
+  check, >= MID_CONFIRM_MS (4 min) after the first, agrees — b.midSeen = {r, t}; a result that goes away (a TD or catch taken
+  back on review) clears it; the final clears it too. Note line "⏱ N bets decided mid-game — settled once the next check
+  agrees". (7) legResult counts a scorer's TDs from the scoring plays too (clean name <= 4 words, his team; max with the box
+  score): an offensive player's fumble-recovery TD has no box-score line. (8) espnResult fetches no-store and returns R.done
+  from the summary's OWN status; a scoreboard-final game whose summary isn't final is not graded or cached (a missing status
+  counts as final). (9) syncNow(follow): after a write this window syncs once more 8 s later (follow === true never chains —
+  two devices' tombstone key order can differ, so chaining could ping-pong). (10) whole-number prop lines: EV x (1 - push)
+  in propEval and in watch.mjs (prop.push from propSides); floorPrice takes the push (app + bot, keep identical); Kelly is
+  unchanged. (11) blendP clamps 0.003 / 0.997 on both ends (app + bot). (12) 1st / last / 2+ TD: an anchor from fewer than
+  TD_SHAPE_MIN (8) priced players — or none — is "thin": priced and shown, tier "dart", never carded; the slip / parlay
+  paths still use the 4-row anchor; anytime unchanged. Tested: bot old vs new on mocked pulls (309 candidates identical on
+  half-point lines; whole-number lines EV = old x (1 - push), same chance and rank); app with a fake Odds API (7 priced -> off
+  the card, 8 -> on; whole-number line EV 16.1% vs 18.6% unadjusted), a fake ESPN (TD seen once -> pending; overturned ->
+  pending again; confirmed 5 min later -> win; scoreboard final + summary not -> nothing graded; then 45 rush yds win,
+  fumble-recovery TD win) and a fake gist (GET+PATCH, one GET 8 s later that brought in another device's bet, then silence).
+  NBA / NHL sync has the same read-merge-write race (not changed).
 - FULL RUN-THROUGH 2026-11-07 (user: "run through full sim and find bugs"; local copy, mocked odds, 0 credits; 15 graded test
   bets on JAX@BAL all right). Fixed: (1) the slip's ➕ Add leg / Best pick (priceableLegs) and a TD bet logged by hand (addBet)
   used the MODEL ALONE (p[market]); they now take lastAnchors() like gameOptions — any new place that prices a TD bet must too

@@ -99,7 +99,7 @@ const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const americanToDec = a => { a = +a; if (!a) return null; return a > 0 ? 1 + a / 100 : 1 + 100 / (-a); };
 const americanToProb = a => { a = +a; if (!a) return null; return a > 0 ? 100 / (a + 100) : (-a) / ((-a) + 100); };
 const logit = p => Math.log(p / (1 - p)), expit = x => 1 / (1 + Math.exp(-x));
-const blendP = (mkt, model, w) => expit((1 - w) * logit(clamp(mkt, 0.003, 0.995)) + w * logit(clamp(model, 0.003, 0.995)));
+const blendP = (mkt, model, w) => expit((1 - w) * logit(clamp(mkt, 0.003, 0.997)) + w * logit(clamp(model, 0.003, 0.997)));   // the app's (same clamp on both ends since 2026-11-11)
 const median = a => { const s = a.slice().sort((x, y) => x - y), n = s.length; return n ? (n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2) : null; };
 const normName = s => String(s || '').toLowerCase().replace(/[.'`]/g, '').replace(/\b(jr|sr|ii|iii|iv|v)\b/g, '').replace(/[^a-z]/g, '').trim();
 const fmtAm = v => (v > 0 ? '+' : '') + v;
@@ -108,8 +108,8 @@ const probToAm = p => p >= 0.5 ? Math.round(-100 * p / (1 - p)) : Math.round(100
 const evalBet = (mp, price) => { const dec = americanToDec(price), bimp = americanToProb(price); if (!dec || mp == null) return null; return { ev: mp * (dec - 1) - (1 - mp), edge: mp - bimp, bimp, dec }; };
 // the worst price that still clears the card's EV bar AND still sizes (¼ Kelly on the confidence-adjusted edge reaches
 // MIN_STAKE, else the card drops it as "edge too thin to size") — app: floorPrice, keep identical (2026-11-07)
-const floorPrice = (p, conf) => { if (!(p > 0 && p < 1)) return null; const k = conf > 0 ? MIN_STAKE / KELLY_FRAC / conf : 0; if (k && !(p > k)) return null;
-  const d = Math.max(1.03 / p, k ? (1 - k) / (p - k) : 0) + 1e-9; return d >= 2 ? '+' + Math.ceil((d - 1) * 100) : '-' + Math.floor(100 / (d - 1)); };
+const floorPrice = (p, conf, push) => { if (!(p > 0 && p < 1)) return null; const k = conf > 0 ? MIN_STAKE / KELLY_FRAC / conf : 0; if (k && !(p > k)) return null;
+  const d = Math.max((1 + 0.03 / (1 - (push || 0))) / p, k ? (1 - k) / (p - k) : 0) + 1e-9; return d >= 2 ? '+' + Math.ceil((d - 1) * 100) : '-' + Math.floor(100 / (d - 1)); };
 function cleanName(s) {
   return String(s)
     .replace(/[+\-−–—]\s?\d{2,6}/g, ' ').replace(/\b\d+\s*\/\s*\d+\b/g, ' ')
@@ -367,9 +367,10 @@ function propCandidates(body, idx, G, wind) {
       const model = sd === 'O' ? pr.over : pr.under; let mo = propCons(cf && cf.p, s, line, mu), src = mo != null ? (cf.p[line] != null ? 'books' : 'near') : null;
       if (mo == null && two) { const io = americanToProb(two.O.price), iu = americanToProb(two.U.price); if (io > 0 && iu > 0) { mo = io / (io + iu); src = 'own'; } }
       const mkt = mo != null ? (sd === 'O' ? mo : 1 - mo) : null, mp = mkt != null ? blendP(mkt, model, PROP_W) : model, r = evalBet(mp, off.price); if (!r) return;
+      r.ev *= 1 - pr.push;   // a whole-number line can push: the EV counts the refund (the app's propEval, 2026-11-11)
       const conf = propConfidence(p, s, r, mu, wind);
       out.push({ key: p._key, abbr: p._abbr, name: p.name, market: `P|${s}|${sd}|${line}`, price: off.price, book: off.b, link: slipLink(off.b, off.o), mp, model, mkt, src,
-        nOth: src === 'books' ? cf.n[line] : 0, ...r, conf, tier: propTier(r), rk: r.edge > 0 ? conf * r.edge / (1 - r.bimp) : 0, prop: { s, side: sd, line, mu, med } });
+        nOth: src === 'books' ? cf.n[line] : 0, ...r, conf, tier: propTier(r), rk: r.edge > 0 ? conf * r.edge / (1 - r.bimp) : 0, prop: { s, side: sd, line, mu, med, push: pr.push } });
     };
     side('O', main.line, main.O, main); side('U', main.line, main.U, main);
     for (const [b, m] of mains) if (m.line !== P.line) { side('O', m.line, m.O, m); side('U', m.line, m.U, m); }   // another of your books' own line
@@ -589,7 +590,7 @@ async function main() {
       for (const x of fresh.slice(n)) if (cache.games[x.game]) cache.games[x.game][isProp(x.market) ? 't' : 'tdT'] = 0;
       break; }
     const [a, h] = c.game.split('@'), stake = usdOf(c) != null ? usdTxt(usdOf(c)) : `${c.stake.toFixed(1)}u (1u = 1% of your bankroll)`;
-    const book = bookName(c.book), floor = floorPrice(c.mp, c.conf), when = `${S.teams[a].short} @ ${S.teams[h].short}, ${etTime(c.ko)}`;
+    const book = bookName(c.book), floor = floorPrice(c.mp, c.conf, c.prop && c.prop.push), when = `${S.teams[a].short} @ ${S.teams[h].short}, ${etTime(c.ko)}`;
     let why;
     if (!isProp(c.market)) why = `The other books (${c.nOth}) have him around ${fmtAm(probToAm(c.ip))}; fair chance ${pct(c.mp)} → EV +${(c.ev * 100).toFixed(0)}%.`;
     else { const { s, med } = c.prop, proj = `${med.toFixed(s === 'rec' ? 1 : 0)} ${PROP_UNIT[s]}`;
