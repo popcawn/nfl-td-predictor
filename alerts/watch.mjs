@@ -18,7 +18,8 @@
 //     on the confidence-adjusted edge, 4% team cap.
 // Not here (they need the app's Monte Carlo sim): 1st / last / 2+ TD and defense TDs.
 //
-// Credits: 1 per market per game that has prices (a market no book has posted yet is free). Anytime TD: every run. Props (5
+// Credits: 1 per market per game that has prices (a market no book has posted yet is free). Anytime TD: every run within 6 h of
+// kickoff, every 25 min within 24 h, every 85 min within 72 h, every 3 h before that (TD_EVERY, since 2026-11-11). Props (5
 // markets): every run within 6 h of kickoff, hourly within 24 h, every 3 h within 72 h, every 6 h before that (PROP_EVERY);
 // between checks the card keeps the game's last prop prices (ALERT_CACHE, carried from run to run by the workflow's
 // actions/cache) so a TD never takes a slot a better prop holds. Only freshly pulled prices are alerted. Props pause below
@@ -57,6 +58,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const env = process.env, MODE = (env.ALERT_MODE || 'live').trim().toLowerCase();
 const num = (v, d) => v != null && String(v).trim() !== '' && !isNaN(+v) ? +v : d;
 const HOURS = num(env.ALERT_HOURS, 6), RESERVE = num(env.ALERT_RESERVE, 1000), PROP_RESERVE = num(env.ALERT_PROP_RESERVE, 10000);
+const HOLD_H = num(env.ALERT_HOLD_H, 3);
 const MAX_ALERTS = num(env.ALERT_MAX, 6), PROPS_ON = (env.ALERT_PROPS || 'on').trim().toLowerCase() !== 'off', DEBUG = !!env.ALERT_DEBUG;
 const BOOKS = (env.ALERT_BOOKS || 'fanduel,draftkings').split(',').map(s => s.trim()).filter(Boolean);
 const NTFY = (env.ALERT_NTFY || 'https://ntfy.sh').replace(/\/+$/, ''), TOPIC = (env.NTFY_TOPIC || '').trim(), STATE = (env.ALERT_STATE || '').trim().toLowerCase();
@@ -73,6 +75,17 @@ const PROP_UNIT = { rec: 'catches', recyd: 'yds', ryd: 'yds', rryd: 'yds', pyd: 
 // minutes between prop checks of a game, by hours to its kickoff (anytime TD: every run). Runs come every 30 min, so 55 =
 // every other run (hourly), 175 = every 6th (3 h), 355 = every 12th (6 h)
 const PROP_EVERY = h => h <= 6 ? 0 : h <= 24 ? 55 : h <= 72 ? 175 : 355;
+// ANYTIME TD CADENCE (2026-11-11 audit, user: "Fix 2, 3, 4 and 5 now"): the TD market was pulled for every game in the 168 h
+// window on EVERY run — about 15 games x 64 runs a day, ~29K of the ~43K credits a month. Now by hours to kickoff: every run
+// within 6 h, every 25 min within 24 h, every 85 min within 72 h, every 175 min before that (cache.games[gid].tdT = last TD
+// pull). A game whose TD board can't make a card yet (fewer than 4 priced players) and is more than a day out waits 2 h more.
+const TD_EVERY = h => h <= 6 ? 0 : h <= 24 ? 25 : h <= 72 ? 85 : 175;
+// PROPS NEED TWO OUTSIDE BOOKS (2026-11-11 audit): with all five of your books on, "the other books" are a few small ones, and
+// ONE of them posting a line became the whole market at 90% weight. A line fewer than PROP_MIN_BOOKS outside books post has no
+// consensus (the nearest line that does, else the book's own two-way price — which never shows an edge). 2025 closes, rec +
+// rush yds: one outside book was no more accurate than the target book's own price in either half (Brier .2499/.2500 vs
+// .2499/.2497). The app's fillBoard applies the same rule — keep them equal.
+const PROP_MIN_BOOKS = 2;
 // QUIET HOURS, Eastern time (2026-11-06, user: "stops running at 10pm est, then starts back up at 6am est"): ALERT_QUIET '22-6' =
 // live runs from 22:00 to 05:59 ET check nothing (no credits, no buzz). No NFL game kicks off then; the 6 AM run re-checks
 // every game whose props are due. Simulated: ~30% fewer credits (30-min timer: ~870/day instead of ~1,230)
@@ -333,7 +346,7 @@ function propCandidates(body, idx, G, wind) {
   const consFor = new Map();
   for (const [s, C] of Object.entries(cons)) for (const [name, lines] of Object.entries(C)) { const p = matchPlayer(cleanName(name), idx); if (!p) continue;
     const k = s + '|' + p._key, o = consFor.get(k) || { p: {}, n: {} }; consFor.set(k, o);
-    for (const [l, xs] of Object.entries(lines)) if (xs.length) { o.p[l] = median(xs); o.n[l] = xs.length; } }
+    for (const [l, xs] of Object.entries(lines)) if (xs.length >= PROP_MIN_BOOKS) { o.p[l] = median(xs); o.n[l] = xs.length; } }
   const out = [], rank = b => BOOKS.indexOf(b);
   for (const [s, N] of Object.entries(mineAll)) for (const [name, arr] of Object.entries(N)) {
     if (!PSTAT.includes(s)) continue;
@@ -468,7 +481,7 @@ function loadCache() {
 }
 function saveCache(c) {
   if (!CACHE_FILE || MODE !== 'live') return;   // a dry run must not make the next live run think its props are fresh
-  for (const [g, x] of Object.entries(c.games)) if (!(Date.parse(x.ko) > NOW) || !(NOW - x.t < 12 * 3600e3)) delete c.games[g];
+  for (const [g, x] of Object.entries(c.games)) if (!(Date.parse(x.ko) > NOW) || !(NOW - Math.max(x.t || 0, x.tdT || 0) < 12 * 3600e3)) delete c.games[g];
   for (const [g, x] of Object.entries(c.wx)) if (!(NOW - x.t < 3 * 3600e3)) delete c.wx[g];
   for (const [k, x] of Object.entries(c.sent)) if (!(Date.parse(x.ko) > NOW)) delete c.sent[k];
   fs.mkdirSync(path.dirname(path.resolve(CACHE_FILE)), { recursive: true });
@@ -507,7 +520,7 @@ async function main() {
   const [sync, sent, sched] = await Promise.all([syncState(), sentBefore(), espnSchedule()]);
   for (const [k, x] of Object.entries(cache.sent)) sent.set(k, Math.max(sent.get(k) ?? -Infinity, x.p));   // alerts older than ntfy keeps
   const statusOf = p => inj.get(String(p.id)) || p.status || 'ACT';
-  const alerts = [], freshGames = new Set();
+  const alerts = [], freshGames = new Set(); let skipped = 0;
   for (const E of events) {
     if (creditsLeft != null && creditsLeft < RESERVE + 6) { log(`Stopping: ${creditsLeft} credits left, reserve ${RESERVE}.`); break; }
     const a0 = abbrOf(E.away_team), h0 = abbrOf(E.home_team); if (!a0 || !h0) continue;
@@ -516,6 +529,8 @@ async function main() {
     const away = g.away, home = g.home, gid = away + '@' + home, hrs = (Date.parse(E.commence_time) - NOW) / 3.6e6;
     const C = cache.games[gid], propsOk = PROPS_ON && !!PM && !(creditsLeft != null && creditsLeft < PROP_RESERVE);
     const propsDue = propsOk && (!C || NOW - C.t >= PROP_EVERY(hrs) * 60e3);
+    const tdDue = !C || NOW >= (C.tdT || 0) + TD_EVERY(hrs) * 60e3;
+    if (!tdDue && !propsDue) { skipped++; continue; }   // nothing new to price for this game on this run: no pull, no credits
     const markets = ['player_anytime_td', ...(propsDue ? Object.keys(OA_PROP) : [])];
     let body; try { body = await oddsGet(`${ODDS_API}/events/${E.id}/odds?apiKey=${key}&regions=us&markets=${markets.join(',')}&oddsFormat=american&includeLinks=true&includeSids=true`); }
     catch (e) { log(gid, e.message); continue; }
@@ -529,11 +544,12 @@ async function main() {
       props = propCandidates(body, idx, { away, home, imp }, wx.outdoor ? wx.wind : 0);
       cache.games[gid] = { t: NOW, ko: E.commence_time, props: props.map(slimProp) }; freshGames.add(gid);
       propNote = `${props.length} prop prices`;
-    } else if (C) {   // between prop checks: the last prop prices hold their places on the card (never alerted from here)
+    } else if (C && C.t) {   // between prop checks: the last prop prices hold their places on the card (never alerted from here)
       const out = new Set(roster.filter(p => p._status === 'OUT').map(p => p._key));
       props = C.props.filter(c => !out.has(c.key)).map(c => ({ ...c, stale: true }));
       propNote = `${props.length} prop prices from ${Math.round((NOW - C.t) / 60e3)} min ago`;
     } else propNote = propsOk ? 'props not checked' : 'props off';
+    cache.games[gid] = { ...(cache.games[gid] || { t: 0, ko: E.commence_time, props: [] }), tdT: !td.cands.length && hrs > 24 ? NOW + 2 * 3600e3 : NOW };
     const logged = sync ? sync.nflOpen.filter(b => b.game === gid) : [];
     const { picks, edges } = gameCard(td.cands.concat(props), logged);
     const newPicks = picks.filter(c => !c.bet && !c.stale).map(c => ({ ...c, game: gid, ko: E.commence_time }));
@@ -555,9 +571,14 @@ async function main() {
   // 💰 BANKROLL LIMIT (the app's fitRoom): money on open bets across NFL, NBA and NHL never goes above your bankroll — new
   // bets take the room biggest $ first; the rest wait (no alert) until settled bets free some up. Off when the app's limit is off.
   if (sync && sync.lim && sync.bank != null && sync.unitUsd) {
-    let left = sync.bank - sync.riding; const fit = [], wait = [];
+    // 🔒 ROOM HELD FOR EARLIER ALERTS (2026-11-11 audit): a bet alerted in an earlier run and placed, but not in the synced log
+    // yet, wasn't counted — two runs could each fill the same room ($38 + $38 on $40 left). An alert's dollars now hold their
+    // room for ALERT_HOLD_H (3 h) or until the bet shows up in the log (then it is in "riding") or its game kicks off.
+    const inLog = id => sync.nflOpen.some(b => b.game + '|' + b.key + '|' + b.market === id);
+    const held = Object.values(cache.sent).filter(x => x.usd > 0 && NOW - x.t < HOLD_H * 3600e3 && Date.parse(x.ko) > NOW && !inLog(x.bet)).reduce((s, x) => s + x.usd, 0);
+    let left = sync.bank - sync.riding - held; const fit = [], wait = [];
     for (const c of fresh.slice().sort((a, b) => usdOf(b) - usdOf(a))) { if (usdOf(c) <= left + 1e-9) { fit.push(c); left -= usdOf(c); } else wait.push(c); }
-    log(`bankroll: ${usdTxt(sync.riding)} of ${usdTxt(sync.bank)} in play · ${fit.length} new bet(s) fit${wait.length ? `, ${wait.length} wait for room (${wait.map(c => c.name).join(', ')})` : ''}`);
+    log(`bankroll: ${usdTxt(sync.riding)} of ${usdTxt(sync.bank)} in play${held ? ` + ${usdTxt(held)} held for earlier alerts not in your log yet` : ''} · ${fit.length} new bet(s) fit${wait.length ? `, ${wait.length} wait for room (${wait.map(c => c.name).join(', ')})` : ''}`);
     fresh = fit;
   } else if (!sync) log('bankroll: unknown (no SYNC_TOKEN) — every bet alerted, stakes in units');
   fresh.sort((a, b) => b.rk - a.rk);
@@ -565,7 +586,7 @@ async function main() {
   for (const c of fresh) {
     if (n >= MAX_ALERTS) {   // the rest go next run: a game whose props weren't sent is checked again then
       log(`alert cap reached for this run — ${fresh.length - n} more next run`);
-      for (const x of fresh.slice(n)) if (isProp(x.market) && cache.games[x.game]) cache.games[x.game].t = 0;
+      for (const x of fresh.slice(n)) if (cache.games[x.game]) cache.games[x.game][isProp(x.market) ? 't' : 'tdT'] = 0;
       break; }
     const [a, h] = c.game.split('@'), stake = usdOf(c) != null ? usdTxt(usdOf(c)) : `${c.stake.toFixed(1)}u (1u = 1% of your bankroll)`;
     const book = bookName(c.book), floor = floorPrice(c.mp, c.conf), when = `${S.teams[a].short} @ ${S.teams[h].short}, ${etTime(c.ko)}`;
@@ -582,11 +603,12 @@ async function main() {
       ...(c.link ? { click: c.link, actions: [{ action: 'view', label: `Open in ${book}`, url: c.link, clear: true }] }
         : BOOK_HOME[c.book] ? { actions: [{ action: 'view', label: `Open ${book} (find him)`, url: BOOK_HOME[c.book], clear: true }] } : {})
     });
-    if (MODE === 'live') for (const k of idsOf(idOf(c), titleOf(c))) cache.sent[k] = { p: Math.max(cache.sent[k] ? cache.sent[k].p : -Infinity, c.price), ko: c.ko };
+    if (MODE === 'live') idsOf(idOf(c), titleOf(c)).forEach((k, i) => { cache.sent[k] = { p: Math.max(cache.sent[k] ? cache.sent[k].p : -Infinity, c.price), ko: c.ko,
+      ...(i ? {} : { usd: usdOf(c) || 0, t: NOW, bet: c.game + '|' + c.key + '|' + c.market }) }; });   // the dollars ride on the first id only (held room)
     n++; log(`alert: ${titleOf(c)} · EV +${(c.ev * 100).toFixed(1)}% · ${stake}`);
   }
   cache.lastRun = NOW; saveCache(cache);
   if (env.ALERT_DUMP) fs.writeFileSync(env.ALERT_DUMP, JSON.stringify(DUMP, null, 1));
-  log(`${n} alert(s) ${MODE === 'dry' ? 'printed' : 'sent'} · props checked for ${freshGames.size} game(s) · credits used ${creditsUsed}${creditsLeft != null ? ` · ${creditsLeft} left` : ''}`);
+  log(`${n} alert(s) ${MODE === 'dry' ? 'printed' : 'sent'} · props checked for ${freshGames.size} game(s)${skipped ? ` · ${skipped} game(s) not due` : ''} · credits used ${creditsUsed}${creditsLeft != null ? ` · ${creditsLeft} left` : ''}`);
 }
 main().catch(e => { console.error('❌', e.message); process.exit(1); });

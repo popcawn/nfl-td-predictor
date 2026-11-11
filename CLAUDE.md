@@ -236,6 +236,22 @@ See README.md for what the model does and how it was validated.
   had them; the user's Chrome had all 5 books and the same markets as the bot. No backtest covers betting days ahead; the
   user's own log (712 NFL bets) beat the close by +12.1% avg (67% of bets) when placed 3+ days out, +5-6% at 6 h-3 days, +0.1%
   under 1 h — CLV supports looking ahead; ROI by lead time is still noise.
+- 🔎 CODE AUDIT 2026-11-11 (the user pasted an audit brief, then: "Fix 2, 3, 4 and 5 now"; finding 1 — the anytime-TD rule's
+  flagged bets went −26% on 2025 closes while claiming +14% — is to be reassessed after week 10's games, NOT changed).
+  (2) PROPS NEED TWO OUTSIDE BOOKS: PROP_MIN_BOOKS = 2 in fillBoard (the freshP line) and in watch.mjs (consFor) — keep them
+  equal. A line only one non-user book posts has no consensus (nearest line with one, else the book's own two-way price = no
+  edge). 2025 closes: one outside book no better than the target's own price in either half. (3) ALERTS HOLD THEIR ROOM:
+  cache.sent keeps {usd, t, bet} on an alert's first id; the bankroll-limit block subtracts alerts younger than ALERT_HOLD_H (3 h)
+  whose bet isn't in the synced log and whose game hasn't kicked off. (4) OTHER WINDOWS: the storage listener merges another
+  NFL window's log (takeOtherWindow -> mergeRecs + its tombstones; nothing written back) and re-fits the lists when NBA / NHL
+  bets change; "📓 Log the N new" re-checks fitRoom at the click. ANY NEW STORAGE KEY THAT MOVES THE POT MUST RE-RUN renderWeek
+  there. (5) TD CADENCE: watch.mjs TD_EVERY (every run <= 6 h, 25 min <= 24 h, 85 min <= 72 h, else 175) with
+  cache.games[gid].tdT; a game with nothing due is skipped (no pull); a TD board under 4 priced players more than a day out
+  waits 2 h more; the alert cap resets tdT as well as t. Also: the ⚡ status line counted bets waiting for room as "already in
+  your log" (now P.length − ALLNEW.length). Tested with mocked odds, 0 credits (scratch test-audit-bot.mjs, test-held.mjs: 3-day-
+  out games 3 credits a run -> 0 between checks; $15 of room: old alerted $27, new $14.50; logged bets move from held to
+  riding; hold ends after 3 h) and in two local windows (NBA bet -> NFL list re-fits; log / stake edit / delete cross over).
+  NBA / NHL apps still only redraw their bankroll box on another sport's bets (paper only) — same fix if they go real.
 - FULL RUN-THROUGH 2026-11-07 (user: "run through full sim and find bugs"; local copy, mocked odds, 0 credits; 15 graded test
   bets on JAX@BAL all right). Fixed: (1) the slip's ➕ Add leg / Best pick (priceableLegs) and a TD bet logged by hand (addBet)
   used the MODEL ALONE (p[market]); they now take lastAnchors() like gameOptions — any new place that prices a TD bet must too

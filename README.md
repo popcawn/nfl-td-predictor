@@ -173,9 +173,10 @@ Tap the alert and the bet opens in your book's slip — you check the price and 
   2+ TD and defense TDs (they need the app's simulation). Each bet is alerted once (again only if its price gets better).
   On 2025's real prices the TD rule (flat, EV over 3%) went +18% in weeks 1–9 and +2% in weeks 10–18 at closing prices; the
   props rule has no ROI test — **unproven**; your CLV says whether it works.
-- **Credits:** 1 per market per game that has prices (unposted markets are free). Anytime TD: EVERY game on every run (an
-  outside timer, cron-job.org, calls the workflow; GitHub's own timer is a 2-hour backup that stands down when a run just
-  happened). Props (5 markets): every run within 6 h of kickoff, hourly within 24 h, every 3 h within 72 h, every 6 h before
+- **Credits:** 1 per market per game that has prices (unposted markets are free). Anytime TD: by hours to kickoff since 2026-11-11 —
+  every run within 6 h, every 25 min within 24 h, every 85 min within 72 h, every 3 h before that (it used to be every game on
+  every run, about two thirds of the credits). An outside timer, cron-job.org, calls the workflow; GitHub's own timer is a
+  2-hour backup that stands down when a run just happened. Props (5 markets): every run within 6 h of kickoff, hourly within 24 h, every 3 h within 72 h, every 6 h before
   that; between checks the workflow's cache keeps each game's last prop prices so the card still counts them (only freshly
   pulled prices are alerted). **Quiet hours** (since 2026-11-06): no checks 10 PM – 6 AM Eastern (`ALERT_QUIET`; no NFL game
   kicks off then, and the 6 AM run re-checks everything). Simulated on a typical week (TD posted 6 days out, props 4):

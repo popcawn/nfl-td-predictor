@@ -2389,7 +2389,20 @@ function renderPotChip(now){ const c=$('potChip'); if(!c) return; const AB=allBe
     (onG.length?st('','This game', exactUsd(gUsd), 'staked on the game you have open'):'');
   try{ const sh=c.innerHTML.replace(/<div class="stat [^"]*" title="staked on the game you have open">[\s\S]*$/, ''); localStorage.setItem('sims_chip', sh); }catch(e){} }
 // another app (NBA / NHL) in another tab changed the pot or its bets -> redraw
-window.addEventListener('storage', e=>{ if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderBank(); try{ if(LAST) computeTopPlays(); renderSlip(); renderBets(); renderWeek(); if(SLATE) renderSlate(); }catch(err){} } else if(e.key==='nbap_bets'||e.key==='nhlp_bets') renderBank(); });
+window.addEventListener('storage', e=>{ if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderBank(); try{ if(LAST) computeTopPlays(); renderSlip(); renderBets(); renderWeek(); if(SLATE) renderSlate(); }catch(err){} }
+  else if(e.key==='nbap_bets'||e.key==='nhlp_bets'){ renderBank(); try{ if(LAST) computeTopPlays(); renderWeek(); if(SLATE) renderSlate(); }catch(err){} }
+  else if(e.key==='nfltd_bets') takeOtherWindow(); });
+// 🪟 ANOTHER WINDOW CHANGED THE LOG (2026-11-11 audit): this window kept its own copy of the bet log, so (1) a bet logged in a
+// second NFL window didn't count as riding here, and this window's next save wrote the log back WITHOUT it; (2) an NBA / NHL
+// bet only redrew the bankroll box — the ⚡ list kept bets that no longer fit. Now the other window's log is merged in (newest
+// edit of a bet wins, deletions follow its tombstones — the ☁ Sync merge) and the lists are re-fitted. Nothing is written
+// back here, so two windows can't ping-pong.
+function takeOtherWindow(){ let theirs; try{ theirs=JSON.parse(localStorage.getItem('nfltd_bets')||'[]'); }catch(e){ return; } if(!Array.isArray(theirs)) return;
+  const t=lsGet('nfltd_tomb',null)||{}; for(const [k,v] of Object.entries(t.bets||{})) if(!(TOMB.bets[k]>=v)) TOMB.bets[k]=v;
+  const before=JSON.stringify(bets);
+  bets=mergeRecs(bets, theirs, betKey, TOMB.bets).sort((x,y)=>String(y.ts).localeCompare(String(x.ts)));
+  betSnap=snapOf(bets, betKey); if(JSON.stringify(bets)===before) return;
+  renderBets(); try{ if(LAST) computeTopPlays(); renderWeek(); if(SLATE) renderSlate(); }catch(err){} }
 function setBank(v){ const lim=BANK.lim; BANK = v>0 ? {amt:+(+v).toFixed(2), at:Date.now(), mt:Date.now()} : {amt:null, at:0, mt:Date.now()}; if(lim===false) BANK.lim=false; lsW('nfltd_bank', BANK); syncSoon(); if(LAST) computeTopPlays(); renderSlip(); renderBets(); try{ if(SLATE) renderSlate(); }catch(e){} }
 // all five of your books by default (user, 2026-10-24: "is it intentional to have betmgm turned off" — no: the list is
 // saved per device and a new device started with FanDuel + DraftKings only, while the real-price test found the edge in
@@ -2507,6 +2520,12 @@ function lastAnchors(){ const pl=LAST.awayR.concat(LAST.homeR), a={}; for(const 
 // book consensus from a multi-book pull: TD = median implied prob of every book except your best-priced one (the price judged);
 // props = median de-vigged P(over) of the other books at FanDuel's line
 const ipOf=a=>a>0?100/(a+100):-a/(-a+100);
+// PROPS NEED TWO OUTSIDE BOOKS (2026-11-11 audit, user: "Fix 2, 3, 4 and 5 now"): with all five of your books on, the "other
+// books" are a few small ones, and ONE of them posting a line became the whole market at 90% weight. A line fewer than
+// PROP_MIN_BOOKS outside books post gets no consensus: propCons then uses the nearest line that has one, else the book's own
+// two-way price (never an edge). 2025 closes: one outside book was no more accurate than the target book's own price in
+// either half (Brier .2499/.2500 vs .2499/.2497). alerts/watch.mjs has the same constant — keep them equal.
+const PROP_MIN_BOOKS=2;
 const median=a=>{ const s=a.slice().sort((x,y)=>x-y), n=s.length; return n?(n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2):null; };
 function consensusFrom(books){
   const td={}, pr={}, mine=myBooks();   // your books' prices are what gets judged; the rest are the market
@@ -2553,7 +2572,7 @@ function fillBoard(L, d, gid){
     else { const [a,b]=k.split('|'); if(a==='P' ? stIn.has(b) : tdIn.has(a)) delete L.mktMap[k]; } }
   for(const [mk,o] of Object.entries(C2.td)) for(const [name,c] of Object.entries(o)){ const p=matchPlayer(cleanName(name), idx); if(p) L.mktMap[mk+'|'+p._key]={ip:c.ip, n:c.n}; }
   // a pull REPLACES each player's prop consensus (lines move; an old line's consensus mustn't outlive the pull)
-  const freshP={}; for(const [st,o] of Object.entries(C2.props)) for(const c of Object.values(o)){ const p=matchPlayer(cleanName(c.name), idx); if(p) (freshP['P|'+st+'|'+p._key]=freshP['P|'+st+'|'+p._key]||{})[c.line]=c.fairOver; }
+  const freshP={}; for(const [st,o] of Object.entries(C2.props)) for(const c of Object.values(o)){ const p=matchPlayer(cleanName(c.name), idx); if(p && c.n>=PROP_MIN_BOOKS) (freshP['P|'+st+'|'+p._key]=freshP['P|'+st+'|'+p._key]||{})[c.line]=c.fairOver; }
   Object.assign(L.mktMap, freshP);
   for(const [mk,arr] of Object.entries(d.td)) for(const o of arr){
     const p=matchPlayer(cleanName(o.name), idx); if(p){ L.bookMap[mk+'|'+p._key]=fmtAm(o.price); if(o.fd) L.mktMap['FD#'+mk+'#'+p._key]=o.fd; got.add(mk+'|'+p._key); n++; continue; }
@@ -3113,7 +3132,7 @@ function renderWeek(){
   if(!WEEK) return;
   const age=Math.round((now-WEEK.at)/60e3), P=WEEK.picks.filter(c=>(!c.kickoff||Date.parse(c.kickoff)>now) && !heldSameStat(c.game, c) && !SKIP[skipKey(c.game, c)]);   // kicked-off games drop out; so does a stat you already bet
   const isNew=c=>!bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&b.market===c.market), ALLNEW=P.filter(isNew), WR=fitRoom(ALLNEW, c=>roundUsd(c.stake*(unitUsd()||0))), NEW=ALLNEW.filter(c=>WR.fit.includes(c)), nNew=NEW.length, tot=NEW.reduce((a,c)=>a+c.stake,0);
-  let h= !P.length ? cardStat('none',ah?'NO BETS RIGHT NOW':'NO BETS THIS WEEK','nothing at your books clears the bar') : nNew ? cardStat('new',`🆕 ${nNew} NEW BET${nNew>1?'S':''}`, `${stakesTxt(NEW)} · ${(tot/getBankroll()*100).toFixed(1)}% of bankroll${P.length-nNew?` · ${P.length-nNew} already in your log`:''}`) : cardStat('done','✅ NO NEW BETS',`${P.length>1?'all '+P.length+' are':'it\'s'} already in your log`);
+  let h= !P.length ? cardStat('none',ah?'NO BETS RIGHT NOW':'NO BETS THIS WEEK','nothing at your books clears the bar') : nNew ? cardStat('new',`🆕 ${nNew} NEW BET${nNew>1?'S':''}`, `${stakesTxt(NEW)} · ${(tot/getBankroll()*100).toFixed(1)}% of bankroll${P.length-ALLNEW.length?` · ${P.length-ALLNEW.length} already in your log`:''}`) : cardStat('done','✅ NO NEW BETS',`${P.length>1?'all '+P.length+' are':'it\'s'} already in your log`);
   h+=`<div class="muted" style="font-size:13px;margin:-2px 0 8px">${WEEK.n} game${WEEK.n===1?'':'s'} checked ${age<1?'just now':age<60?age+' min ago':Math.round(age/60)+' h ago'}${age>60?' — <span style="color:var(--warn)">pull again for fresh prices</span>':''} · each game's bets are exactly what its card says · tap a bet to open its game</div>`;
   if(WR.out.length) h=(nNew?h:cardStat('done','💰 BANKROLL IN PLAY', `${WR.out.length} bet${WR.out.length>1?'s':''} wait${WR.out.length>1?'':'s'} for room`))+roomNote(WR);
   if(nNew) h+=`<div class="bacts"><button class="statussel" id="weekLog">📓 Log the ${nNew} new</button></div>`;
@@ -3132,7 +3151,8 @@ function renderWeek(){
   { const n=weekSkips().length; if(n) h+=`<div class="skipnote">${n} skipped this week <button class="statussel" id="unskip">↩ Bring ${n>1?'them':'it'} back</button></div>`; }
   if(WEEK.notes&&WEEK.notes.length) h+=`<div class="muted" style="font-size:12px;margin-top:10px">Skipped: ${WEEK.notes.map(esc).join(' · ')}</div>`;
   out.innerHTML=h;
-  const wl=$('weekLog'); if(wl) wl.onclick=()=>{ let n=0; for(const c of NEW) if(logBetFrom(Object.assign({}, c), c.stake, c.game)) n++; if(n){ saveBets(); renderBets(); } renderWeek(); };
+  // the room is checked again at the click: bets logged since this list was drawn (another tab, another sport) may have used it
+  const wl=$('weekLog'); if(wl) wl.onclick=()=>{ const ok=fitRoom(NEW, c=>roundUsd(c.stake*(unitUsd()||0))).fit; let n=0; for(const c of NEW) if(ok.includes(c) && logBetFrom(Object.assign({}, c), c.stake, c.game)) n++; if(n){ saveBets(); renderBets(); } renderWeek(); };
   out.querySelectorAll('.spick').forEach(el=>{ el.onclick=e=>{ if(e.target.closest('button,a')) return; const [a,hm]=el.dataset.g.split('@'); if(!S.teamList.includes(a)||!S.teamList.includes(hm)) return;
     $('awaySel').value=a; $('homeSel').value=hm; userPicked=true; onMatchupChange(); setTimeout(()=>goTo('mktSec'), 300); }; });
 }

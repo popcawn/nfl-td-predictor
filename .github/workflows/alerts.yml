@@ -3,7 +3,8 @@ name: Edge alerts
 # Pushes the bets Your card would make — anytime TD AND player props (receptions, receiving / rushing / rush+rec / passing
 # yards; props since 2026-11-06, user: "ntfy is only sending td picks") — to your phone (ntfy) for EVERY game on the board
 # (ALERT_HOURS 168 — since 2026-11-05, user: "i want to catch all nfl bets"; was the next 6 hours). It never places a bet.
-# Credits: 1 per market per game that has prices. Anytime TD every run; props (5 markets) every run within 6 h of kickoff,
+# Credits: 1 per market per game that has prices. Anytime TD every run within 6 h of kickoff, every 25 min within 24 h, every
+# 85 min within 72 h, every 3 h before that (TD_EVERY, 2026-11-11); props (5 markets) every run within 6 h of kickoff,
 # hourly within 24 h, every 3 h within 72 h, every 6 h before that. The cache below carries each game's last prop prices from
 # run to run, so between prop checks the card still knows them. Quiet hours 10 PM - 6 AM Eastern (ALERT_QUIET): those runs
 # check nothing. Setup and settings: README.md → "📲 Edge alerts".
