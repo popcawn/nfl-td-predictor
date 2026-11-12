@@ -88,6 +88,7 @@
   .mktbtn:hover{border-color:var(--accent)}
   .mktbtn.active{background:var(--accent);color:#04121f;border-color:var(--accent)}
   td.probcell.active{color:var(--ink);font-weight:800}
+  .wpnote{font-size:13px;color:var(--ink2);margin:6px 0 8px;line-height:1.4}
   .bookin{width:78px;font-family:var(--mono);font-size:13px;padding:5px 7px;text-align:right}
   .stkedit{background:none;border:0;border-bottom:1px dashed var(--ink2);border-radius:0;padding:0;margin:0;font:inherit;color:inherit;cursor:pointer} .stkedit:hover{color:var(--accent);border-bottom-color:var(--accent)}
   .ev-pos{color:var(--good);font-weight:800}
@@ -1530,6 +1531,45 @@ function evalBet(mp, oddsStr){
 // edge justifies AT THAT PRICE, which puts a +155 and a +3000 on the same footing. Sizing is 1/4
 // Kelly (the model is an estimate), at most 2 plays per team and a per-team cap (same-team scorers
 // win and lose together). Probabilities are the role-calibrated ones.
+// ===== 📅 WEEKLY BUDGET (user, 2026-11-12: "theres so many bets and i always go over my bankroll. is there anyway we can get
+// all of the bets we see and stay under for the full week" -> "take into account avg amount of bets per week along with
+// potential bets with an edge that i miss"). KEEP THIS BLOCK IDENTICAL in nfl-td-predictor.template.html, alerts/watch.mjs and
+// nhl-prop-predictor.template.html. Every stake = its full size (the card's ¼ Kelly) x m, so a week's stakes add up to
+// WEEK_BUDGET of the bankroll and every bet still shows:
+//  F    = full-size stakes (% of bankroll) of an average week: the last 3 weeks of every bet the card made — the ones you logged
+//         (b.full, else b.stake) plus every one the phone-alert bot found (nfl-flagged.json in the ☁ Sync gist), placed or not;
+//  base = min(1, WEEK_BUDGET x 100 / F);
+//  brake: what is left of this week's budget ($) over the full-size stakes still to come this week (F x the share of a week
+//         still ahead, WEEK_SHARE — measured on the user's own Oct 13 - Nov 9 log), so a busy week shrinks the later stakes;
+//  m    = min(base, brake). Weeks run Tuesday 00:00 - Monday 24:00 Eastern. Off before WEEK_FROM (m = 1).
+const WEEK_BUDGET=0.9, WEEK_FROM='2026-11-17', WEEK_SHARE=[[0,0],[24,.11],[48,.23],[72,.43],[96,.62],[120,.78],[132,.85],[144,.92],[156,.94],[168,1]];
+const ET_PARTS=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York', hourCycle:'h23', year:'numeric', month:'2-digit', day:'2-digit', weekday:'short', hour:'2-digit', minute:'2-digit'});
+function etWeek(t){ const p={}; for(const x of ET_PARTS.formatToParts(new Date(t))) p[x.type]=x.value; const wd=['Tue','Wed','Thu','Fri','Sat','Sun','Mon'].indexOf(p.weekday);
+  return {key:new Date(Date.UTC(+p.year, +p.month-1, +p.day-wd)).toISOString().slice(0,10), h:wd*24+(+p.hour%24)+(+p.minute)/60}; }
+function weekShare(h){ for(let i=1;i<WEEK_SHARE.length;i++){ const [h1,s1]=WEEK_SHARE[i], [h0,s0]=WEEK_SHARE[i-1]; if(h<=h1) return s0+(s1-s0)*(h-h0)/(h1-h0); } return 1; }
+function flagId(game, key, market){ const m=String(market||''); return game+'|'+key+'|'+(m.startsWith('P|')?m.split('|').slice(0,3).join('|'):m); }   // a prop at another line is the same bet
+// bets = every logged bet of every sport ({id, ts, usd, stake, full?, game, key, market, legs?}); flagged = nfl-flagged.json
+// ({weeks: {weekKey: {flagId: [full units, t]}}}); bank = the bankroll now ($)
+function weekPlan(now, bets, flagged, bank){
+  const W=etWeek(now); if(W.key<WEEK_FROM || !(bank>0)) return {on:false, m:1, key:W.key};
+  const per={}, add=(wk, id, u)=>{ if(!(u>0)) return; const o=per[wk]=per[wk]||{}; o[id]=Math.max(o[id]||0, u); };
+  for(const [wk,o] of Object.entries((flagged&&flagged.weeks)||{})) for(const [id,x] of Object.entries(o||{})) add(wk, id, +(x&&x[0])||0);
+  for(const b of bets||[]){ const t=Date.parse(b.ts); if(!t) continue; add(etWeek(t).key, (b.legs||!b.key)?'L|'+b.id:flagId(b.game, b.key, b.market), +(b.full!=null?b.full:b.stake)||0); }
+  const past=Object.keys(per).filter(k=>k<W.key).sort().slice(-3).map(k=>Object.values(per[k]).reduce((a,x)=>a+x, 0));
+  const F=past.length?past.reduce((a,x)=>a+x, 0)/past.length:100, base=Math.min(1, WEEK_BUDGET*100/Math.max(F, 1)), budget=WEEK_BUDGET*bank;
+  let spent=0; for(const b of bets||[]){ const t=Date.parse(b.ts); if(t && etWeek(t).key===W.key) spent+=+b.usd||0; }
+  const rest=F/100*bank*(1-weekShare(W.h)), left=Math.max(0, budget-spent), m=!(left>0)?0:rest>1e-9?Math.min(base, left/rest):base;
+  return {on:true, m, base, F, n:past.length, budget, spent, left, key:W.key};
+}
+// ===== end of the weekly budget block
+let WP=null, WPt=0;   // this week's plan, recomputed at most every 5 s (and after every save / another tab's change)
+function curPlan(){ if(WP&&Date.now()-WPt<5e3) return WP; try{ WP=weekPlan(Date.now(), allBets(), lsJ('nfltd_flagged', null), bankNow()); }catch(e){ WP={on:false, m:1, key:''}; } WPt=Date.now(); return WP; }
+// the line that says what this week's sizing is doing
+function budgetOut(){ try{ const P=curPlan(); return !!(P.on&&P.m<0.02); }catch(e){ return false; } }
+function wpNote(){ let P; try{ P=curPlan(); }catch(e){ return ''; } const $=x=>exactUsd(x);
+  if(!P.on) return P.key<WEEK_FROM?`<div class="wpnote">📅 From Tuesday Nov 17, every stake is sized so a whole week of bets fits ${Math.round(WEEK_BUDGET*100)}% of your bankroll — every bet still shows, just smaller</div>`:'';
+  if(P.m<0.02) return `<div class="wpnote">📅 <b>This week\'s budget is used up</b> — ${$(P.spent)} staked of ${$(P.budget)}. New bets start Tuesday 12 AM Eastern.</div>`;
+  return `<div class="wpnote" title="your last ${P.n} week${P.n===1?'':'s'} of bets (logged + the ones the phone alerts found) came to about ${Math.round(P.F)}% of your bankroll at full size; every stake is cut to fit ${Math.round(WEEK_BUDGET*100)}% a week, and a busy week cuts the later stakes more">📅 This week: stakes at <b>${Math.round(P.m*100)}%</b> of full size so the week fits ${$(P.budget)} — ${$(P.spent)} used${P.m<P.base-0.005?' · a busy week, so later stakes are smaller':''}</div>`; }
 const KELLY_FRAC=0.25, TEAM_CAP=0.04, MIN_STAKE=0.005, MAX_PER_TEAM=2;
 function getBankroll(){ const v=+$('bankroll').value; return v>0?v:100; }
 const cardStat=(cls,big,small)=>`<div class="cardstat ${cls}">${big}${small?` <span>${small}</span>`:''}</div>`;
@@ -1566,6 +1606,9 @@ function pickPlays(cands){
   for(const t of Object.keys(perTeam)){ const L=picks.filter(c=>c.abbr===t), tot=L.reduce((a,c)=>a+c.stake,0), cap=TEAM_CAP*bank;
     if(tot>cap) L.forEach(c=>{ c.stake*=cap/tot; c.capped=true; }); }
   picks.forEach(c=>c.stake=Math.round(c.stake*10)/10);
+  // 📅 the weekly budget: full size kept (c.full, also what the forecast counts), the stake shown and logged is full x m
+  { const P=curPlan(); for(const c of picks){ c.full=c.stake; if(P.on) c.stake=P.m>=0.02?Math.max(0.1, Math.round(c.full*P.m*10)/10):0; }
+    if(P.on&&P.m<0.02) for(const c of picks.splice(0)) if(c.bet) picks.push(c); else skipped.push({c, why:'this week\'s budget is used up — next week starts Tuesday'}); }
   picks.sort((a,b)=>b.stake-a.stake);
   return {picks, skipped};
 }
@@ -1573,7 +1616,7 @@ function pickPlays(cands){
 function pendingFor(game){ return bets.filter(b=>b.game===game && b.result==='pending' && b.key && b.market!=='custom' && b.modelProb!=null && !b.fun); }   // fun bets sit outside the card
 // a logged bet's rank was saved when it was logged; older entries fall back to Kelly from the price x 0.7
 function betRank(b){ if(typeof b.rk==='number') return b.rk; const d=oddsDec(b.odds), p=b.modelProb; if(!d||p==null) return 0; return 0.7*Math.max(0,(p*d-1)/(d-1)); }
-function sugStake(c){ return Math.max(0.1, Math.round(KELLY_FRAC*(c.kelly||c.rk||0)*getBankroll()*10)/10); }
+function sugStake(c){ const P=curPlan(); return Math.max(0.1, Math.round(KELLY_FRAC*(c.kelly||c.rk||0)*getBankroll()*(P.on?P.m:1)*10)/10); }
 // the one place a priced bet is written into the log (keeps its rank so the log can pick the best later)
 // a prop's stat without side or line ('P|recyd'); TD markets are their own stat
 function statOf(m){ return typeof m==='string'&&m.startsWith('P|') ? m.split('|').slice(0,2).join('|') : m; }
@@ -1594,9 +1637,9 @@ function undoLog(){ if(!UNDO) return; const ids=new Set(UNDO), n0=bets.length; b
   UNDO=null; if(n){ saveBets(); renderBets(); } const el=$('undoBar'); if(!el) return;
   el.innerHTML=`<span>↩ Took ${n||'no'} bet${n===1?'':'s'} back out of your log</span>`; clearTimeout(undoTimer); undoTimer=setTimeout(hideUndo, 2500); }
 function logBetFrom(c, stake, gameIn){
-  const game=gameIn||curGameId();
+  const game=gameIn||curGameId(), WPl=curPlan(), full=c.full!=null?c.full:(WPl.on&&WPl.m>0?+(stake/WPl.m).toFixed(2):null);
   if(bets.some(b=>b.game===game && b.key===c.key && b.market===c.market && b.result==='pending') || heldSameStat(game, c)) return false;
-  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), ...koStamp(game), ...usdStamp(stake), ...(c.book?{book:c.book}:{}), game, key:c.key, player:c.label, market:c.market, odds:c.odds,
+  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*999999), ts:new Date().toISOString(), ...koStamp(game), ...usdStamp(stake), ...(full!=null?{full}:{}), ...(c.book?{book:c.book}:{}), game, key:c.key, player:c.label, market:c.market, odds:c.odds,
     modelProb:+(+c.mp).toFixed(4), ...(c.fun?{fun:true}:{}), ...(c.model!=null?{rawP:+(+c.model).toFixed(4)}:{}), ...(c.mkt!=null?{mktP:+(+c.mkt).toFixed(4)}:{}), rk:+(c.kelly!=null?c.kelly:(c.rk||0)).toFixed(5), cf:c.conf?c.conf.score:null, ...(c.prop?{pmu:+c.prop.mu.toFixed(3)}:{}),
     stake:+(+stake).toFixed(1), closeOdds:'', result:'pending'});
   noteLogged(bets[0].id);
@@ -1688,7 +1731,9 @@ function computeTopPlays(){
       fdButton(picks.map(c=>({game:curGameId(), market:c.market, key:c.key, label:c.label, odds:c.odds, stake:c.stake})), n=>`Open ${n>1?'these '+n:'it'} on FanDuel`)+`</div>`;
   } else {
     html+= logged.length ? cardStat('done', '✅ NO NEW BETS', `you have ${logged.length} open bet${logged.length>1?'s':''} on this game in your log — nothing new clears the bar at today's prices`)
+      : budgetOut() ? cardStat('none', '📅 WEEK’S BUDGET USED UP', 'no new bets until Tuesday — the week already holds its full budget')
       : cardStat('none', 'NO BETS IN THIS GAME', 'nothing clears the bar');
+    if(budgetOut()) html+=`<div style="margin-top:4px">Edges still show in the markets above, but this week's stakes already add up to the weekly budget, so the card holds them back. A new week starts Tuesday 12 AM Eastern.</div>`; else
     html+=`<div style="margin-top:4px">Nothing you've priced clears the bar after calibration and sizing — the normal case, since the market is efficient on most props. (If everything's a pass, sanity-check the total/spread up top.)</div>`;
   }
   if(gone.length) html+=`<div class="muted" style="font-size:12px;margin-top:8px">${gone.length} saved price${gone.length>1?'s are':' is'} from ${esc([...new Set(gone.map(c=>bookName(c.book)))].join(' / '))}, no longer one of your books — left off. <button class="statussel fdpull" style="padding:2px 9px" title="pulls this game again so every box shows your books' prices">⚡ Pull again</button></div>`;
@@ -2148,7 +2193,7 @@ function renderSlip(){
 let bets=[]; let betOptCache=[];
 const LOGOPEN=new Map();      // which game sections you opened/closed (kept across re-renders)
 function loadBets(){ try{ const s=localStorage.getItem('nfltd_bets'); if(s) bets=JSON.parse(s)||[]; }catch(e){ bets=[]; } if(!Array.isArray(bets)) bets=[]; }
-function saveBets(){ stampChanges(bets, betSnap, betKey, TOMB.bets); betSnap=snapOf(bets, betKey); saveTomb(); lsSave('nfltd_bets', bets); syncSoon(); if(LAST) computeTopPlays(); try{ if(SLATE) renderSlate(); }catch(e){} try{ renderWeek(); }catch(e){} }
+function saveBets(){ WP=null; stampChanges(bets, betSnap, betKey, TOMB.bets); betSnap=snapOf(bets, betKey); saveTomb(); lsSave('nfltd_bets', bets); syncSoon(); if(LAST) computeTopPlays(); try{ if(SLATE) renderSlate(); }catch(e){} try{ renderWeek(); }catch(e){} }
 
 // ---------- cloud sync: one bet log / slip / bankroll across PCs, via a private GitHub gist ----------
 // Browser storage is per machine and per address, so PCs drift apart. With a GitHub token (gist scope only) saved
@@ -2231,6 +2276,8 @@ async function syncNow(follow){
       if(g){ SYNC.gistId=g.id; saveSyncCfg(); }
     }
     const remote=g?await readSyncGist(g):null;
+    // 📅 the bets the phone-alert bot found this season (for the weekly budget's forecast); the bot writes it, the apps only read it
+    try{ const ff=g&&g.files&&g.files['nfl-flagged.json']; if(ff){ const t=ff.truncated&&ff.raw_url?await (await fetch(ff.raw_url,{cache:'no-store'})).text():ff.content, j=JSON.parse(t); if(j&&j.weeks){ lsW('nfltd_flagged', j); WP=null; } } }catch(e){}
     if(remote) applyRemote(remote);
     const mine=syncPayload(), content=JSON.stringify(mine);
     if(!g){ const c=await ghApi('/gists',{method:'POST', body:JSON.stringify({description:'NFL TD predictor — bet log sync (private, used by the app)', public:false, files:{[SYNC_FILE]:{content}}})}); SYNC.gistId=c.id; wrote=true; }
@@ -2379,7 +2426,7 @@ function renderBank(){ renderLimit();
   const since=new Date(BANK.at).toLocaleDateString([], {month:'short', day:'numeric'});
   $('bankNow').innerHTML=done.length ? `<b class="${d>0?'ev-pos':d<0?'ev-neg':''}">${d>=0?'+':''}${exactUsd(d)}</b> <span class="muted">since ${since} · ${done.length} settled bet${done.length>1?'s':''} (started ${exactUsd(BANK.amt)})${bySport.includes(' · ')||!bySport.startsWith('NFL')?' — '+bySport:''}</span>` : `<span class="muted">set ${since}</span>`;
   renderPotChip(now, open.length);
-  $('bankNote').innerHTML=`<b>One pot</b> for 🏈 🏀 🏒 — 1 unit = 1% = <b>${exactUsd(unitUsd())}</b>. Every stake is in dollars and scales as this grows.${open.length?` <b>${exactUsd(risk)}</b> is riding on ${open.length} open bet${open.length>1?'s':''}.`:''} Deposited or withdrew? Just type the new balance.`;
+  $('bankNote').innerHTML=`<b>One pot</b> for 🏈 🏀 🏒 — 1 unit = 1% = <b>${exactUsd(unitUsd())}</b>. Every stake is in dollars and scales as this grows.${open.length?` <b>${exactUsd(risk)}</b> is riding on ${open.length} open bet${open.length>1?'s':''}.`:''} Deposited or withdrew? Just type the new balance.`+wpNote();
 }
 function renderPotChip(now){ const c=$('potChip'); if(!c) return; const AB=allBets(), open=AB.filter(b=>b.result==='pending').length, g=(LAST?curGameId():null);
   const onG=g?bets.filter(b=>b.game===g||(b.legs||[]).some(l=>l.game===g)):[], gUsd=onG.reduce((a,b)=>a+(betUsd(b)||0),0);   // this sport's bets on the game you have open
@@ -2392,7 +2439,7 @@ function renderPotChip(now){ const c=$('potChip'); if(!c) return; const AB=allBe
     (onG.length?st('','This game', exactUsd(gUsd), 'staked on the game you have open'):'');
   try{ const sh=c.innerHTML.replace(/<div class="stat [^"]*" title="staked on the game you have open">[\s\S]*$/, ''); localStorage.setItem('sims_chip', sh); }catch(e){} }
 // another app (NBA / NHL) in another tab changed the pot or its bets -> redraw
-window.addEventListener('storage', e=>{ if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderBank(); try{ if(LAST) computeTopPlays(); renderSlip(); renderBets(); renderWeek(); if(SLATE) renderSlate(); }catch(err){} }
+window.addEventListener('storage', e=>{ WP=null; if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderBank(); try{ if(LAST) computeTopPlays(); renderSlip(); renderBets(); renderWeek(); if(SLATE) renderSlate(); }catch(err){} }
   else if(e.key==='nbap_bets'||e.key==='nhlp_bets'){ renderBank(); try{ if(LAST) computeTopPlays(); renderWeek(); if(SLATE) renderSlate(); }catch(err){} }
   else if(e.key==='nfltd_bets') takeOtherWindow(); });
 // 🪟 ANOTHER WINDOW CHANGED THE LOG (2026-11-11 audit): this window kept its own copy of the bet log, so (1) a bet logged in a
@@ -3156,6 +3203,7 @@ function renderWeek(){
   const age=Math.round((now-WEEK.at)/60e3), P=WEEK.picks.filter(c=>(!c.kickoff||Date.parse(c.kickoff)>now) && !heldSameStat(c.game, c) && !SKIP[skipKey(c.game, c)]);   // kicked-off games drop out; so does a stat you already bet
   const isNew=c=>!bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&b.market===c.market), ALLNEW=P.filter(isNew), WR=fitRoom(ALLNEW, c=>roundUsd(c.stake*(unitUsd()||0))), NEW=ALLNEW.filter(c=>WR.fit.includes(c)), nNew=NEW.length, tot=NEW.reduce((a,c)=>a+c.stake,0);
   let h= !P.length ? cardStat('none',ah?'NO BETS RIGHT NOW':'NO BETS THIS WEEK','nothing at your books clears the bar') : nNew ? cardStat('new',`🆕 ${nNew} NEW BET${nNew>1?'S':''}`, `${stakesTxt(NEW)} · ${(tot/getBankroll()*100).toFixed(1)}% of bankroll${P.length-ALLNEW.length?` · ${P.length-ALLNEW.length} already in your log`:''}`) : cardStat('done','✅ NO NEW BETS',`${P.length>1?'all '+P.length+' are':'it\'s'} already in your log`);
+  h+=wpNote();
   h+=`<div class="muted" style="font-size:13px;margin:-2px 0 8px">${WEEK.n} game${WEEK.n===1?'':'s'} checked ${age<1?'just now':age<60?age+' min ago':Math.round(age/60)+' h ago'}${age>60?' — <span style="color:var(--warn)">pull again for fresh prices</span>':''} · each game's bets are exactly what its card says · tap a bet to open its game</div>`;
   if(WR.out.length) h=(nNew?h:cardStat('done','💰 BANKROLL IN PLAY', `${WR.out.length} bet${WR.out.length>1?'s':''} wait${WR.out.length>1?'':'s'} for room`))+roomNote(WR);
   if(nNew) h+=`<div class="bacts"><button class="statussel" id="weekLog">📓 Log the ${nNew} new</button></div>`;
@@ -3197,7 +3245,7 @@ function renderSlate(){
   const parlayBadge=(PP,stake,fun,cls)=>parlayLogged(PP.legs, fun) ? '<span class="muted" style="font-size:12px">✓ already bet</span>' : `<span class="vbadge${cls}" style="font-size:12px">bet ${u(stake)}</span>`;
   let html='';
   { const nNew=SLATE.picks.filter(c=>on.get(c.game+'|'+c.key)!=='log').length, n=SLATE.picks.length;
-    html+= !n ? cardStat('none', 'NO TD BETS', 'nothing clears the bar')
+    html+= !n ? (budgetOut() ? cardStat('none', '📅 WEEK’S BUDGET USED UP', 'no new TD bets until Tuesday') : cardStat('none', 'NO TD BETS', 'nothing clears the bar'))
       : nNew ? cardStat('new', `🆕 ${nNew} NEW BET${nNew>1?'S':''}`, n-nNew?`${n-nNew} already in your log`:'')
       : cardStat('done', '✅ NO NEW BETS', `${n>1?'all '+n+' picks are':'the pick is'} already in your log`); }
   if(!SLATE.picks.length) html+=`<div><b>No TD bets worth making</b> across the ${SLATE.checked} game${SLATE.checked>1?'s':''} checked — your books' best prices are at or below what the other books say they're worth. Sitting it out is a win too.${stale}</div>`;

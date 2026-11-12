@@ -163,6 +163,38 @@ function legConfidence(o, snapWeeks) {   // the app's, for anytime TDs (no D/ST)
   return +s.toFixed(2);
 }
 const KELLY_FRAC = 0.25, TEAM_CAP = 0.04, MIN_STAKE = 0.005, MAX_PER_TEAM = 2, MAX_PER_GAME = 3;
+// ===== 📅 WEEKLY BUDGET (user, 2026-11-12: "theres so many bets and i always go over my bankroll. is there anyway we can get
+// all of the bets we see and stay under for the full week" -> "take into account avg amount of bets per week along with
+// potential bets with an edge that i miss"). KEEP THIS BLOCK IDENTICAL in nfl-td-predictor.template.html, alerts/watch.mjs and
+// nhl-prop-predictor.template.html. Every stake = its full size (the card's ¼ Kelly) x m, so a week's stakes add up to
+// WEEK_BUDGET of the bankroll and every bet still shows:
+//  F    = full-size stakes (% of bankroll) of an average week: the last 3 weeks of every bet the card made — the ones you logged
+//         (b.full, else b.stake) plus every one the phone-alert bot found (nfl-flagged.json in the ☁ Sync gist), placed or not;
+//  base = min(1, WEEK_BUDGET x 100 / F);
+//  brake: what is left of this week's budget ($) over the full-size stakes still to come this week (F x the share of a week
+//         still ahead, WEEK_SHARE — measured on the user's own Oct 13 - Nov 9 log), so a busy week shrinks the later stakes;
+//  m    = min(base, brake). Weeks run Tuesday 00:00 - Monday 24:00 Eastern. Off before WEEK_FROM (m = 1).
+const WEEK_BUDGET=0.9, WEEK_FROM='2026-11-17', WEEK_SHARE=[[0,0],[24,.11],[48,.23],[72,.43],[96,.62],[120,.78],[132,.85],[144,.92],[156,.94],[168,1]];
+const ET_PARTS=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York', hourCycle:'h23', year:'numeric', month:'2-digit', day:'2-digit', weekday:'short', hour:'2-digit', minute:'2-digit'});
+function etWeek(t){ const p={}; for(const x of ET_PARTS.formatToParts(new Date(t))) p[x.type]=x.value; const wd=['Tue','Wed','Thu','Fri','Sat','Sun','Mon'].indexOf(p.weekday);
+  return {key:new Date(Date.UTC(+p.year, +p.month-1, +p.day-wd)).toISOString().slice(0,10), h:wd*24+(+p.hour%24)+(+p.minute)/60}; }
+function weekShare(h){ for(let i=1;i<WEEK_SHARE.length;i++){ const [h1,s1]=WEEK_SHARE[i], [h0,s0]=WEEK_SHARE[i-1]; if(h<=h1) return s0+(s1-s0)*(h-h0)/(h1-h0); } return 1; }
+function flagId(game, key, market){ const m=String(market||''); return game+'|'+key+'|'+(m.startsWith('P|')?m.split('|').slice(0,3).join('|'):m); }   // a prop at another line is the same bet
+// bets = every logged bet of every sport ({id, ts, usd, stake, full?, game, key, market, legs?}); flagged = nfl-flagged.json
+// ({weeks: {weekKey: {flagId: [full units, t]}}}); bank = the bankroll now ($)
+function weekPlan(now, bets, flagged, bank){
+  const W=etWeek(now); if(W.key<WEEK_FROM || !(bank>0)) return {on:false, m:1, key:W.key};
+  const per={}, add=(wk, id, u)=>{ if(!(u>0)) return; const o=per[wk]=per[wk]||{}; o[id]=Math.max(o[id]||0, u); };
+  for(const [wk,o] of Object.entries((flagged&&flagged.weeks)||{})) for(const [id,x] of Object.entries(o||{})) add(wk, id, +(x&&x[0])||0);
+  for(const b of bets||[]){ const t=Date.parse(b.ts); if(!t) continue; add(etWeek(t).key, (b.legs||!b.key)?'L|'+b.id:flagId(b.game, b.key, b.market), +(b.full!=null?b.full:b.stake)||0); }
+  const past=Object.keys(per).filter(k=>k<W.key).sort().slice(-3).map(k=>Object.values(per[k]).reduce((a,x)=>a+x, 0));
+  const F=past.length?past.reduce((a,x)=>a+x, 0)/past.length:100, base=Math.min(1, WEEK_BUDGET*100/Math.max(F, 1)), budget=WEEK_BUDGET*bank;
+  let spent=0; for(const b of bets||[]){ const t=Date.parse(b.ts); if(t && etWeek(t).key===W.key) spent+=+b.usd||0; }
+  const rest=F/100*bank*(1-weekShare(W.h)), left=Math.max(0, budget-spent), m=!(left>0)?0:rest>1e-9?Math.min(base, left/rest):base;
+  return {on:true, m, base, F, n:past.length, budget, spent, left, key:W.key};
+}
+// ===== end of the weekly budget block
+const FLAG_FILE = 'nfl-flagged.json';   // every bet the card made, by week (written here, read by the apps)
 function pickPlays(cands) {   // the app's per-game rule; stakes in units (bankroll = 100)
   const bank = 100, picks = [], byPlayer = new Set(), perTeam = {};
   for (const c of cands.slice().sort((a, b) => b.rk - a.rk)) {
@@ -456,10 +488,10 @@ function potFrom(files) {
   const riding = all.filter(b => b.result === 'pending').reduce((a, b) => a + (usd(b) || 0), 0);
   // the app's pendingFor(): open bets the model priced (not custom, not fun, not parlays)
   const nflOpen = (d.bets || []).filter(b => b.result === 'pending' && b.game && b.key && !b.legs && b.market && b.market !== 'custom' && b.modelProb != null && !b.fun);
-  return { unitUsd: bank != null ? bank / units : null, nflOpen, bank, riding, lim: B.lim !== false };
+  return { unitUsd: bank != null ? bank / units : null, nflOpen, bank, riding, lim: B.lim !== false, bets: all, flagged: files[FLAG_FILE] || null };
 }
 async function syncState() {
-  if (env.ALERT_SYNC_MOCK) return potFrom(JSON.parse(fs.readFileSync(env.ALERT_SYNC_MOCK, 'utf8')));
+  if (env.ALERT_SYNC_MOCK) { const pot = potFrom(JSON.parse(fs.readFileSync(env.ALERT_SYNC_MOCK, 'utf8'))); if (pot) pot.mockFile = env.ALERT_SYNC_MOCK; return pot; }
   const tok = (env.SYNC_TOKEN || '').trim(); if (!tok) return null;
   const gh = async p => { const r = await fetch('https://api.github.com' + p, { headers: { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' } }); if (!r.ok) throw new Error('GitHub ' + r.status); return r.json(); };
   try {
@@ -467,9 +499,10 @@ async function syncState() {
     for (let page = 1; page <= 5 && !hit; page++) { const list = await gh(`/gists?per_page=100&page=${page}`); hit = list.find(x => x.files && x.files['nfl-td-sync.json']); if (list.length < 100) break; }
     if (!hit) { log('sync: no nfl-td-sync.json gist for this token'); return null; }
     const g = await gh('/gists/' + hit.id), files = {};
-    for (const name of SYNC_FILES) { const f = g.files[name]; if (!f) continue;
+    for (const name of [...SYNC_FILES, FLAG_FILE]) { const f = g.files[name]; if (!f) continue;
       try { files[name] = JSON.parse(f.truncated && f.raw_url ? await (await fetch(f.raw_url)).text() : f.content); } catch (e) { log(`sync: ${name} unreadable`); } }
-    return potFrom(files);
+    const pot = potFrom(files); if (pot) { pot.gistId = hit.id; pot.write = async (name, content) => { const r = await fetch('https://api.github.com/gists/' + hit.id, { method: 'PATCH', headers: { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' }, body: JSON.stringify({ files: { [name]: { content } } }) }); if (!r.ok) throw new Error('GitHub ' + r.status); }; }
+    return pot;
   } catch (e) { log('sync: could not read your bet log —', e.message); return null; }
 }
 // the run-to-run memory (ALERT_CACHE): {lastRun, games: {gid: {t: props pulled at, ko, props: [...]}}, wx: {gid: {t, w}},
@@ -521,6 +554,10 @@ async function main() {
   const [sync, sent, sched] = await Promise.all([syncState(), sentBefore(), espnSchedule()]);
   for (const [k, x] of Object.entries(cache.sent)) sent.set(k, Math.max(sent.get(k) ?? -Infinity, x.p));   // alerts older than ntfy keeps
   const statusOf = p => inj.get(String(p.id)) || p.status || 'ACT';
+  // 📅 weekly budget: this week's stake size, and the record of every bet the card makes (the forecast counts missed bets too)
+  const plan = sync ? weekPlan(NOW, sync.bets, sync.flagged, sync.bank) : { on: false, m: 1 };
+  const flagged = sync && sync.flagged && sync.flagged.weeks ? sync.flagged : { app: 'nfl-flagged', v: 1, weeks: {} }; let flagDirty = false;
+  if (plan.on) log(`weekly budget: stakes at ${Math.round(plan.m * 100)}% of full size (weeks average ${Math.round(plan.F)}% of the bankroll over ${plan.n}; ${usdTxt(plan.spent)} of ${usdTxt(plan.budget)} used)`);
   const alerts = [], freshGames = new Set(); let skipped = 0;
   for (const E of events) {
     if (creditsLeft != null && creditsLeft < RESERVE + 6) { log(`Stopping: ${creditsLeft} credits left, reserve ${RESERVE}.`); break; }
@@ -553,7 +590,10 @@ async function main() {
     cache.games[gid] = { ...(cache.games[gid] || { t: 0, ko: E.commence_time, props: [] }), tdT: !td.cands.length && hrs > 24 ? NOW + 2 * 3600e3 : NOW };
     const logged = sync ? sync.nflOpen.filter(b => b.game === gid) : [];
     const { picks, edges } = gameCard(td.cands.concat(props), logged);
-    const newPicks = picks.filter(c => !c.bet && !c.stale).map(c => ({ ...c, game: gid, ko: E.commence_time }));
+    if (sync) { const W = flagged.weeks[etWeek(NOW).key] = flagged.weeks[etWeek(NOW).key] || {};
+      for (const c of picks) { if (c.stale) continue; const id = flagId(gid, c.key, c.market), u = Math.round((+c.stake || 0) * 100) / 100; if (u > 0 && !(W[id] && W[id][0] >= u)) { W[id] = [u, NOW]; flagDirty = true; } } }
+    for (const c of picks) { c.full = c.stake; if (plan.on) c.stake = plan.m >= 0.02 ? Math.max(0.1, Math.round(c.full * plan.m * 10) / 10) : 0; }
+    const newPicks = picks.filter(c => !c.bet && !c.stale && c.stake > 0).map(c => ({ ...c, game: gid, ko: E.commence_time }));
     const nHeld = picks.filter(c => c.bet).length, nOld = picks.filter(c => c.stale && !c.bet).length;
     log(`${gid}: ${td.n} TD prices · ${propNote} · ${edges} edge(s) · ${picks.length} on the card` +
       (nHeld || nOld ? ` (${[nHeld ? nHeld + ' in your log' : '', nOld ? nOld + ' from the last prop check' : ''].filter(Boolean).join(', ')})` : ''));
@@ -608,6 +648,10 @@ async function main() {
       ...(i ? {} : { usd: usdOf(c) || 0, t: NOW, bet: c.game + '|' + c.key + '|' + c.market }) }; });   // the dollars ride on the first id only (held room)
     n++; log(`alert: ${titleOf(c)} · EV +${(c.ev * 100).toFixed(1)}% · ${stake}`);
   }
+  if (flagDirty && MODE === 'live') {   // keep the last 6 weeks; never fatal
+    const keys = Object.keys(flagged.weeks).sort(); for (const k of keys.slice(0, Math.max(0, keys.length - 6))) delete flagged.weeks[k];
+    try { if (sync.mockFile) { const f = JSON.parse(fs.readFileSync(sync.mockFile, 'utf8')); f[FLAG_FILE] = flagged; fs.writeFileSync(sync.mockFile, JSON.stringify(f)); } else if (sync.write) await sync.write(FLAG_FILE, JSON.stringify(flagged)); log(`flagged bets saved (${Object.keys(flagged.weeks[etWeek(NOW).key] || {}).length} this week)`); }
+    catch (e) { log('could not save the flagged bets —', e.message); } }
   cache.lastRun = NOW; saveCache(cache);
   if (env.ALERT_DUMP) fs.writeFileSync(env.ALERT_DUMP, JSON.stringify(DUMP, null, 1));
   log(`${n} alert(s) ${MODE === 'dry' ? 'printed' : 'sent'} · props checked for ${freshGames.size} game(s)${skipped ? ` · ${skipped} game(s) not due` : ''} · credits used ${creditsUsed}${creditsLeft != null ? ` · ${creditsLeft} left` : ''}`);

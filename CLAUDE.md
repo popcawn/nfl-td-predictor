@@ -295,6 +295,36 @@ See README.md for what the model does and how it was validated.
   Checked OK: snapshot (32 teams, no dup ids / names, no NaN, QB/RB/WR/TE everywhere), ESPN lines (NYG really -3 at PHI),
   workflows (alerts concurrency group, cache keys, refresh rebase), sim tallies.
 
+## 📅 Weekly budget (2026-11-12, user: "theres so many bets and i always go over my bankroll. is there anyway we can get
+## all of the bets we see and stay under for the full week? whatever we decide can go into effect next week" → "take into
+## account avg amount of bets per week along with potential bets with an edge that i miss")
+- ONE BLOCK, THREE COPIES: the "📅 WEEKLY BUDGET" block (WEEK_BUDGET, WEEK_FROM, WEEK_SHARE, etWeek, weekShare, flagId,
+  weekPlan) is byte-identical in nfl-td-predictor.template.html, nfl-td-predictor/alerts/watch.mjs and
+  nhl-prop-predictor.template.html. Change all three together (a diff of the three blocks must be empty).
+- RULE: every stake = its full size (the normal ¼-Kelly stake, after caps) × m, so a week's stakes fit 90% of the
+  bankroll and every edge still gets a bet, just smaller. Weeks run Tue 00:00 – Mon 24:00 Eastern. On from Tue 2026-11-17.
+  F = the average full-size units (% of bankroll) over the last 3 weeks, from logged bets (b.full, else b.stake) of every
+  sport PLUS every bet the NFL alert bot found (nfl-flagged.json in the ☁ Sync gist), deduped by flagId (a prop at a
+  moved line = the same bet; the bigger size counts). base = min(1, 90/F). Brake: left$ / (F% × bank × share of the week
+  still ahead, WEEK_SHARE = the user's own Oct 13 – Nov 9 timing). m = min(base, brake); left ≤ 0 → m = 0. A bet scaled
+  under 0.02 of its size is dropped ("this week's budget is used up — next week starts Tuesday"); otherwise stakes round
+  to 0.1u, minimum 0.1u. Logged bets store `full` (the unscaled size) so F stays honest.
+- At the user's numbers (Nov 12): $500 bankroll, weeks of 147/190/204/254% at full size → m ≈ 0.4 — a $20 bet becomes $8.
+- 🤖 The alert bot (alerts/watch.mjs) records every pick it finds (placed or not) into nfl-flagged.json
+  {weeks: {weekKey: {flagId: [full units, t]}}} (last 6 weeks), via a gist PATCH with the same SYNC_TOKEN; it records from
+  now (Nov 12) so F has missed bets in it on Nov 17. From Nov 17 it scales alert stakes the same way and sends nothing for
+  a bet scaled to 0. A failed save is logged, never stops alerts. The apps' ☁ Sync copies the file to localStorage
+  nfltd_flagged.
+- UI: a 📅 note (class .wpnote) — before Nov 17 "From Tuesday Nov 17 …", then "This week: stakes at X% of full size so the
+  week fits $450 — $Y used", and "This week's budget is used up — $Y staked of $450. New bets start Tuesday" at the end.
+  The card headline says "📅 WEEK’S BUDGET USED UP" instead of "no bets" when that is the reason.
+- The 💰 bankroll limit stays as a second guard (the user had it OFF on Nov 12 — asked to turn it back on).
+- Tested 2026-11-12: unit checks (week edges incl. DST, share curve, missed bets raise F, dedupe, brake, used-up, a normal
+  week stakes $450.52 of $450 and a 1.7× week $450.00); bot old vs new on the same odds (9 alerts $89 → $36), rerun 15 min
+  later (nothing new), before Nov 17 (stakes unchanged, recording on), used-up week (0 alerts); app in a local copy with
+  fake odds: $20 → $8 on a Nov 19 clock, log stores full; used-up card; NHL copy started a week early: BetMGM $5.50 → $2,
+  $2 → $1, used-up card.
+
 ## Gotchas
 - In Git Bash, `node -e "..."` containing JS template-literal backticks gets mangled by command substitution —
   use the Edit tool or put the script in a file. `python` may be a Store stub that hangs.
