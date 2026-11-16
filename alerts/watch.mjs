@@ -175,6 +175,9 @@ const KELLY_FRAC = 0.25, TEAM_CAP = 0.04, MIN_STAKE = 0.005, MAX_PER_TEAM = 2, M
 //         still ahead, WEEK_SHARE — measured on the user's own Oct 13 - Nov 9 log), so a busy week shrinks the later stakes;
 //  m    = min(base, brake). Weeks run Tuesday 00:00 - Monday 24:00 Eastern. Off before WEEK_FROM (m = 1).
 const WEEK_BUDGET=0.9, WEEK_FROM='2026-11-17', WEEK_SHARE=[[0,0],[24,.11],[48,.23],[72,.43],[96,.62],[120,.78],[132,.85],[144,.92],[156,.94],[168,1]];
+// 📝 TD bets are PAPER ONLY since 2026-11-16 (the TD rule lost on 2025 + 2026 real prices): NFL TD markets (anytime / first / last / two)
+// are left out of the forecast F — logged ones and the ones the alert bot found — so the budget sizes the bets that are still made
+const TD_PAPER=true, isTdMkt=m=>/^(anytime|first|last|two)$/.test(String(m||''));
 const ET_PARTS=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York', hourCycle:'h23', year:'numeric', month:'2-digit', day:'2-digit', weekday:'short', hour:'2-digit', minute:'2-digit'});
 function etWeek(t){ const p={}; for(const x of ET_PARTS.formatToParts(new Date(t))) p[x.type]=x.value; const wd=['Tue','Wed','Thu','Fri','Sat','Sun','Mon'].indexOf(p.weekday);
   return {key:new Date(Date.UTC(+p.year, +p.month-1, +p.day-wd)).toISOString().slice(0,10), h:wd*24+(+p.hour%24)+(+p.minute)/60}; }
@@ -185,8 +188,8 @@ function flagId(game, key, market){ const m=String(market||''); return game+'|'+
 function weekPlan(now, bets, flagged, bank){
   const W=etWeek(now); if(W.key<WEEK_FROM || !(bank>0)) return {on:false, m:1, key:W.key};
   const per={}, add=(wk, id, u)=>{ if(!(u>0)) return; const o=per[wk]=per[wk]||{}; o[id]=Math.max(o[id]||0, u); };
-  for(const [wk,o] of Object.entries((flagged&&flagged.weeks)||{})) for(const [id,x] of Object.entries(o||{})) add(wk, id, +(x&&x[0])||0);
-  for(const b of bets||[]){ const t=Date.parse(b.ts); if(!t) continue; add(etWeek(t).key, (b.legs||!b.key)?'L|'+b.id:flagId(b.game, b.key, b.market), +(b.full!=null?b.full:b.stake)||0); }
+  for(const [wk,o] of Object.entries((flagged&&flagged.weeks)||{})) for(const [id,x] of Object.entries(o||{})) if(!(TD_PAPER&&isTdMkt(id.split('|').pop()))) add(wk, id, +(x&&x[0])||0);
+  for(const b of bets||[]){ const t=Date.parse(b.ts); if(!t||(TD_PAPER&&!b.legs&&isTdMkt(b.market))) continue; add(etWeek(t).key, (b.legs||!b.key)?'L|'+b.id:flagId(b.game, b.key, b.market), +(b.full!=null?b.full:b.stake)||0); }
   const past=Object.keys(per).filter(k=>k<W.key).sort().slice(-3).map(k=>Object.values(per[k]).reduce((a,x)=>a+x, 0));
   const F=past.length?past.reduce((a,x)=>a+x, 0)/past.length:100, base=Math.min(1, WEEK_BUDGET*100/Math.max(F, 1)), budget=WEEK_BUDGET*bank;
   let spent=0; for(const b of bets||[]){ const t=Date.parse(b.ts); if(t && etWeek(t).key===W.key) spent+=+b.usd||0; }
@@ -194,7 +197,10 @@ function weekPlan(now, bets, flagged, bank){
   return {on:true, m, base, F, n:past.length, budget, spent, left, key:W.key};
 }
 // ===== end of the weekly budget block
-const FLAG_FILE = 'nfl-flagged.json';   // every bet the card made, by week (written here, read by the apps)
+const FLAG_FILE = 'nfl-flagged.json';
+// 📝 the TD rule's picks while TDs are paper only: {app, v, picks: {game|key|market: {g, k, n, m, o (first price), b, mp, ip, nOth, ev, u,
+// t (first seen), ko, lo / lb / lt (latest price, book, time)}}} — settled later against nflverse to re-test the rule
+const PAPER_FILE = 'nfl-td-paper.json';   // every bet the card made, by week (written here, read by the apps)
 function pickPlays(cands) {   // the app's per-game rule; stakes in units (bankroll = 100)
   const bank = 100, picks = [], byPlayer = new Set(), perTeam = {};
   for (const c of cands.slice().sort((a, b) => b.rk - a.rk)) {
@@ -418,15 +424,16 @@ function gameCard(cand, logged) {
   for (const c of cand) { delete c.dup; const g = sideOf(c); if (g && (!best.has(g) || beats(c, best.get(g)))) best.set(g, c); }
   for (const c of cand) { const g = sideOf(c), b = g && best.get(g); if (b && b !== c) c.dup = true; }
   const now = new Map(cand.map(c => [c.key + '|' + c.market, c]));
-  const opts = cand.filter(c => c.tier === 'take' && !c.dup && !heldSameStat(c)).map(c => ({ ...c, bet: logged.find(b => b.key === c.key && b.market === c.market) || null }));
+  const opts = cand.filter(c => c.tier === 'take' && !c.dup && !heldSameStat(c) && (isProp(c.market) || !TD_PAPER)).map(c => ({ ...c, bet: logged.find(b => b.key === c.key && b.market === c.market) || null }));
   for (const b of logged) {
     if (opts.some(o => o.key === b.key && o.market === b.market)) continue;
     const c = now.get(b.key + '|' + b.market);   // priced now but no longer a take -> it holds no slot
     if (!c && b.offBoard) continue;
     opts.push({ ...(c || { key: b.key, abbr: teamOfKey(b.key), name: b.player, market: b.market, price: b.odds, mp: b.modelProb }), rk: c ? 0 : betRank(b), bet: b });
   }
-  const edges = cand.filter(c => c.tier === 'take' && !c.dup).length;
-  return { picks: pickPlays(opts), edges };
+  const edges = cand.filter(c => c.tier === 'take' && !c.dup && (isProp(c.market) || !TD_PAPER)).length;
+  const paper = TD_PAPER ? pickPlays(cand.filter(c => c.tier === 'take' && !c.dup && !isProp(c.market)).map(c => ({ ...c }))) : [];   // what the TD rule alone would bet
+  return { picks: pickPlays(opts), edges, paper };
 }
 
 // ---- I/O ----
@@ -488,7 +495,7 @@ function potFrom(files) {
   const riding = all.filter(b => b.result === 'pending').reduce((a, b) => a + (usd(b) || 0), 0);
   // the app's pendingFor(): open bets the model priced (not custom, not fun, not parlays)
   const nflOpen = (d.bets || []).filter(b => b.result === 'pending' && b.game && b.key && !b.legs && b.market && b.market !== 'custom' && b.modelProb != null && !b.fun);
-  return { unitUsd: bank != null ? bank / units : null, nflOpen, bank, riding, lim: B.lim !== false, bets: all, flagged: files[FLAG_FILE] || null };
+  return { unitUsd: bank != null ? bank / units : null, nflOpen, bank, riding, lim: B.lim !== false, bets: all, flagged: files[FLAG_FILE] || null, paper: files[PAPER_FILE] || null };
 }
 async function syncState() {
   if (env.ALERT_SYNC_MOCK) { const pot = potFrom(JSON.parse(fs.readFileSync(env.ALERT_SYNC_MOCK, 'utf8'))); if (pot) pot.mockFile = env.ALERT_SYNC_MOCK; return pot; }
@@ -499,7 +506,7 @@ async function syncState() {
     for (let page = 1; page <= 5 && !hit; page++) { const list = await gh(`/gists?per_page=100&page=${page}`); hit = list.find(x => x.files && x.files['nfl-td-sync.json']); if (list.length < 100) break; }
     if (!hit) { log('sync: no nfl-td-sync.json gist for this token'); return null; }
     const g = await gh('/gists/' + hit.id), files = {};
-    for (const name of [...SYNC_FILES, FLAG_FILE]) { const f = g.files[name]; if (!f) continue;
+    for (const name of [...SYNC_FILES, FLAG_FILE, PAPER_FILE]) { const f = g.files[name]; if (!f) continue;
       try { files[name] = JSON.parse(f.truncated && f.raw_url ? await (await fetch(f.raw_url)).text() : f.content); } catch (e) { log(`sync: ${name} unreadable`); } }
     const pot = potFrom(files); if (pot) { pot.gistId = hit.id; pot.write = async (name, content) => { const r = await fetch('https://api.github.com/gists/' + hit.id, { method: 'PATCH', headers: { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' }, body: JSON.stringify({ files: { [name]: { content } } }) }); if (!r.ok) throw new Error('GitHub ' + r.status); }; }
     return pot;
@@ -557,6 +564,7 @@ async function main() {
   // 📅 weekly budget: this week's stake size, and the record of every bet the card makes (the forecast counts missed bets too)
   const plan = sync ? weekPlan(NOW, sync.bets, sync.flagged, sync.bank) : { on: false, m: 1 };
   const flagged = sync && sync.flagged && sync.flagged.weeks ? sync.flagged : { app: 'nfl-flagged', v: 1, weeks: {} }; let flagDirty = false;
+  const paperF = sync && sync.paper && sync.paper.picks ? sync.paper : { app: 'nfl-td-paper', v: 1, picks: {} }; let paperDirty = false, nPaper = 0;
   if (plan.on) log(`weekly budget: stakes at ${Math.round(plan.m * 100)}% of full size (weeks average ${Math.round(plan.F)}% of the bankroll over ${plan.n}; ${usdTxt(plan.spent)} of ${usdTxt(plan.budget)} used)`);
   const alerts = [], freshGames = new Set(); let skipped = 0;
   for (const E of events) {
@@ -589,13 +597,16 @@ async function main() {
     } else propNote = propsOk ? 'props not checked' : 'props off';
     cache.games[gid] = { ...(cache.games[gid] || { t: 0, ko: E.commence_time, props: [] }), tdT: !td.cands.length && hrs > 24 ? NOW + 2 * 3600e3 : NOW };
     const logged = sync ? sync.nflOpen.filter(b => b.game === gid) : [];
-    const { picks, edges } = gameCard(td.cands.concat(props), logged);
+    const { picks, edges, paper } = gameCard(td.cands.concat(props), logged);
+    for (const c of paper) { const id = flagId(gid, c.key, c.market), P = paperF.picks[id]; nPaper++;
+      if (!P) { paperF.picks[id] = { g: gid, k: c.key, n: c.name, m: c.market, o: c.price, b: c.book, lo: c.price, lb: c.book, mp: r4(c.mp), ip: r4(c.ip), nOth: c.nOth, ev: r4(c.ev), u: c.stake, t: NOW, ko: E.commence_time }; paperDirty = true; }
+      else if (P.lo !== c.price || P.lb !== c.book) { Object.assign(P, { lo: c.price, lb: c.book, lt: NOW }); paperDirty = true; } }
     if (sync) { const W = flagged.weeks[etWeek(NOW).key] = flagged.weeks[etWeek(NOW).key] || {};
       for (const c of picks) { if (c.stale) continue; const id = flagId(gid, c.key, c.market), u = Math.round((+c.stake || 0) * 100) / 100; if (u > 0 && !(W[id] && W[id][0] >= u)) { W[id] = [u, NOW]; flagDirty = true; } } }
     for (const c of picks) { c.full = c.stake; if (plan.on) c.stake = plan.m >= 0.02 ? Math.max(0.1, Math.round(c.full * plan.m * 10) / 10) : 0; }
     const newPicks = picks.filter(c => !c.bet && !c.stale && c.stake > 0).map(c => ({ ...c, game: gid, ko: E.commence_time }));
     const nHeld = picks.filter(c => c.bet).length, nOld = picks.filter(c => c.stale && !c.bet).length;
-    log(`${gid}: ${td.n} TD prices · ${propNote} · ${edges} edge(s) · ${picks.length} on the card` +
+    log(`${gid}: ${td.n} TD prices · ${propNote} · ${edges} edge(s) · ${picks.length} on the card` + (paper.length ? ` · ${paper.length} TD paper pick(s)` : '') +
       (nHeld || nOld ? ` (${[nHeld ? nHeld + ' in your log' : '', nOld ? nOld + ' from the last prop check' : ''].filter(Boolean).join(', ')})` : ''));
     if (env.ALERT_DUMP) DUMP[gid] = { g, wx, cands: td.cands.concat(props).map(c => ({ ...c, link: undefined })), picks: picks.map(c => c.name + ' ' + c.market) };
     if (DEBUG) for (const c of td.cands.concat(props).filter(c => c.tier !== 'pass').sort((x, y) => y.rk - x.rk))
@@ -652,6 +663,10 @@ async function main() {
     const keys = Object.keys(flagged.weeks).sort(); for (const k of keys.slice(0, Math.max(0, keys.length - 6))) delete flagged.weeks[k];
     try { if (sync.mockFile) { const f = JSON.parse(fs.readFileSync(sync.mockFile, 'utf8')); f[FLAG_FILE] = flagged; fs.writeFileSync(sync.mockFile, JSON.stringify(f)); } else if (sync.write) await sync.write(FLAG_FILE, JSON.stringify(flagged)); log(`flagged bets saved (${Object.keys(flagged.weeks[etWeek(NOW).key] || {}).length} this week)`); }
     catch (e) { log('could not save the flagged bets —', e.message); } }
+  if (paperDirty && MODE === 'live' && sync) {   // never fatal; picks kept 150 days
+    for (const [k, x] of Object.entries(paperF.picks)) if (Date.parse(x.ko) < NOW - 150 * 864e5) delete paperF.picks[k];
+    try { if (sync.mockFile) { const f = JSON.parse(fs.readFileSync(sync.mockFile, 'utf8')); f[PAPER_FILE] = paperF; fs.writeFileSync(sync.mockFile, JSON.stringify(f)); } else if (sync.write) await sync.write(PAPER_FILE, JSON.stringify(paperF)); log(`TD paper picks saved (${Object.keys(paperF.picks).length} in the file, ${nPaper} on this run)`); }
+    catch (e) { log('could not save the TD paper picks —', e.message); } }
   cache.lastRun = NOW; saveCache(cache);
   if (env.ALERT_DUMP) fs.writeFileSync(env.ALERT_DUMP, JSON.stringify(DUMP, null, 1));
   log(`${n} alert(s) ${MODE === 'dry' ? 'printed' : 'sent'} · props checked for ${freshGames.size} game(s)${skipped ? ` · ${skipped} game(s) not due` : ''} · credits used ${creditsUsed}${creditsLeft != null ? ` · ${creditsLeft} left` : ''}`);

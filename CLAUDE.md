@@ -325,6 +325,24 @@ See README.md for what the model does and how it was validated.
   fake odds: $20 → $8 on a Nov 19 clock, log stores full; used-up card; NHL copy started a week early: BetMGM $5.50 → $2,
   $2 → $1, used-up card.
 
+## 📝 TD bets = PAPER ONLY (2026-11-16, user: "Let's reconsider the td Rule" → "Paper only")
+- Why: 12 TD rules tested on real prices (scratch tdrule-test.mjs: 2025 close + 6 h out from market_td_2025 + bt_rows,
+  2026 wks 1-9 6 h out from market_hist/2026 + nflverse): the current take rule −33% / −23% / −19%; EV>10% / >20%, price
+  bands, 5+ books, best-of-all-books, FD/DK only — none positive in both halves of every set. Betting EVERY player at your best
+  price lost only −5% / −5% / −11%, so the rule picked WORSE than random (it lands on +300+ shots where one book is high; they
+  hit 24 vs 35 expected at the price in 2025). The user's own log: TDs 171 bets −15% (−$137) despite +12% CLV; props +10%.
+- TD_PAPER (inside the shared 📅 block, all three files): TD markets (anytime / first / last / two, D/ST too) never make the
+  card, the ⚡ list or an alert; Your card lists them under Left off ("📝 TD bets are paper only"); 🎯 TD picks shows the
+  picks with "📝 paper", no stakes / log / open buttons. The weekly budget's forecast F leaves TD markets out (logged and
+  flagged). Logged TD bets still count as money spent and riding. Parlay picker + slip are unchanged (user-built).
+- 🤖 watch.mjs: gameCard returns `paper` = pickPlays on the TD takes alone (what the rule would bet); main writes them to
+  nfl-td-paper.json in the sync gist {picks: {game|key|market: {o first price, b, mp, ip, nOth, ev, u, t, ko, lo/lb/lt latest}}}
+  (live only, 150 days). TD pulls keep their cadence (credits) so the paper record stays complete. Re-test: settle the
+  file against nflverse (same matching as tdrule-test.mjs); turn back on only if a rule wins both halves on real prices.
+- Tested 2026-11-16: bot old vs new on mocks (9 TD alerts → 0, the same prop alert both, paper file 9 picks, rerun saves
+  nothing); F with TD left out (unit check); app with fake odds: card = prop, TD under Left off; ⚡ list 3 props, no TDs;
+  🎯 TD picks "paper", no buttons; NHL page loads.
+
 ## Gotchas
 - In Git Bash, `node -e "..."` containing JS template-literal backticks gets mangled by command substitution —
   use the Edit tool or put the script in a file. `python` may be a Store stub that hangs.
