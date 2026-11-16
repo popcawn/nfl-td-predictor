@@ -340,6 +340,14 @@ See README.md for what the model does and how it was validated.
   before every sync, on focus and on the `storage` event. 401 reads "key rejected (expired or deleted)"; a 403/429 with
   rate-limit headers reads "GitHub is limiting requests" instead of blaming the key. NBA / NHL read the key fresh each sync
   (never write it), so they were fine. Windows still running the old code must be reloaded once.
+- 🔑 TOKEN GONE EVERY FEW DAYS ON THE IPHONE (2026-11-15, user: "Keeps making me put in a new token every few days. Tokens
+  have no expiration"): the code drops the key ONLY on Disconnect (checked; no token in any repo for GitHub to revoke) —
+  iPhone Safari wipes the site's storage (ITP / storage pressure). The box is now a real login form (#syncForm: hidden
+  username "gist-sync" + the token as autocomplete=current-password, submit = Connect, field cleared 1.5 s later) so Safari
+  offers Save Password and refills it in one tap; Connect calls navigator.storage.persist(); a token the browser won't store
+  shows a warning and doesn't connect. Tested in a local copy with a fake GitHub (connect, Enter, Sync now / Disconnect don't
+  submit, blocked storage, 375 px). Whether Safari actually shows the prompt can't be tested here — fallback: add it by hand in
+  the Passwords app (site popcawn.github.io).
 - ESPN calls in the build retry (curlJsonRetry); a team whose roster still fails is rebuilt from the PREVIOUS
   snapshot's player list, and the build throws (no files written, the bot commits nothing) if any team is still missing.
   A one-off ESPN failure dropped PIT on 2026-10-01 and blanked the app. Test with `FAIL_ROSTER=PIT`. The app also skips

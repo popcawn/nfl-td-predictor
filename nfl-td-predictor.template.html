@@ -663,14 +663,15 @@
           <li>Make a token that can <b>only</b> touch gists: <a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=NFL%20TD%20sync" target="_blank" rel="noopener" style="color:var(--accent)">GitHub → new token (gist scope pre-ticked)</a> → pick an expiration → <b>Generate token</b> → copy it.</li>
           <li>Paste it below and hit <b>Connect</b>. On your other PC, do the same (a second token is fine, or reuse this one).</li>
         </ol>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <input id="syncToken" type="password" placeholder="paste token (ghp_…)" autocomplete="off" spellcheck="false" style="width:270px;padding:6px 9px;font-size:13px">
-          <button class="btn" id="syncConnect" style="padding:6px 14px;font-size:13px">Connect</button>
-          <button class="statussel" id="syncNowBtn" style="padding:6px 10px;font-size:12px">Sync now</button>
-          <button class="statussel" id="syncOff" style="padding:6px 10px;font-size:12px">Disconnect this PC</button>
+        <form id="syncForm" action="#" method="post" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0">
+          <input type="text" name="username" autocomplete="username" value="gist-sync" readonly tabindex="-1" aria-hidden="true" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">
+          <input id="syncToken" name="password" type="password" placeholder="paste token (ghp_…)" autocomplete="current-password" spellcheck="false" autocapitalize="off" style="width:270px;padding:6px 9px;font-size:13px">
+          <button type="submit" class="btn" id="syncConnect" style="padding:6px 14px;font-size:13px">Connect</button>
+          <button type="button" class="statussel" id="syncNowBtn" style="padding:6px 10px;font-size:12px">Sync now</button>
+          <button type="button" class="statussel" id="syncOff" style="padding:6px 10px;font-size:12px">Disconnect this PC</button>
           <span id="syncMsg" class="muted" style="font-size:12px"></span>
-        </div>
-        <div class="muted" style="font-size:12px;margin-top:6px">The token is saved in this browser only — never in the site's code — and can't do anything but read/write your gists. Syncs a few seconds after every change, whenever you come back to the tab, and every 90 s. Deleting a bet (or Clear log) deletes it on every synced PC.</div>
+        </form>
+        <div class="muted" style="font-size:12px;margin-top:6px">🔑 <b>iPhone:</b> Safari wipes a site's saved data now and then, token included. When it offers <b>Save Password</b> after Connect, say yes — next time, tap the box and pick it from Passwords (one tap). The token is saved in this browser only — never in the site's code — and can't do anything but read/write your gists. Syncs a few seconds after every change, whenever you come back to the tab, and every 90 s. Deleting a bet (or Clear log) deletes it on every synced PC.</div>
       </div>
       <div id="betBody" class="legend"></div>
       <details id="logMore" style="margin-top:12px">
@@ -3926,8 +3927,15 @@ setInterval(()=>{ if(document.prerendering) return; autoLiveCloses(); autoSettle
 betSnap=snapOf(bets, betKey); slipSnap=snapOf(slip, legKey); syncStatus();
 // sync wiring: pull on load, when the tab comes back, and every 90 s while visible
 $('syncBtn').onclick=()=>{ const b=$('syncBox'); b.style.display=b.style.display==='none'?'':'none'; syncStatus(); };
-$('syncConnect').onclick=()=>{ const t=$('syncToken').value.trim(); if(!t){ $('syncMsg').textContent='paste the token first'; return; }
-  SYNC={token:t}; putSyncCfg(); $('syncToken').value=''; syncNow(); };
+// 🔑 (2026-11-15, user: "Keeps making me put in a new token every few days. Tokens have no expiration"): the app only drops the
+// token on Disconnect — iPhone Safari wipes the site's storage (token and all). The box is a real login form now (hidden
+// username + current-password), so Safari offers to save the token in Passwords and fills it back in one tap; Connect also
+// asks the browser to keep this site's storage (storage.persist) and says so if the token didn't save.
+$('syncForm').onsubmit=e=>{ e.preventDefault(); const t=$('syncToken').value.trim(); if(!t){ $('syncMsg').textContent='paste the token first'; return; }
+  SYNC={token:t}; putSyncCfg(); try{ navigator.storage&&navigator.storage.persist&&navigator.storage.persist().catch(()=>{}); }catch(x){}
+  setTimeout(()=>{ $('syncToken').value=''; }, 1500);   // a beat for Safari's Save Password prompt to read the field
+  if(((lsGet('nfltd_sync',{})||{}).token||'')!==t){ SYNC=lsGet('nfltd_sync',{})||{}; syncStatus(); $('syncMsg').innerHTML='<span style="color:var(--warn)">this browser would not save the token (private tab, or website data blocked in settings?) — sync can’t stay on here</span>'; return; }
+  syncNow(); };
 $('syncNowBtn').onclick=()=>{ if(SYNC.token) syncNow(); else $('syncMsg').textContent='connect first'; };
 $('syncOff').onclick=()=>{ if(SYNC.token && confirm('Stop syncing on this PC? Your log stays here; the gist and other PCs are untouched.')){ SYNC={}; putSyncCfg(); syncStatus(); } };
 const syncIfStale=()=>{ if(adoptSyncToken()) syncStatus(); if(SYNC.token && document.visibilityState==='visible' && Date.now()-(SYNC.last||0)>20e3) syncNow(); };
