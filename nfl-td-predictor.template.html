@@ -2468,12 +2468,17 @@ let PULLED=(p=>{ const old=Date.now()-2*86400e3; for(const k of Object.keys(p)) 
 let oddsRemaining=lsJ('nfltd_oddsleft',null), oddsEvents=null, pullToken=0;
 const oddsKey=()=>{ try{ return localStorage.getItem('nfltd_oddskey')||''; }catch(e){ return ''; } };
 const oddsFail=(status)=>Object.assign(new Error('odds '+status),{status});
+// a request that never answers used to leave ⚡ Pull all games on "Checking …" forever (user 2026-11-16: "its hanging"):
+// every request the pull waits on now gives up after ms (the timer also covers reading the body) and the pull moves on —
+// weather → calm, injuries → none, odds → that game gets a "couldn't reach" note and the next game is checked
+function fetchT(url, ms, o){ const c=typeof AbortController!=='undefined'?new AbortController():null; if(c) setTimeout(()=>c.abort(), ms||20e3);
+  return fetch(url, c?Object.assign({}, o||{}, {signal:c.signal}):o); }
 function oddsWhy(e){ const s=e&&e.status;
   return s==='nokey'?'add your The Odds API key under <b>odds settings</b>':s==='noevent'?'this game isn\'t on The Odds API\'s board yet':s==='started'?'already kicked off — closing prices have to be pulled before kickoff'
     :s===401?'key rejected — check it under odds settings':(s===429||s===422)?'out of credits (or too many requests) on The Odds API':'couldn\'t reach The Odds API (offline?)'; }
 async function oddsEventsList(key){
   if(oddsEvents && Date.now()-oddsEvents.t<10*60e3) return oddsEvents.list;   // the events list is free; cache it 10 min
-  const r=await fetch(`${ODDS_API}/events?apiKey=${encodeURIComponent(key)}`); if(!r.ok) throw oddsFail(r.status);
+  const r=await fetchT(`${ODDS_API}/events?apiKey=${encodeURIComponent(key)}`, 15e3); if(!r.ok) throw oddsFail(r.status);
   const list=await r.json(); oddsEvents={t:Date.now(), list}; return list;
 }
 const abbrByTeamName=name=>{ const n=String(name||'').toLowerCase(), nick=n.split(' ').pop();
@@ -2491,7 +2496,7 @@ async function fetchGameOdds(away, home, markets, mustBeUpcoming){ await opened(
   const ev=(await oddsEventsList(key)).find(e=>abbrByTeamName(e.away_team)===away && abbrByTeamName(e.home_team)===home);
   if(!ev) throw oddsFail('noevent');
   if(mustBeUpcoming && new Date(ev.commence_time).getTime()<=Date.now()) throw oddsFail('started');
-  const r=await fetch(`${ODDS_API}/events/${ev.id}/odds?apiKey=${encodeURIComponent(key)}&regions=us&markets=${markets.join(',')}&oddsFormat=american&includeLinks=true&includeSids=true`);   // all US books: same credits, gives the consensus; links/sids = FanDuel's own bet-slip ids (free)
+  const r=await fetchT(`${ODDS_API}/events/${ev.id}/odds?apiKey=${encodeURIComponent(key)}&regions=us&markets=${markets.join(',')}&oddsFormat=american&includeLinks=true&includeSids=true`, 30e3);   // all US books: same credits, gives the consensus; links/sids = FanDuel's own bet-slip ids (free)
   const rem=r.headers.get('x-requests-remaining'); if(rem!=null){ oddsRemaining=+rem; lsW('nfltd_oddsleft', oddsRemaining); }
   if(!r.ok) throw oddsFail(r.status);
   const d=parseOdds(await r.json()); d.asked=markets; return d;   // asked: fillBoard replaces exactly these markets
@@ -2975,16 +2980,16 @@ async function gameWeather(g){
   if(indoor) return calm;
   try{
     let loc=st;
-    if(!loc && g.city){ const gj=await (await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(g.city)}&count=1`)).json(); const r=gj.results&&gj.results[0]; if(r) loc={lat:r.latitude, lon:r.longitude}; }
+    if(!loc && g.city){ const gj=await (await fetchT(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(g.city)}&count=1`, 8e3)).json(); const r=gj.results&&gj.results[0]; if(r) loc={lat:r.latitude, lon:r.longitude}; }
     if(!loc) return calm;
-    const j=await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&hourly=wind_speed_10m,precipitation_probability,weather_code&wind_speed_unit=mph&timeformat=unixtime&forecast_days=7`)).json();
+    const j=await (await fetchT(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&hourly=wind_speed_10m,precipitation_probability,weather_code&wind_speed_unit=mph&timeformat=unixtime&forecast_days=7`, 10e3)).json();
     const i=nearestHourIdx(j.hourly.time, new Date(g.kickoff).getTime()); if(i<0) return calm;
     const k=wxKind(j.hourly.weather_code[i]);
     return {outdoor:true, wind:Math.round(j.hourly.wind_speed_10m[i]), wx:{precip:k.precip, pp:j.hourly.precipitation_probability[i]||0}};
   }catch(e){ return calm; }
 }
 const pxFresh=gid=>!!SLATEPX[gid] && Date.now()-SLATEPX[gid].t<PX_FRESH;   // anytime prices this recent are reused — no credit
-async function slateInjuries(){ try{ return parseInjuries(await (await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries')).json()); }catch(e){ return new Map(); } }
+async function slateInjuries(){ try{ return parseInjuries(await (await fetchT('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries', 12e3)).json()); }catch(e){ return new Map(); } }
 // one game for the slate: your books' anytime prices (cached 20 min), the sim and the market anchor -> real candidates
 // ('take' tier) and every in-band fun option. The prices also go on the game's saved board (open the game later: they're there).
 async function slateGame(g, injMap){
