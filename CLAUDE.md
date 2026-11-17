@@ -587,3 +587,8 @@ See README.md for what the model does and how it was validated.
   (plain {book,market,odds,held}; winner = logged one, else higher EV) and the winner c.also; dups are off the card, hidden
   from the Priced list (kept row shows "+1 line", details on hover) and explained under Left off.
 - Commits end with the Co-Authored-By line from the session's instructions.
+
+## 🏀 alerts.yml also runs the NBA hourly paper pulls (2026-11-17)
+- After the alert check: checkout popcawn/nhl-prop-predictor closes/ -> `node nhl/closes/nba-paper.mjs` (continue-on-error,
+  3 min; live runs only). Docs + tests: nhl-prop-predictor/CLAUDE.md "NBA hourly paper pulls". This timer was picked
+  because it fires reliably; closes.yml's cron-job.org dispatch has not fired since Nov 11.

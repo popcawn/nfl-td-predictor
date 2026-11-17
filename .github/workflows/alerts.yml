@@ -34,7 +34,7 @@ concurrency:
 jobs:
   watch:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 11
     steps:
       - uses: actions/checkout@v4
         with:
@@ -73,6 +73,30 @@ jobs:
           ALERT_CACHE: alerts-cache/state.json
           ALERT_TRIGGER: ${{ github.event_name }}
         run: node alerts/watch.mjs
+
+      # 🏀 NBA HOURLY PAPER PULLS (2026-11-17, user: "create a timer that pulls nba odds every hour" -> hourly, last 6 h before
+      # tip). The bot lives in nhl-prop-predictor (closes/nba-paper.mjs, see its CLAUDE.md); it runs here because this timer
+      # (cron-job.org) is the one that fires reliably. Every NBA game starting within 6 h that wasn't pulled in the last 55 min
+      # gets one Pull (pts/reb/ast, 3 credits) by the live NBA app in a headless Chrome, which records + syncs its paper bets.
+      # Never below 3,000 credits; nothing due = a few seconds and no Chrome. It can't fail the alerts (continue-on-error).
+      - name: Get the NBA paper-pull bot
+        if: always() && (inputs.mode || 'live') == 'live'
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: popcawn/nhl-prop-predictor
+          path: nhl
+          sparse-checkout: closes
+          sparse-checkout-cone-mode: false
+
+      - name: NBA paper pulls (hourly, last 6 h before tip)
+        if: always() && (inputs.mode || 'live') == 'live'
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        run: node nhl/closes/nba-paper.mjs
 
       - name: Keep the prices for the next run
         if: steps.check.outputs.saved == 'true'   # only after a live run that checked prices (not quiet hours / test / dry)
