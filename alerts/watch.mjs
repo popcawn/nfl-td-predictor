@@ -192,7 +192,7 @@ function weekPlan(now, bets, flagged, bank){
   for(const b of bets||[]){ const t=Date.parse(b.ts); if(!t||(TD_PAPER&&!b.legs&&isTdMkt(b.market))) continue; add(etWeek(t).key, (b.legs||!b.key)?'L|'+b.id:flagId(b.game, b.key, b.market), +(b.full!=null?b.full:b.stake)||0); }
   const past=Object.keys(per).filter(k=>k<W.key).sort().slice(-3).map(k=>Object.values(per[k]).reduce((a,x)=>a+x, 0));
   const F=past.length?past.reduce((a,x)=>a+x, 0)/past.length:100, base=Math.min(1, WEEK_BUDGET*100/Math.max(F, 1)), budget=WEEK_BUDGET*bank;
-  let spent=0; for(const b of bets||[]){ const t=Date.parse(b.ts); if(t && etWeek(t).key===W.key) spent+=+b.usd||0; }
+  let spent=0; for(const b of bets||[]){ const t=Date.parse(b.ts); if(t && etWeek(t).key===W.key && b.result!=='push') spent+=+b.usd||0; }   // a push / void gives its money back
   const rest=F/100*bank*(1-weekShare(W.h)), left=Math.max(0, budget-spent), m=!(left>0)?0:rest>1e-9?Math.min(base, left/rest):base;
   return {on:true, m, base, F, n:past.length, budget, spent, left, key:W.key};
 }

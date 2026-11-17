@@ -1561,7 +1561,7 @@ function weekPlan(now, bets, flagged, bank){
   for(const b of bets||[]){ const t=Date.parse(b.ts); if(!t||(TD_PAPER&&!b.legs&&isTdMkt(b.market))) continue; add(etWeek(t).key, (b.legs||!b.key)?'L|'+b.id:flagId(b.game, b.key, b.market), +(b.full!=null?b.full:b.stake)||0); }
   const past=Object.keys(per).filter(k=>k<W.key).sort().slice(-3).map(k=>Object.values(per[k]).reduce((a,x)=>a+x, 0));
   const F=past.length?past.reduce((a,x)=>a+x, 0)/past.length:100, base=Math.min(1, WEEK_BUDGET*100/Math.max(F, 1)), budget=WEEK_BUDGET*bank;
-  let spent=0; for(const b of bets||[]){ const t=Date.parse(b.ts); if(t && etWeek(t).key===W.key) spent+=+b.usd||0; }
+  let spent=0; for(const b of bets||[]){ const t=Date.parse(b.ts); if(t && etWeek(t).key===W.key && b.result!=='push') spent+=+b.usd||0; }   // a push / void gives its money back
   const rest=F/100*bank*(1-weekShare(W.h)), left=Math.max(0, budget-spent), m=!(left>0)?0:rest>1e-9?Math.min(base, left/rest):base;
   return {on:true, m, base, F, n:past.length, budget, spent, left, key:W.key};
 }
@@ -3342,8 +3342,10 @@ function renderBets(){
   const rows=bets.map(b=>{ const dec=oddsDec(b.odds), cd=oddsDec(b.closeOdds), nd=!cd&&b.cur&&b.cur.q?oddsDec(b.cur.q):null;
     return {b, dec, clv:dec&&cd?dec/cd-1:null, live:dec&&nd?dec/nd-1:null, stk:usdOn?(betUsd(b)||0):(+b.stake||0),
       pl:usdOn?betPlUsd(b):(b.result==='win'?b.stake*((dec||1)-1):b.result==='loss'?-b.stake:b.result==='push'?0:null)}; });
+  // Total bet = every stake on a bet that won, lost or is still open; the same money counts again each time it is reused, and pushes / voids are left out (that money came straight back)
+  const TOTBET_TIP='every dollar you have put on a bet that won, lost or is still open. Money you win and bet again counts again, so this is NOT money out of your pocket. Pushes and voids are left out: that money came straight back';
   const agg=R=>{ let w=0,l=0,p=0,st=0,net=0,cs=0,cn=0,cp=0,open=0,spent=0,riding=0,towin=0;
-    for(const r of R){ const x=r.b.result; spent+=r.stk||0; if(x==='pending'){ riding+=r.stk||0; towin+=(r.stk||0)*((r.dec||1)-1); } if(x==='win'||x==='loss'){ x==='win'?w++:l++; st+=r.stk; net+=r.pl||0; } else if(x==='push') p++; else open++;
+    for(const r of R){ const x=r.b.result; if(x!=='push') spent+=r.stk||0; if(x==='pending'){ riding+=r.stk||0; towin+=(r.stk||0)*((r.dec||1)-1); } if(x==='win'||x==='loss'){ x==='win'?w++:l++; st+=r.stk; net+=r.pl||0; } else if(x==='push') p++; else open++;
       if(r.clv!=null){ cs+=r.clv; cn++; if(r.clv>0) cp++; } }
     return {n:R.length, w, l, p, st, net, roi:st?net/st:null, clv:cn?cs/cn:null, cn, cp, open, spent, riding, towin}; };
   const cnt=a=>a.open===a.n?`${a.n} open bet${a.n>1?'s':''}`:`${a.n} bet${a.n>1?'s':''}${a.open?` · ${a.open} open`:''}`;   // "52 bets · 52 open" -> "52 open bets"
@@ -3352,7 +3354,7 @@ function renderBets(){
   const rec=a=>`${a.w}-${a.l}${a.p?'-'+a.p:''}`;
   const A=agg(rows), F=agg(rows.filter(r=>r.b.fun));
   let html=`<div class="logsum"><span>Record <b>${rec(A)}</b></span>${BK.length>1?`<span title="every sport's settled bets, by the book they were placed at">🏆 Best book <b>${esc(bookName(BK[0].k))}</b> ${plPill(BK[0].pl)}</span>`:''}`+
-    `<span title="every stake you've logged, open bets included">Spent <b>${amt(A.spent)}</b></span>`+
+    `<span title="${TOTBET_TIP}">Total bet <b>${amt(A.spent)}</b></span>`+
     `<span>Won/lost ${plPill(A.net)}</span>`+
     `<span>ROI <b class="${g(A.roi)}">${A.roi==null?'—':pc(A.roi)}</b></span>`+
     `<span title="CLV = how much better your price was than FanDuel's closing price. Beat the close over many bets and profit follows — it shows long before ROI does.">CLV <b class="${g(A.clv)}">${A.clv==null?'—':pc(A.clv)}</b>${A.cn?` <span class="muted">(${Math.round(A.cp/A.cn*100)}% beat the close)</span>`:''}</span>`+
@@ -3369,7 +3371,7 @@ function renderBets(){
     const wOpen=LOGOPEN.has('W'+ws)?LOGOPEN.get('W'+ws):(wi===0||a.open>0);
     html+=`<details class="weekgrp" data-w="${ws}"${wOpen?' open':''}><summary><b>${wk?'Week '+wk:'Week of '+fmtD(ws)}</b>${a.w+a.l?plPill(a.net):''} <span class="muted">${wk?fmtD(ws)+' – '+fmtD(ws+6*86400e3)+' · ':''}${cnt(a)}${a.w+a.l?` · ${rec(a)}`:''}</span>`+
       `${a.clv!=null?` <span class="muted">· CLV</span> <b class="${g(a.clv)}">${pc(a.clv)}</b>`:''}`+
-      `<span class="wktally">💵 Spent <b>${amt(a.spent)}</b>${a.riding?` · <span class="muted">${amt(a.riding)} still riding · could win ${amt(a.towin)}</span>`:''}</span></summary><div class="wkbody">`;
+      `<span class="wktally" title="${TOTBET_TIP}">💵 Total bet <b>${amt(a.spent)}</b>${a.riding?` · <span class="muted">${amt(a.riding)} still riding · could win ${amt(a.towin)}</span>`:''}</span></summary><div class="wkbody">`;
     const groups=new Map(); R.forEach(r=>{ const k=r.b.game||''; (groups.get(k)||groups.set(k,[]).get(k)).push(r); });
     const G=[...groups.entries()].map(([gm,rs])=>({gm, rs, pend:rs.filter(r=>r.b.result==='pending').length, t:(gm&&kick(gm))||Math.min(...rs.map(r=>betWhen(r.b)))}))
       .sort((x,y)=>((y.pend>0)-(x.pend>0)) || (!x.gm-!y.gm) || (x.t-y.t));
