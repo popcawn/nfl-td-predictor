@@ -592,3 +592,17 @@ See README.md for what the model does and how it was validated.
 - After the alert check: checkout popcawn/nhl-prop-predictor closes/ -> `node nhl/closes/nba-paper.mjs` (continue-on-error,
   3 min; live runs only). Docs + tests: nhl-prop-predictor/CLAUDE.md "NBA hourly paper pulls". This timer was picked
   because it fires reliably; closes.yml's cron-job.org dispatch has not fired since Nov 11.
+
+## 🔄 Every sport's log on every page (2026-11-20)
+- User: "I noticed the bankroll only updates if I click the log tab on each league". Each page's ☁ Sync read only its own
+  sport's file, so the pot missed bets settled / logged on another device until that sport's page was opened here (the
+  user's PC was 17 settled NHL bets and 13 NFL bets behind the gist). `pullOtherSports(gist)` (one block, IDENTICAL in the
+  NFL, NBA and NHL templates, right after `allBets`) runs inside every sync: it merges the other two sports' files into
+  this browser's nfltd_bets / nbap_bets / nhlp_bets + tombstones (the owners' merge: newest mt wins, a tie goes to the
+  record that knows more, tombstones delete) and the pot by its mt. READ-ONLY on the gist: only a sport's own page
+  writes its file. An open page of that sport picks the change up through its storage listener (takeOtherWindow).
+  Settling still happens only on the sport's own page (some device has to open it).
+- Tested 2026-11-20 in a local copy with a fake GitHub (serve_mockgh.mjs in %TEMP%): NFL page pot 501 -> 539.18 (2 NHL
+  bets settled elsewhere, a new NHL bet, an NBA deletion; only nfl-td-sync.json written); NHL page took a new NFL win
+  (564.18) without re-stamping its bets; NBA page same pot, no errors; an NHL page left open in another tab updated
+  (557.18) when the NFL page synced.

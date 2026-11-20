@@ -2284,6 +2284,8 @@ async function syncNow(follow){
     // 📅 the bets the phone-alert bot found this season (for the weekly budget's forecast); the bot writes it, the apps only read it
     try{ const ff=g&&g.files&&g.files['nfl-flagged.json']; if(ff){ const t=ff.truncated&&ff.raw_url?await (await fetch(ff.raw_url,{cache:'no-store'})).text():ff.content, j=JSON.parse(t); if(j&&j.weeks){ lsW('nfltd_flagged', j); WP=null; } } }catch(e){}
     if(remote) applyRemote(remote);
+    // 🔄 the other sports' logs (see pullOtherSports): the pot and the bankroll limit count their settled / open bets
+    if(g&&await pullOtherSports(g)){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); WP=null; renderBank(); try{ if(LAST) computeTopPlays(); renderSlip(); renderWeek(); if(SLATE) renderSlate(); }catch(e){} }
     const mine=syncPayload(), content=JSON.stringify(mine);
     if(!g){ const c=await ghApi('/gists',{method:'POST', body:JSON.stringify({description:'NFL TD predictor — bet log sync (private, used by the app)', public:false, files:{[SYNC_FILE]:{content}}})}); SYNC.gistId=c.id; wrote=true; }
     else if(!remote || syncCanon(mine)!==syncCanon(remote)){ await ghApi('/gists/'+SYNC.gistId,{method:'PATCH', body:JSON.stringify({files:{[SYNC_FILE]:{content}}})}); wrote=true; }
@@ -2385,6 +2387,27 @@ const lsW=(k,v)=>lsSave(k, v);
 const ME='nfl', SPORT_BETS={nfl:'nfltd_bets', nba:'nbap_bets', nhl:'nhlp_bets'}, SPORT_LBL={nfl:'NFL', nba:'NBA', nhl:'NHL'};
 const otherBets=()=>Object.entries(SPORT_BETS).filter(([k])=>k!==ME).flatMap(([k,key])=>(lsJ(key,[])||[]).map(b=>Object.assign({},b,{sport:k})));
 const allBets=()=>bets.map(b=>Object.assign({},b,{sport:ME})).concat(otherBets());
+// 🔄 EVERY SPORT'S LOG ON EVERY PAGE (2026-11-20, user: "I noticed the bankroll only updates if I click the log tab on each league"):
+// each page's ☁ Sync read only its own sport's file, so the pot (one bankroll for all three) missed bets settled or logged on
+// another device until that sport's page was opened on this one (the PC was 17 settled NHL bets behind the phone). Every sync
+// now also reads the other two sports' files from the same gist and merges them into this browser's copy — the owners' own
+// merge: newest edit (mt) wins, a tie goes to the record that knows more, tombstones delete; the pot (bank) by its mt.
+// READ-ONLY: only a sport's own page ever writes its file. An open page of that sport picks the change up through its
+// storage listener (takeOtherWindow). KEEP THIS BLOCK IDENTICAL in the three templates.
+const SPORT_FILES={nfl:['nfl-td-sync.json','nfltd_bets','nfltd_tomb'], nba:['nba-sync.json','nbap_bets','nbap_tomb'], nhl:['nhl-sync.json','nhlp_bets','nhlp_tomb']};
+async function pullOtherSports(gist){ let changed=false;
+  for(const [sp,[file,bk,tk]] of Object.entries(SPORT_FILES)){ if(sp===ME) continue;
+    try{ const f=gist&&gist.files&&gist.files[file]; if(!f) continue;
+      const R=JSON.parse(f.truncated&&f.raw_url?await (await fetch(f.raw_url,{cache:'no-store'})).text():f.content); if(!R||!Array.isArray(R.bets)) continue;
+      const nfl=sp==='nfl', T=lsJ(tk,null)||(nfl?{bets:{},slip:{}}:{}), T0=JSON.stringify(T), tb=nfl?(T.bets=T.bets||{}):T, rt=(nfl?R.tomb&&R.tomb.bets:R.tomb)||{};
+      for(const [k,t] of Object.entries(rt)) if(!(tb[k]>=t)) tb[k]=t;
+      const L=lsJ(bk,[])||[], m=new Map(L.map(r=>[r.id, r])), known=x=>(x.result&&x.result!=='pending'?2:0)+(x.closeOdds?1:0);
+      for(const r of R.bets){ if(!r||!r.id) continue; const a=m.get(r.id), ma=a?a.mt||0:-1, mr=r.mt||0; if(!a||(mr!==ma?mr>ma:known(r)>known(a))) m.set(r.id, r); }
+      const out=[...m.values()].filter(r=>!(tb[r.id]>=(r.mt||0))).sort((x,y)=>String(y.ts).localeCompare(String(x.ts)));
+      if(JSON.stringify(T)!==T0) lsSave(tk, T);
+      if(JSON.stringify(out)!==JSON.stringify(L)){ lsSave(bk, out); changed=true; }
+      const B=lsJ('nfltd_bank',{})||{}; if(R.bank&&(R.bank.mt||0)>(B.mt||0)){ lsSave('nfltd_bank', R.bank); changed=true; } }catch(e){} }
+  return changed; }
 let BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {}));
 const betUsd=b=>b.usd!=null ? +b.usd : (BANK.amt ? (+b.stake||0)*BANK.amt/getBankroll() : null);   // older bets: at the starting unit
 const betPlUsd=b=>{ const u=betUsd(b); if(u==null) return null; const d=oddsDec(b.odds)||1; return b.result==='win'?u*(d-1):b.result==='loss'?-u:b.result==='push'?0:null; };
