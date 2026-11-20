@@ -479,11 +479,11 @@ async function sentBefore() {
   return out;
 }
 // the app's ☁ Sync gist — ONE POT like the app (2026-11-05, user: "make the alerts follow my bankroll"): bankroll now =
-// BANK.amt + the dollar P/L of every sport's bets settled since (NFL nfl-td-sync.json, NBA nba-sync.json, NHL nhl-sync.json),
+// BANK.amt + the dollar P/L of every sport's bets settled since (NFL nfl-td-sync.json, NBA nba-sync.json, NHL nhl-sync.json, UFC ufc-sync.json),
 // the money riding on every sport's open bets, the limit switch (BANK.lim === false = off), and your open NFL bets (they join
 // each game's card, like the app's).
 // ALERT_SYNC_MOCK = a local JSON {"nfl-td-sync.json": {...}, "nba-sync.json": {...}, "nhl-sync.json": {...}} for tests.
-const SYNC_FILES = ['nfl-td-sync.json', 'nba-sync.json', 'nhl-sync.json'];
+const SYNC_FILES = ['nfl-td-sync.json', 'nba-sync.json', 'nhl-sync.json', 'ufc-sync.json'];   // ufc = the UFC page's log (2026-11-20)
 function potFrom(files) {
   const d = files['nfl-td-sync.json']; if (!d) return null;
   const units = d.bankroll > 0 ? d.bankroll : 100, B = d.bank || {};

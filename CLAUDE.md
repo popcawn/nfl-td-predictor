@@ -606,3 +606,7 @@ See README.md for what the model does and how it was validated.
   bets settled elsewhere, a new NHL bet, an NBA deletion; only nfl-td-sync.json written); NHL page took a new NFL win
   (564.18) without re-stamping its bets; NBA page same pot, no errors; an NHL page left open in another tab updated
   (557.18) when the NFL page synced.
+
+
+## 🥊 LINE SHOP + UFC as the 4th sport (2026-11-20)
+User: "pull odds like the nfl and tell what to stake ... maybe we should change the name" → the site is **LINE SHOP** (was PROP SIM) and the UFC page (`ufc-fight-simulator/`) is the 4th tab on the ONE pot. UFC bets live in `ufcs_bets` (pot shape: usd, odds American, result pending/win/loss/push, st, mt, plus legs/price/book/stake%) and sync as `ufc-sync.json` in the same gist (the UFC page writes it; every other page reads it via pullOtherSports — SPORT_BETS / SPORT_LBL / SPORT_FILES carry `ufc`, keep them identical in the 3 templates). The alert bot (watch.mjs SYNC_FILES) and the NBA paper bot (nba-paper.mjs) count UFC bets in the bankroll too. UFC stakes = ¼-Kelly % of the pot in whole dollars, held to the 💰 bankroll limit, NOT scaled by the weekly budget (it is the best-backtested edge); they do count toward the week's spend. UFC page: ⚡ Pull fresh lines (nfltd_oddskey, mma h2h+totals us,us2 = 4 credits; auto when lines > 2 h old), auto-settle from ESPN's UFC scoreboard.
