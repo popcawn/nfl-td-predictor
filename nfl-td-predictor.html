@@ -149,6 +149,8 @@
   details.gamegrp[open]>summary{border-bottom:1px solid var(--line2)}
   details.gamegrp.curgame{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent);background:rgba(77,163,255,.08)}
   details.gamegrp.curgame>summary::after{content:"📍 on screen";margin-left:8px;font-size:11px;font-weight:800;letter-spacing:.04em;color:var(--accent)}
+  .livetag{display:inline-block;margin-left:8px;font-size:11px;font-weight:800;letter-spacing:.06em;color:#fff;background:var(--bad);border-radius:6px;padding:1px 7px;vertical-align:1px;animation:livepulse 1.6s ease-in-out infinite}
+  @keyframes livepulse{50%{opacity:.55}}
   .grpbody{padding:6px 10px 10px}
   .logsum{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin-bottom:10px;padding:9px 12px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;font-size:13px}
   details.weekgrp{margin:0 0 6px}
@@ -2792,6 +2794,12 @@ const evCache=new Map(), liveCache=new Map();   // ESPN event id -> parsed final
 function renderAutoNote(){ const el=$('autoMsg'); if(el) el.innerHTML=AUTO_NOTE; }
 // ESPN events for the active week and the weeks back to the oldest open bet (ESPN refuses date ranges; weeks work),
 // as {id, game, kickoff, final, tids}
+// 🔴 LIVE TAG (2026-11-22, user: "add a live tag"): the bet log marks a game being played while it has open bets.
+// GAME_STATE = what ESPN's scoreboard said at the last settle check (every 5-10 min while the app is open); without a
+// fresh check (under 20 min old) a game counts as live from kickoff for 4 hours. Final = no tag, even before its bets settle.
+const GAME_STATE=new Map();
+function noteGameStates(evs){ const now=Date.now(); let ch=false; for(const e of evs||[]){ const ko=Date.parse(e.kickoff); if(!(Math.abs(ko-now)<2*864e5)) continue; const v={live:!!e.live, final:!!e.final, ko, at:now}, o=GAME_STATE.get(e.game); if(!o||o.live!==v.live||o.final!==v.final) ch=true; GAME_STATE.set(e.game, v); } if(ch){ try{ renderBets(); }catch(err){} } }
+function gameLive(gm, t){ if(!gm||!(t>0)) return false; const s=GAME_STATE.get(gm), now=Date.now(); if(s&&Math.abs(s.ko-t)<864e5&&now-s.at<20*60e3) return s.live; return t<=now&&now-t<4*3600e3; }
 async function espnEventsFor(bs){
   const oldest=Math.min(...bs.map(b=>Date.parse(b.ts)||Date.now()));
   const cur=await activeWeek(), type=(cur.season&&cur.season.type)||2, wk=(cur.week&&cur.week.number)||1;
@@ -2885,7 +2893,7 @@ async function autoSettle(manual){
   if(!pend.length && !noClose.length && !noKo.length){ if(manual){ AUTO_NOTE='🤖 no open bets to settle'; renderAutoNote(); } return; }
   autoBusy=true; autoLast=Date.now(); if(manual){ AUTO_NOTE='🤖 checking ESPN…'; renderAutoNote(); }
   try{
-    const evs=await espnEventsFor(pend.concat(noClose, noKo));
+    const evs=await espnEventsFor(pend.concat(noClose, noKo)); noteGameStates(evs);
     let settled=0, byHand=0, changed=false, mid=0, fixed=0, waiting=0; liveCache.clear();
     for(const b of noKo){ const es=(b.legs&&b.legs.length?b.legs:[b]).map(l=>eventFor(evs,{game:l.game, ts:b.ts})).filter(Boolean).sort((x,y)=>Date.parse(x.kickoff)-Date.parse(y.kickoff));
       if(es.length){ b.ko=es[0].kickoff; if(es[0].week) b.wk=es[0].week; } else b.koX=1;   // koX: not found, don't look again
@@ -3399,10 +3407,10 @@ function renderBets(){
     const G=[...groups.entries()].map(([gm,rs])=>({gm, rs, pend:rs.filter(r=>r.b.result==='pending').length, t:(gm&&kick(gm))||Math.min(...rs.map(r=>betWhen(r.b)))}))
       .sort((x,y)=>((y.pend>0)-(x.pend>0)) || (!x.gm-!y.gm) || (x.t-y.t));
     for(const grp of G){
-      const ga=agg(grp.rs), key=grp.gm+'#'+ws;
+      const ga=agg(grp.rs), key=grp.gm+'#'+ws, gko=(grp.gm&&kick(grp.gm))||Math.min(...grp.rs.map(r=>Date.parse(r.b.ko)||Infinity)), isLive=ga.open>0&&gameLive(grp.gm, gko);
       const open=LOGOPEN.has(key)?LOGOPEN.get(key):false;   // games start collapsed (user, 2026-10-16)
       html+=`<details class="gamegrp" data-k="${esc(key)}"${open?' open':''}><summary><b>${grp.gm?fmtGame(grp.gm):'Parlays &amp; custom bets'}</b> <span class="muted">· ${cnt(ga)}${ga.w+ga.l?` · ${rec(ga)}`:''}${ga.open?` · could win ${amt(ga.towin)}`:''}</span>`+
-        `${ga.w+ga.l?` <b class="${g(ga.net)}">${mny(ga.net)}</b>`:''}</summary><div class="grpbody">`;
+        `${ga.w+ga.l?` <b class="${g(ga.net)}">${mny(ga.net)}</b>`:''}${isLive?'<span class="livetag" title="game in progress — bets settle as plays happen, the rest at the final">● LIVE</span>':''}</summary><div class="grpbody">`;
       html+=`<div style="overflow-x:auto"><table class="logtbl" style="margin-top:0"><thead><tr>${head}</tr></thead><tbody>`;
       grp.rs.forEach(({b,dec,clv,live,pl,stk})=>{ const mine=isPropMkt(b.market)?+b.market.split('|')[3]:null;
         const moved=mine!=null && b.cur && b.cur.l!=null && b.cur.l!==mine, arrow=moved?(b.cur.l<mine?'▼':'▲')+b.cur.l+' ':'';
