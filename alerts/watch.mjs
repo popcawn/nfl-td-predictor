@@ -174,6 +174,7 @@ const KELLY_FRAC = 0.25, TEAM_CAP = 0.04, MIN_STAKE = 0.005, MAX_PER_TEAM = 2, M
 //  brake: what is left of this week's budget ($) over the full-size stakes still to come this week (F x the share of a week
 //         still ahead, WEEK_SHARE — measured on the user's own Oct 13 - Nov 9 log), so a busy week shrinks the later stakes;
 //  m    = min(base, brake). Weeks run Tuesday 00:00 - Monday 24:00 Eastern. Off before WEEK_FROM (m = 1).
+const ROLLING=true, ROLL_SCALE=0.5;
 const WEEK_BUDGET=1, WEEK_FROM='2026-11-17', WEEK_SHARE=[[0,0],[24,.11],[48,.23],[72,.43],[96,.62],[120,.78],[132,.85],[144,.92],[156,.94],[168,1]];
 // 📝 TD bets are PAPER ONLY since 2026-11-16 (the TD rule lost on 2025 + 2026 real prices): NFL TD markets (anytime / first / last / two)
 // are left out of the forecast F — logged ones and the ones the alert bot found — so the budget sizes the bets that are still made
@@ -186,7 +187,8 @@ function flagId(game, key, market){ const m=String(market||''); return game+'|'+
 // bets = every logged bet of every sport ({id, ts, usd, stake, full?, game, key, market, legs?}); flagged = nfl-flagged.json
 // ({weeks: {weekKey: {flagId: [full units, t]}}}); bank = the bankroll now ($)
 function weekPlan(now, bets, flagged, bank){
-  const W=etWeek(now); if(W.key<WEEK_FROM || !(bank>0)) return {on:false, m:1, key:W.key};
+  const W=etWeek(now); if(ROLLING) return {on:true, roll:true, m:ROLL_SCALE, base:ROLL_SCALE, F:0, n:0, budget:bank||0, spent:0, left:bank||0, key:W.key};
+  if(W.key<WEEK_FROM || !(bank>0)) return {on:false, m:1, key:W.key};
   const per={}, add=(wk, id, u)=>{ if(!(u>0)) return; const o=per[wk]=per[wk]||{}; o[id]=Math.max(o[id]||0, u); };
   for(const [wk,o] of Object.entries((flagged&&flagged.weeks)||{})) for(const [id,x] of Object.entries(o||{})) if(!(TD_PAPER&&isTdMkt(id.split('|').pop()))) add(wk, id, +(x&&x[0])||0);
   for(const b of bets||[]){ const t=Date.parse(b.ts); if(!t||(TD_PAPER&&!b.legs&&isTdMkt(b.market))) continue; add(etWeek(t).key, (b.legs||!b.key)?'L|'+b.id:flagId(b.game, b.key, b.market), +(b.full!=null?b.full:b.stake)||0); }
@@ -196,6 +198,10 @@ function weekPlan(now, bets, flagged, bank){
   const rest=F/100*bank*(1-weekShare(W.h)), left=Math.max(0, budget-spent), m=!(left>0)?0:rest>1e-9?Math.min(base, left/rest):base;
   return {on:true, m, base, F, n:past.length, budget, spent, left, key:W.key};
 }
+// 🔄 ROLLING BANKROLL (user, 2026-11-23: "or be on a rolling bankroll" -> "switch to rolling with the full bankroll cap"): the weekly
+// budget above is OFF while ROLLING. Every stake = its full size x ROLL_SCALE, in dollars of TODAY's bankroll (grows after wins, shrinks
+// after losses), and the 💰 limit keeps the money on open bets at or under the whole bankroll — when a bet settles, its money (and any
+// winnings) can be bet again right away; nothing waits for Tuesday. weekPlan returns {roll:true, m:ROLL_SCALE}.
 // ===== end of the weekly budget block
 const FLAG_FILE = 'nfl-flagged.json';
 // 📝 the TD rule's picks while TDs are paper only: {app, v, picks: {game|key|market: {g, k, n, m, o (first price), b, mp, ip, nOth, ev, u,
@@ -565,7 +571,8 @@ async function main() {
   const plan = sync ? weekPlan(NOW, sync.bets, sync.flagged, sync.bank) : { on: false, m: 1 };
   const flagged = sync && sync.flagged && sync.flagged.weeks ? sync.flagged : { app: 'nfl-flagged', v: 1, weeks: {} }; let flagDirty = false;
   const paperF = sync && sync.paper && sync.paper.picks ? sync.paper : { app: 'nfl-td-paper', v: 1, picks: {} }; let paperDirty = false, nPaper = 0;
-  if (plan.on) log(`weekly budget: stakes at ${Math.round(plan.m * 100)}% of full size (weeks average ${Math.round(plan.F)}% of the bankroll over ${plan.n}; ${usdTxt(plan.spent)} of ${usdTxt(plan.budget)} used)`);
+  if (plan.roll) log(`rolling bankroll: stakes at ${Math.round(plan.m * 100)}% of full size from ${usdTxt(plan.budget)}; open bets capped at the bankroll`);
+  else if (plan.on) log(`weekly budget: stakes at ${Math.round(plan.m * 100)}% of full size (weeks average ${Math.round(plan.F)}% of the bankroll over ${plan.n}; ${usdTxt(plan.spent)} of ${usdTxt(plan.budget)} used)`);
   const alerts = [], freshGames = new Set(); let skipped = 0;
   for (const E of events) {
     if (creditsLeft != null && creditsLeft < RESERVE + 6) { log(`Stopping: ${creditsLeft} credits left, reserve ${RESERVE}.`); break; }

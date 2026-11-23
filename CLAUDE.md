@@ -613,3 +613,5 @@ User: "pull odds like the nfl and tell what to stake ... maybe we should change 
 
 ## 🔴 Live tag in the bet log (2026-11-22, user: "add a live tag")
 - A game group in the bet log shows ● LIVE (pulsing red pill) while it is being played AND still has open bets. GAME_STATE (beside espnEventsFor) = what the scoreboard said at the last settle check (autoSettle → noteGameStates; redraws the log when a state flips); with no check under 20 min old, kickoff → +4 h counts as live. Final = no tag even before its bets settle. Tested on the real 1 PM slate (MIA@BUF in progress: LIVE; NYJ@LAC pre: none; settled game: none).
+
+- 2026-11-23 🔄 ROLLING BANKROLL (user: "switch to rolling with the full bankroll cap"): ROLLING=true / ROLL_SCALE=0.5 in the weekly-budget block (identical in the NFL app, alerts/watch.mjs, the NHL app). weekPlan returns {roll:true, m:0.5}: every stake = full size x 0.5 from today's bankroll, no weekly cap, no "budget used up"; the 💰 limit (open bets <= bankroll, on unless BANK.lim===false) is the only cap. Set ROLLING=false to bring the weekly budget back.
