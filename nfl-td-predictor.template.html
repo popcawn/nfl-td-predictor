@@ -1545,7 +1545,7 @@ function evalBet(mp, oddsStr){
 //  brake: what is left of this week's budget ($) over the full-size stakes still to come this week (F x the share of a week
 //         still ahead, WEEK_SHARE — measured on the user's own Oct 13 - Nov 9 log), so a busy week shrinks the later stakes;
 //  m    = min(base, brake). Weeks run Tuesday 00:00 - Monday 24:00 Eastern. Off before WEEK_FROM (m = 1).
-const WEEK_BUDGET=0.9, WEEK_FROM='2026-11-17', WEEK_SHARE=[[0,0],[24,.11],[48,.23],[72,.43],[96,.62],[120,.78],[132,.85],[144,.92],[156,.94],[168,1]];
+const WEEK_BUDGET=1, WEEK_FROM='2026-11-17', WEEK_SHARE=[[0,0],[24,.11],[48,.23],[72,.43],[96,.62],[120,.78],[132,.85],[144,.92],[156,.94],[168,1]];
 // 📝 TD bets are PAPER ONLY since 2026-11-16 (the TD rule lost on 2025 + 2026 real prices): NFL TD markets (anytime / first / last / two)
 // are left out of the forecast F — logged ones and the ones the alert bot found — so the budget sizes the bets that are still made
 const TD_PAPER=true, isTdMkt=m=>/^(anytime|first|last|two)$/.test(String(m||''));

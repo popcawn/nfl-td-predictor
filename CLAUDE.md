@@ -301,7 +301,7 @@ See README.md for what the model does and how it was validated.
 - ONE BLOCK, THREE COPIES: the "📅 WEEKLY BUDGET" block (WEEK_BUDGET, WEEK_FROM, WEEK_SHARE, etWeek, weekShare, flagId,
   weekPlan) is byte-identical in nfl-td-predictor.template.html, nfl-td-predictor/alerts/watch.mjs and
   nhl-prop-predictor.template.html. Change all three together (a diff of the three blocks must be empty).
-- RULE: every stake = its full size (the normal ¼-Kelly stake, after caps) × m, so a week's stakes fit 90% of the
+- RULE: every stake = its full size (the normal ¼-Kelly stake, after caps) × m, so a week's stakes fit 100% (was 90% until 2026-11-23) of the
   bankroll and every edge still gets a bet, just smaller. Weeks run Tue 00:00 – Mon 24:00 Eastern. On from Tue 2026-11-17.
   F = the average full-size units (% of bankroll) over the last 3 weeks, from logged bets (b.full, else b.stake) of every
   sport PLUS every bet the NFL alert bot found (nfl-flagged.json in the ☁ Sync gist), deduped by flagId (a prop at a
