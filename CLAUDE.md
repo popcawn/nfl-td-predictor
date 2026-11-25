@@ -150,6 +150,14 @@ See README.md for what the model does and how it was validated.
   open-all), one "Open all N on BetMGM" per book group. History: 10-25 a stake in a multi-bet link filled ONE amount on every
   bet (stake=2,3 filled nothing) -> one button per stake amount; 10-26 too many buttons -> a shared average stake; the user
   rejected the average, and BetMGM turned &stake=0.78 into $0.50. Don't bring back link stakes or shared stakes.
+- STAKE IN THE LINK, BOOK BY BOOK (researched 2026-11-25 from each book's own public site code + BetMGM's deep-link doc; user:
+  "figure out how to add stake amount in slips for phone and pc use"). BetMGM: yes, documented (, decimal point; one stake
+  per link) — shipped for one-bet links. FanDuel: NO — its addToBetslip screen reads only marketId / selectionId / shareCode / source.
+  DraftKings: NO — its bet slip reads only  (also , ); the amount the user saw on DK was DK's own stake
+  kept in the browser. Caesars: the link target lists  (aliases amount / wager) and sends it to their possible-bets call, but the
+  slip is filled from a mapper that never uses it — so it does not show today; untested on a real slip. Fanatics: no links (site 403s
+  scripts — do not work around it). BetRivers / Kambi books: The Odds API link is coupon={pickType}|<outcome id>|{wagerAmount} (stake
+  slot exists; units untested; not one of the user's NFL books). Don't re-research FanDuel / DraftKings stake parameters.
 - BetMGM links = the bet slip on their SITE (a single bet's &stake= filled in on the user's iPhone
   2026-10-22: bet + stake filled in Safari). The user asked for the APP; nothing opens it from a link on their phone: /en/sportsapp/
   addresses (the only ones Apple's app-site-association lists) opened Safari, betmgm.onelink.me app links opened the App Store, and
