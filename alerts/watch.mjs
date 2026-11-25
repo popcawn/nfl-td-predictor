@@ -454,7 +454,14 @@ async function oddsGet(url) {
     body.bookmakers = (body.bookmakers || []).filter(bk => bk.markets.length);
     creditsUsed += got.size; return body;
   }
-  const r = await fetch(url);
+  // 🔁 one retry (user, 2026-11-25: "add the retry"): The Odds API sometimes answers 502/503 or the connection drops — 6 runs
+  // failed that way Nov 6-25. Wait 30 s and ask once more; a 4xx (bad key, out of credits) is not retried.
+  let r;
+  for (let i = 0; ; i++) {
+    try { r = await fetch(url); } catch (e) { if (i) throw e; log(`  The Odds API didn't answer (${e.message}) — trying again in 30 s`); await new Promise(z => setTimeout(z, 30e3)); continue; }
+    if (r.status >= 500 && !i) { log(`  The Odds API ${r.status} — trying again in 30 s`); await new Promise(z => setTimeout(z, 30e3)); continue; }
+    break;
+  }
   const rem = r.headers.get('x-requests-remaining'), last = r.headers.get('x-requests-last');
   if (rem != null) creditsLeft = +rem; if (last != null) creditsUsed += +last;
   if (!r.ok) throw new Error(`The Odds API ${r.status}: ${(await r.text()).slice(0, 160)}`);
