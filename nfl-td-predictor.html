@@ -469,7 +469,6 @@
       <a href="#mktSec">📈 Markets</a>
       <a href="#tottSec">📊 Teams &amp; QBs</a>
       <a href="#parlaySec">🎰 Parlays</a>
-      <a href="#slipSec">🧾 Slip</a>
       <a href="#logSec">📓 Log</a>
     </nav>
 
@@ -633,21 +632,6 @@
         <div id="parlayBody" class="legend" style="margin-top:8px"></div>
       </div>
     </details>
-
-    <!-- CROSS-GAME SLIP -->
-    <h2 id="slipSec">Cross-game parlay slip</h2>
-    <div class="panel" id="slipPanel" style="padding:14px">
-      <div style="font-weight:700;font-size:13px;margin-bottom:6px">🧾 Add each game's top picks here (<b>➕ add these to slip</b> on Your card) — the slip keeps the best leg per game, scores each by <b>confidence</b>, and builds the parlay that <b>grows your bankroll fastest</b>. Different games are independent, so books pay full odds and the EV is real. The slip stays put when you switch games.</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-        <span class="muted" style="font-size:12px">Add from <b id="slipGameLbl">this game</b>:</span>
-        <select id="slipMarket" class="statussel"><option value="anytime">Anytime</option><option value="two">2+ TD</option><option value="first">1st TD</option><option value="last">Last TD</option><option value="props">Player props</option></select>
-        <select id="slipPlayer" class="statussel" style="max-width:230px"></select>
-        <button class="btn" id="slipAdd" style="padding:6px 14px;font-size:13px">➕ Add leg</button>
-        <button class="btn" id="slipAddBest" style="padding:6px 12px;font-size:12px" title="adds this game's best pick in the selected market (confidence-adjusted)">➕ Best pick</button>
-        <button class="statussel" id="slipClear" style="padding:6px 10px;font-size:12px;margin-left:auto">Clear slip</button>
-      </div>
-      <div id="slipBody" class="legend"></div>
-    </div>
 
     <!-- BET LOG: summary + weeks up top, everything else under "More" -->
     <h2 id="logSec">Bet log</h2>
@@ -1740,7 +1724,6 @@ function computeTopPlays(){
     html+=`<div class="muted" style="margin-top:8px;font-size:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">`+
       `<span>Total <b>${stakesTxt(picks)}</b> (${(tot/bank*100).toFixed(1)}% of bankroll) · ${Object.keys(teams).map(t=>`${S.teams[t].short} ${stakesTxt(picks.filter(c=>c.abbr===t))}`).join(' · ')}</span>`+
       (unlogged.length?`<button class="statussel" id="logCard" style="padding:3px 11px">📓 log ${unlogged.length===picks.length?'these':'the '+unlogged.length+' not logged yet'}</button>`:`<span>✓ all in your log</span>`)+
-      `<button class="statussel" id="cardToSlip" style="padding:3px 11px" title="send these picks to the cross-game slip — do this for each game, then let the slip pick the parlay">➕ add to slip</button>`+
       fdButton(picks.map(c=>({game:curGameId(), market:c.market, key:c.key, label:c.label, odds:c.odds, stake:c.stake})), n=>`Open ${n>1?'these '+n:'it'} on FanDuel`)+`</div>`;
   } else {
     html+= logged.length ? cardStat('done', '✅ NO NEW BETS', `you have ${logged.length} open bet${logged.length>1?'s':''} on this game in your log — nothing new clears the bar at today's prices`)
@@ -3316,7 +3299,7 @@ function renderSlate(){
         `<div style="font-size:13px;margin-top:3px">pays <span class="odds">${amStr(decToAmerican(P.D))}</span> · hits ~${pct(P.P)} · ${parlayBadge(P, stake, false, ' vb-take')}</div></div>`; }
     else if(SLATE.picks.length>1) html+=`<div class="muted" style="font-size:12px;margin-top:8px">${new Set(SLATE.picks.map(c=>c.game)).size<2 ? 'No parlay — it needs picks from at least two different games.' : 'No parlay today — combining these doesn\'t beat betting them as singles.'}</div>`;
     if(!TD_PAPER) html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px"><button class="statussel" id="slateLog" style="padding:4px 11px">📓 log the picks</button>`+
-      (P&&!parlayLogged(P.legs,false)?`<button class="statussel" id="slateLogParlay" style="padding:4px 11px">📓 log the parlay</button><button class="statussel" id="slateSlip" style="padding:4px 11px">➕ parlay to slip</button>`:'')+`</div>`+
+      (P&&!parlayLogged(P.legs,false)?`<button class="statussel" id="slateLogParlay" style="padding:4px 11px">📓 log the parlay</button>`:'')+`</div>`+
       `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${fdButton(SLATE.picks.map(c=>({game:c.game, market:'anytime', key:c.key, label:c.label, fd:c.fd, stake:c.stake})), 'Open the picks on FanDuel', 'rebuild')}${P?parlayButton(P.legs, 'Put the parlay on FanDuel', 'rebuild', P.D):''}</div>`;
   }
   out.innerHTML=html+notes;
@@ -3886,11 +3869,12 @@ $('jumpNav').addEventListener('click', e=>{ const a=e.target.closest('a[href^="#
 $('parlayLegs').onchange=computeParlays;
 $('parlayMix').onchange=computeParlays;
 // cross-game slip wiring
-$('slipMarket').onchange=refreshSlipAdder;
+// (user, 2026-11-25: "remove" the cross-game parlay slip) — section, nav link and the add-to-slip buttons are gone; the slip data + sync stay so nothing old breaks
+if($('slipMarket')){ $('slipMarket').onchange=refreshSlipAdder;
 $('slipAdd').onclick=()=>{ const i=$('slipPlayer').value; if(i==='') return; const l=slipLegCache[+i]; if(!addLeg(l, l.market||$('slipMarket').value)) $('slipGameLbl').title='already in slip'; };
 $('slipAddBest').onclick=()=>{ const l=slipLegCache[0]; if(l) addLeg(l, l.market||$('slipMarket').value); };
 $('slipClear').onclick=()=>{ if(slip.length && confirm('Clear all '+slip.length+' cross-game slip legs?')){ slip=[]; saveSlip(); renderSlip(); } };
-$('slipBody').addEventListener('click', e=>{ const b=e.target.closest('.slipdel'); if(!b) return; slip.splice(+b.dataset.i,1); saveSlip(); renderSlip(); });
+$('slipBody').addEventListener('click', e=>{ const b=e.target.closest('.slipdel'); if(!b) return; slip.splice(+b.dataset.i,1); saveSlip(); renderSlip(); }); }
 // bet log wiring
 $('betMarket').onchange=syncBetFormFields;
 $('betPlayer').onchange=syncBetFormFields;
